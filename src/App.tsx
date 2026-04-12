@@ -9,23 +9,33 @@ import { fetchConstructionJobs } from './services/smartsheet';
 import { AnimatePresence, motion } from 'framer-motion';
 import { X } from 'lucide-react';
 import { useGoogleLogin } from '@react-oauth/google';
+import { useVoiceCommands } from './hooks/useVoiceCommands';
+import { fetchGmailUnreadCount, fetchDriveFiles } from './services/google';
 import type { ConstructionJob } from './types/lumina';
+import { Mic, MicOff } from 'lucide-react';
 
 export default function App() {
   const [jobs, setJobs] = useState<ConstructionJob[]>([]);
   const [selectedJob, setSelectedJob] = useState<ConstructionJob | null>(null);
   const [isChatOpen, setIsChatOpen] = useState(false);
   const [loading, setLoading] = useState(true);
-  const [audioEnabled, setAudioEnabled] = useState(false);
   const [viewMode, setViewMode] = useState<'galaxy' | 'earth'>('galaxy');
   const [googleToken, setGoogleToken] = useState<string | null>(null);
+  const [unreadCount, setUnreadCount] = useState(0);
+  const [driveFiles, setDriveFiles] = useState<any[]>([]);
   const [error, setError] = useState<string | null>(null);
-  const audioRef = useRef<HTMLAudioElement>(null);
+  const [voiceEnabled, setVoiceEnabled] = useState(false);
+  
+  const { isListening } = useVoiceCommands(voiceEnabled);
 
   const login = useGoogleLogin({
-    onSuccess: (tokenResponse) => {
+    onSuccess: async (tokenResponse) => {
       setGoogleToken(tokenResponse.access_token);
-      console.log('Google Auth Success');
+      const count = await fetchGmailUnreadCount(tokenResponse.access_token);
+      const files = await fetchDriveFiles(tokenResponse.access_token);
+      setUnreadCount(count);
+      setDriveFiles(files);
+      console.log('Google Auth Success | Gmail:', count, '| Drive Files:', files?.length);
     },
     scope: 'https://www.googleapis.com/auth/gmail.readonly https://www.googleapis.com/auth/drive.readonly'
   });
@@ -49,17 +59,16 @@ export default function App() {
   }, []);
 
   useEffect(() => {
-    if (audioRef.current) {
-      if (audioEnabled) {
-        audioRef.current.play().catch(() => setAudioEnabled(false));
-      } else {
-        audioRef.current.pause();
-      }
-    }
-  }, [audioEnabled]);
+    const handleToggleView = () => {
+      setViewMode(prev => prev === 'galaxy' ? 'earth' : 'galaxy');
+    };
+    window.addEventListener('lumina-toggle-view', handleToggleView);
+    return () => window.removeEventListener('lumina-toggle-view', handleToggleView);
+  }, []);
 
   return (
     <div style={{ width: '100vw', height: '100vh', background: '#020205' }}>
+      <div className="noise-overlay" />
       <Canvas
         shadows
         camera={{ position: [0, 20, 40], fov: 45 }}
@@ -97,7 +106,9 @@ export default function App() {
         onStatusClick={(status) => {
           window.dispatchEvent(new CustomEvent('lumina-zoom-to-status', { detail: { status } }));
         }}
-        gmailUnreadCount={0} 
+        gmailUnreadCount={unreadCount} 
+        voiceEnabled={voiceEnabled}
+        onVoiceToggle={() => setVoiceEnabled(!voiceEnabled)}
       />
 
       {/* Loading Overlay */}
@@ -192,11 +203,23 @@ export default function App() {
         <ChatInterface 
           onClose={() => setIsChatOpen(false)} 
           jobs={jobs}
+          driveFiles={driveFiles}
           onFlyTo={(job) => {
             setSelectedJob(job);
             setIsChatOpen(false);
           }}
         />
+      )}
+
+      {/* Voice Status Indicator */}
+      {voiceEnabled && (
+        <div className="fixed bottom-8 left-8 z-[100] flex items-center gap-3 bg-cyan-500/10 border border-cyan-500/30 px-4 py-2 rounded-full backdrop-blur-md">
+          <div className="relative flex h-3 w-3">
+            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-cyan-400 opacity-75"></span>
+            <span className="relative inline-flex rounded-full h-3 w-3 bg-cyan-500"></span>
+          </div>
+          <span className="text-[10px] uppercase tracking-widest text-cyan-400 font-bold">Lumina Listening</span>
+        </div>
       )}
 
       <div className="fixed top-8 left-8 z-[110] pointer-events-none">

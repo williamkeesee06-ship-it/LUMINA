@@ -1,11 +1,22 @@
-import { OrbitControls, Stars, Float, Text, Points, PointMaterial, Billboard } from '@react-three/drei';
-import { useFrame, useThree } from '@react-three/fiber';
+import { OrbitControls, Float, Text, Points, PointMaterial, Billboard } from '@react-three/drei';
+import { useFrame, useThree, extend } from '@react-three/fiber';
 import { useRef, useEffect, useState, useMemo } from 'react';
 import { EffectComposer, Bloom } from '@react-three/postprocessing';
+import { shaderMaterial } from '@react-three/drei';
 import * as THREE from 'three';
 
 import type { ConstructionJob } from '../types/lumina';
 import { STATUS_COLORS } from '../types/lumina';
+import { LuminaStardust } from './LuminaStardust';
+import { NeonGlowShader } from './shaders/NeonGlowShader';
+
+const NeonMaterial = shaderMaterial(
+  NeonGlowShader.uniforms,
+  NeonGlowShader.vertexShader,
+  NeonGlowShader.fragmentShader
+);
+
+extend({ NeonMaterial });
 
 interface ExperienceProps {
   jobs: ConstructionJob[];
@@ -169,9 +180,9 @@ function ExperienceContext({ jobs, onSelectJob, selectedJob, onOpenAI, onGoogleL
         <Bloom
           luminanceThreshold={0.4}
           mipmapBlur
-          intensity={4}
+          intensity={1.2}
           radius={0.7}
-          levels={8}
+          levels={6}
         />
       </EffectComposer>
 
@@ -182,7 +193,7 @@ function ExperienceContext({ jobs, onSelectJob, selectedJob, onOpenAI, onGoogleL
         isConnected={isGoogleConnected} 
       />
 
-      <Stars radius={150} depth={60} count={6000} factor={4} saturation={0} fade speed={0.8} />
+      <LuminaStardust count={2500} radius={800} />
 
       {/* ── Construction Job Universe — One cluster per unique Secondary Job Status ── */}
       {clusteredJobs.result.map(({ job, position, clusterColor }) => (
@@ -281,7 +292,7 @@ function LuminaOrb({ onClick, onDoubleClick, isConnected }: {
   }, [hovered]);
 
   useFrame((state) => {
-    const t = state.clock.elapsedTime;
+    const t = state.get().performance.now() * 0.001; // Safer non-deprecated time source
     const orbitT = t * 0.1;
     groupRef.current.position.x = Math.cos(orbitT) * 25;
     groupRef.current.position.z = Math.sin(orbitT) * 25;
@@ -367,20 +378,18 @@ function Planet({ job, position, clusterColor, onSelect }: {
 }) {
   const [hovered, setHovered] = useState(false);
   const planetRef = useRef<THREE.Mesh>(null!);
+  const glowRef = useRef<any>(null!);
 
-  // Use the cluster color assigned by the parent (one color per unique status)
-  const color = clusterColor;
-  const emissive = clusterColor;
-  const urgent = false; // urgency could be added per-status in future
+  const color = useMemo(() => new THREE.Color(clusterColor), [clusterColor]);
 
   useFrame((state) => {
-    if (urgent && planetRef.current) {
-      const p = 1 + Math.sin(state.clock.elapsedTime * 4) * 0.09;
-      planetRef.current.scale.set(p, p, p);
+    if (glowRef.current) {
+      glowRef.current.uTime = state.get().performance.now() * 0.001;
+      glowRef.current.uColor = color;
+      glowRef.current.uGlowIntensity = hovered ? 2.5 : 1.2;
     }
   });
 
-  // Label: jobNumber from "Primary" column, or last 6 of row ID as fallback
   const label = job.jobNumber && job.jobNumber.trim() !== ''
     ? job.jobNumber
     : `…${String(job.id).slice(-6)}`;
@@ -389,14 +398,15 @@ function Planet({ job, position, clusterColor, onSelect }: {
     <group position={position}>
       <Float speed={1.5} rotationIntensity={0.8} floatIntensity={0.8}>
 
-        {/* Rim glow shell — creates neon-edge effect on dark planet body */}
-        <mesh scale={[1.18, 1.18, 1.18]}>
+        {/* Custom Neon Glow Shell using NeonGlowShader */}
+        <mesh scale={[1.3, 1.3, 1.3]}>
           <sphereGeometry args={[0.8, 32, 32]} />
-          <meshStandardMaterial
-            color={color} emissive={emissive}
-            emissiveIntensity={hovered ? 14 : 7}
-            transparent opacity={hovered ? 0.35 : 0.18}
-            side={THREE.BackSide} depthWrite={false}
+          {/* @ts-ignore */}
+          <neonMaterial 
+            ref={glowRef}
+            transparent 
+            depthWrite={false}
+            side={THREE.BackSide}
           />
         </mesh>
 
@@ -410,7 +420,7 @@ function Planet({ job, position, clusterColor, onSelect }: {
           <sphereGeometry args={[0.8, 32, 32]} />
           <meshStandardMaterial
             color={hovered ? '#0a0a14' : '#000000'}
-            emissive={emissive}
+            emissive={clusterColor}
             emissiveIntensity={hovered ? 4 : 0.1}
             metalness={1}
             roughness={0.02}
@@ -421,13 +431,13 @@ function Planet({ job, position, clusterColor, onSelect }: {
         <mesh rotation={[-Math.PI / 2.5, 0, 0]}>
           <ringGeometry args={[1.1, 1.32, 64]} />
           <meshStandardMaterial
-            color={color} emissive={emissive} emissiveIntensity={10}
+            color={clusterColor} 
+            emissive={clusterColor} 
+            emissiveIntensity={10}
             transparent opacity={0.6}
             side={THREE.DoubleSide} depthWrite={false}
           />
         </mesh>
-
-
       </Float>
 
       {/* Job Number label */}

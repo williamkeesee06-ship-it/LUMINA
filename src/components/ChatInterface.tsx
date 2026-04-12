@@ -8,10 +8,11 @@ interface ChatInterfaceProps {
   isOpen: boolean;
   onClose: () => void;
   jobs: ConstructionJob[];
+  driveFiles?: any[];
   onFlyTo: (job: ConstructionJob) => void;
 }
 
-export function ChatInterface({ onClose, jobs, onFlyTo }: Omit<ChatInterfaceProps, 'isOpen'>) {
+export function ChatInterface({ onClose, jobs, driveFiles = [], onFlyTo }: Omit<ChatInterfaceProps, 'isOpen'>) {
   const [messages, setMessages] = useState<{ role: 'ai' | 'user', text: string }[]>([
     { role: 'ai', text: "Greetings. I am Lumina. I have full visibility into your active Smartsheet jobs. Ask me anything." }
   ]);
@@ -148,6 +149,36 @@ export function ChatInterface({ onClose, jobs, onFlyTo }: Omit<ChatInterfaceProp
                   <div className="flex-row items-center gap-2 text-cyan-400/50 italic text-xs ml-2">
                     <div className="signal-dot animate-pulse" />
                     LUMINA is processing...
+                  </div>
+                )}
+
+                {/* Drive Files Context */}
+                {driveFiles.length > 0 && (
+                  <div className="mt-6 pt-6 border-t border-cyan-500/10">
+                    <div className="text-[10px] uppercase tracking-widest text-cyan-400 mb-3 opacity-60 flex-row items-center gap-2">
+                      <div className="w-1.5 h-1.5 rounded-full bg-cyan-500 animate-pulse" />
+                      Secure Drive Uplink
+                    </div>
+                    <div className="flex-col gap-2">
+                      {driveFiles.map((file: any) => (
+                        <a 
+                          key={file.id} 
+                          href={file.webViewLink} 
+                          target="_blank" 
+                          rel="noopener noreferrer"
+                          className="flex-row items-center gap-3 p-2 bg-white/5 hover:bg-white/10 border border-white/10 rounded overflow-hidden transition-all group"
+                        >
+                          <div className="w-6 h-6 flex items-center justify-center bg-cyan-500/20 rounded border border-cyan-500/30 text-cyan-400">
+                            <Terminal size={12} />
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <div className="text-[10px] text-white/80 font-medium truncate group-hover:text-cyan-300">
+                              {file.name}
+                            </div>
+                          </div>
+                        </a>
+                      ))}
+                    </div>
                   </div>
                 )}
               </div>

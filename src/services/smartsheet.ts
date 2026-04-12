@@ -1,11 +1,11 @@
 import type { SmartsheetResponse, ConstructionJob } from '../types/lumina';
 
 const TOKEN = import.meta.env.VITE_SMARTSHEET_TOKEN;
-const SHEET_ID = import.meta.env.VITE_SMARTSHEET_SHEET_ID;
+const SHEET_ID = import.meta.env.VITE_SMARTSHEET_SHEET_ID || '1833739362822020';
 
 export const fetchConstructionJobs = async (): Promise<ConstructionJob[]> => {
-  if (!TOKEN || !SHEET_ID) {
-    console.warn('Smartsheet configuration missing');
+  if (!TOKEN) {
+    console.warn('[Lumina] Smartsheet token missing. Please check VITE_SMARTSHEET_TOKEN in .env');
     return [];
   }
 

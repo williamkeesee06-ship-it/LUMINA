@@ -1,4 +1,4 @@
-import { Globe } from 'lucide-react';
+import { Globe, Mic, MicOff } from 'lucide-react';
 import type { ConstructionJob } from '../types/lumina';
 
 interface CommandBarProps {
@@ -8,9 +8,20 @@ interface CommandBarProps {
   onReset: () => void;
   onStatusClick: (status: string) => void;
   gmailUnreadCount?: number;
+  voiceEnabled: boolean;
+  onVoiceToggle: () => void;
 }
 
-export function CommandBar({ jobs, viewMode, onViewToggle, onReset, onStatusClick, gmailUnreadCount = 0 }: CommandBarProps) {
+export function CommandBar({ 
+  jobs, 
+  viewMode, 
+  onViewToggle, 
+  onReset, 
+  onStatusClick, 
+  gmailUnreadCount = 0,
+  voiceEnabled,
+  onVoiceToggle
+}: CommandBarProps) {
   const stats = {
     total: jobs.length,
     needsFielding: jobs.filter(j => j.status?.toLowerCase().includes('fielding')).length,
@@ -67,6 +78,18 @@ export function CommandBar({ jobs, viewMode, onViewToggle, onReset, onStatusClic
         </div>
         <span className="gauge-label">Gmail Unread</span>
       </div>
+
+      <button 
+        className={`command-icon-btn ${voiceEnabled ? 'voice-active' : ''}`}
+        onClick={onVoiceToggle}
+        title={voiceEnabled ? "Disable Voice Control" : "Enable Voice Control"}
+      >
+        {voiceEnabled ? (
+          <Mic size={24} className="text-cyan-400" />
+        ) : (
+          <MicOff size={24} className="opacity-40" />
+        )}
+      </button>
 
       <button 
         className="command-icon-btn" 
