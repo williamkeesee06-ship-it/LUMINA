@@ -36,8 +36,8 @@ export function LuminaStardust({ count = 5000, radius = 500 }) {
     return { positions: pos, colors, sizes };
   }, [count, radius]);
 
-  useFrame((state) => {
-    const t = state.get().performance.now() * 0.001;
+  useFrame(() => {
+    const t = performance.now() * 0.001;
     if (pointsRef.current) {
         pointsRef.current.rotation.y = t * 0.01;
         pointsRef.current.rotation.x = t * 0.005;
@@ -49,15 +49,11 @@ export function LuminaStardust({ count = 5000, radius = 500 }) {
       <bufferGeometry>
         <bufferAttribute 
             attach="attributes-position" 
-            count={count} 
-            array={particles.positions} 
-            itemSize={3} 
+            args={[particles.positions, 3]} 
         />
         <bufferAttribute 
             attach="attributes-color" 
-            count={count} 
-            array={particles.colors} 
-            itemSize={3} 
+            args={[particles.colors, 3]} 
         />
       </bufferGeometry>
       <pointsMaterial

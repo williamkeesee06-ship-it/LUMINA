@@ -1,27 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
 
-// Web Speech API interfaces
-interface SpeechRecognitionEvent extends Event {
-  results: {
-    [key: number]: {
-      [key: number]: {
-        transcript: string;
-      };
-    };
-  };
-}
-
-interface SpeechRecognition extends EventTarget {
-  continuous: boolean;
-  interimResults: boolean;
-  lang: string;
-  start: () => void;
-  stop: () => void;
-  onresult: (event: any) => void;
-  onerror: (event: any) => void;
-  onend: () => void;
-}
-
 declare global {
   interface Window {
     webkitSpeechRecognition: any;

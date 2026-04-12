@@ -1,5 +1,5 @@
 import { Canvas } from '@react-three/fiber';
-import { Suspense, useState, useEffect, useRef } from 'react';
+import { Suspense, useState, useEffect } from 'react';
 import { Experience } from './components/Experience';
 import { ChatInterface } from './components/ChatInterface';
 import { CommandBar } from './components/CommandBar';
@@ -12,7 +12,6 @@ import { useGoogleLogin } from '@react-oauth/google';
 import { useVoiceCommands } from './hooks/useVoiceCommands';
 import { fetchGmailUnreadCount, fetchDriveFiles } from './services/google';
 import type { ConstructionJob } from './types/lumina';
-import { Mic, MicOff } from 'lucide-react';
 
 export default function App() {
   const [jobs, setJobs] = useState<ConstructionJob[]>([]);
@@ -26,7 +25,7 @@ export default function App() {
   const [error, setError] = useState<string | null>(null);
   const [voiceEnabled, setVoiceEnabled] = useState(false);
   
-  const { isListening } = useVoiceCommands(voiceEnabled);
+  useVoiceCommands(voiceEnabled);
 
   const login = useGoogleLogin({
     onSuccess: async (tokenResponse) => {

@@ -11,7 +11,7 @@ export const fetchConstructionJobs = async (): Promise<ConstructionJob[]> => {
 
   try {
     // Explicitly using the /api/smartsheet proxy path with hardcoded ID as requested
-    const response = await fetch(`/api/smartsheet/2.0/sheets/1833739362822020`, {
+    const response = await fetch(`/api/smartsheet/2.0/sheets/${SHEET_ID}`, {
       headers: {
         'Authorization': `Bearer ${TOKEN}`,
         'Content-Type': 'application/json'

@@ -291,8 +291,8 @@ function LuminaOrb({ onClick, onDoubleClick, isConnected }: {
     return () => { document.body.style.cursor = 'default'; };
   }, [hovered]);
 
-  useFrame((state) => {
-    const t = state.get().performance.now() * 0.001; // Safer non-deprecated time source
+  useFrame(() => {
+    const t = performance.now() * 0.001; // Safer non-deprecated time source
     const orbitT = t * 0.1;
     groupRef.current.position.x = Math.cos(orbitT) * 25;
     groupRef.current.position.z = Math.sin(orbitT) * 25;
@@ -351,7 +351,6 @@ function LuminaOrb({ onClick, onDoubleClick, isConnected }: {
           />
         </mesh>
 
-        <Stars radius={3} depth={1} count={60} factor={1} saturation={0} fade speed={4} />
         <Text 
           position={[0, -2.8, 0]} 
           fontSize={0.7} 
@@ -382,9 +381,9 @@ function Planet({ job, position, clusterColor, onSelect }: {
 
   const color = useMemo(() => new THREE.Color(clusterColor), [clusterColor]);
 
-  useFrame((state) => {
+  useFrame(() => {
     if (glowRef.current) {
-      glowRef.current.uTime = state.get().performance.now() * 0.001;
+      glowRef.current.uTime = performance.now() * 0.001;
       glowRef.current.uColor = color;
       glowRef.current.uGlowIntensity = hovered ? 2.5 : 1.2;
     }
