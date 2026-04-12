@@ -1,0 +1,16 @@
+{
+  "rewrites": [
+    {
+      "source": "/api/smartsheet/:path*",
+      "destination": "/api/smartsheet"
+    },
+    {
+      "source": "/api/nominatim/:path*",
+      "destination": "/api/nominatim"
+    },
+    {
+      "source": "/(.*)",
+      "destination": "/index.html"
+    }
+  ]
+}
