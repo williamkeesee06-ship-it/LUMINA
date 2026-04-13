@@ -40,16 +40,32 @@ export function ChatInterface({ onClose, jobs, driveFiles = [], onFlyTo }: Omit<
     try {
       const aiResponse = await askLumina(currentInput, jobs, null);
       
-      // Handle Fly-To commands if present
+      // Handle Fly-To commands
       if (aiResponse.includes('FLY_TO:')) {
-        const match = aiResponse.match(/FLY_TO:(\d+)/);
+        const match = aiResponse.match(/FLY_TO:([^\s]+)/);
         if (match) {
           const job = jobs.find(j => j.jobNumber.includes(match[1]));
           if (job) onFlyTo(job);
         }
       }
 
-      setMessages(prev => [...prev, { role: 'ai', text: aiResponse.replace(/FLY_TO:[^\s]+/, '') }]);
+      // Handle Open URL commands
+      if (aiResponse.includes('OPEN_URL:')) {
+        const urlMatch = aiResponse.match(/OPEN_URL:([^\s]+)/);
+        if (urlMatch) {
+          window.open(urlMatch[1], '_blank');
+        }
+      }
+
+      const cleanResponse = aiResponse
+        .replace(/FLY_TO:[^\s]+/, '')
+        .replace(/OPEN_URL:[^\s]+/, '')
+        .trim();
+
+      setMessages(prev => [...prev, { 
+        role: 'ai', 
+        text: cleanResponse || (aiResponse.includes('OPEN_URL') ? "Opening the requested site for you now." : "Command acknowledged.")
+      }]);
     } catch (err) {
       setMessages(prev => [...prev, { role: 'ai', text: "Connection to the cosmic uplink failed." }]);
     } finally {

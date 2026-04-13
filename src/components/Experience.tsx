@@ -159,8 +159,8 @@ function ExperienceContext({ jobs, onSelectJob, selectedJob, onOpenAI, onGoogleL
         ref={controlsRef}
         enablePan={true}
         maxDistance={3000}
-        minDistance={3}
-        zoomSpeed={2.5}
+        minDistance={0.5}
+        zoomSpeed={3.5}
         rotateSpeed={0.8}
         enableDamping={true}
         dampingFactor={0.05}
