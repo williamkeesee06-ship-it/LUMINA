@@ -1,4 +1,4 @@
-import { GoogleGenerativeAI } from '@google/generative-ai';
+import { GoogleGenerativeAI, SchemaType } from '@google/generative-ai';
 import type { ConstructionJob } from '../types/lumina';
 
 const API_KEY = import.meta.env.VITE_GEMINI_API_KEY;
@@ -30,15 +30,8 @@ export const askLumina = async (
   `;
 
   try {
-    // Programmatic discovery for troubleshooting (runs once)
-    await genAI.getGenerativeModel({ model: "gemini-3.1-pro-preview" });
-
-    // Check available models if needed (logged to console for troubleshooting)
-    // const modelList = await genAI.listModels();
-    // console.log('[Lumina] Available models:', modelList);
-
     const model = genAI.getGenerativeModel({
-      model: "gemini-3.1-pro-preview",
+      model: "gemini-1.5-pro",
       systemInstruction: systemInstructions,
       tools: [
         {
@@ -47,10 +40,10 @@ export const askLumina = async (
               name: "open_website",
               description: "Open a specific website or URL in a new browser tab for the user.",
               parameters: {
-                type: "OBJECT",
+                type: SchemaType.OBJECT,
                 properties: {
                   url: {
-                    type: "string",
+                    type: SchemaType.STRING,
                     description: "The full URL of the website to open (e.g., https://www.google.com)."
                   }
                 },
@@ -61,10 +54,10 @@ export const askLumina = async (
               name: "fly_to_job",
               description: "Navigate the 3D camera to a specific construction job location.",
               parameters: {
-                type: "OBJECT",
+                type: SchemaType.OBJECT,
                 properties: {
                   jobNumber: {
-                    type: "string",
+                    type: SchemaType.STRING,
                     description: "The unique job number to navigate to."
                   }
                 },
