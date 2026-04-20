@@ -694,3 +694,314 @@ body {
 .holographic-input::placeholder {
   color: rgba(0, 242, 255, 0.2);
 }
+/* Mission Console Sidebar */
+.mission-panel-sidebar {
+  position: fixed;
+  top: 0;
+  right: 0;
+  height: 100vh;
+  width: 500px;
+  background: linear-gradient(to left, rgba(2, 2, 5, 0.98), rgba(2, 2, 5, 0));
+  z-index: 50;
+  pointer-events: auto;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  padding-right: 2rem;
+}
+
+.mission-console {
+  background: rgba(5, 7, 20, 0.95);
+  backdrop-filter: blur(50px);
+  border: 1px solid rgba(0, 242, 255, 0.15);
+  box-shadow: 
+    -30px 0 80px rgba(0, 0, 0, 0.9),
+    inset 0 0 40px rgba(0, 242, 255, 0.03);
+  width: 420px;
+  max-height: 85vh;
+  padding: 3rem;
+  border-radius: 4px;
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  animation: slideInRight 0.5s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+@keyframes slideInRight {
+  from { transform: translateX(50px); opacity: 0; }
+  to { transform: translateX(0); opacity: 1; }
+}
+
+.mission-notes-box {
+  background: rgba(0, 0, 0, 0.4);
+  border: 1px solid rgba(255, 255, 255, 0.03);
+  padding: 1.5rem;
+  max-height: 220px;
+  overflow-y: auto;
+  border-radius: 2px;
+  position: relative;
+}
+
+.mission-notes-box::-webkit-scrollbar {
+  width: 4px;
+}
+
+.mission-notes-box::-webkit-scrollbar-track {
+  background: rgba(0, 242, 255, 0.02);
+}
+
+.mission-notes-box::-webkit-scrollbar-thumb {
+  background: rgba(0, 242, 255, 0.3);
+}
+
+/* Re-usable space-y utilities if needed */
+
+/* ─────────────────────────────────────────────────────────────────────────────
+   LUMINA DOCK & CONVERSATION SYSTEM
+   ───────────────────────────────────────────────────────────────────────────── */
+
+.lumina-dock-outer {
+  position: fixed;
+  bottom: 0;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 90%;
+  max-width: 1000px;
+  z-index: 100;
+  pointer-events: none;
+}
+
+.lumina-dock-container {
+  pointer-events: auto;
+  border-top-left-radius: 12px;
+  border-top-right-radius: 12px;
+  background: rgba(10, 10, 20, 0.85);
+  backdrop-filter: blur(25px);
+  border: 1px solid rgba(0, 242, 255, 0.15);
+  border-bottom: none;
+  box-shadow: 0 -20px 80px rgba(0, 0, 0, 0.8);
+  position: relative;
+  overflow: hidden;
+  transition: all 0.5s cubic-bezier(0.16, 1, 0.3, 1);
+  display: flex;
+  flex-direction: column;
+}
+
+.lumina-dock-minimized {
+  height: 48px;
+  background: rgba(10, 10, 20, 0.6);
+  border-color: rgba(0, 242, 255, 0.1);
+  cursor: pointer;
+}
+
+.lumina-dock-minimized:hover {
+  background: rgba(20, 20, 35, 0.9);
+  border-color: rgba(0, 242, 255, 0.4);
+}
+
+.lumina-dock-expanded {
+  height: 65vh;
+}
+
+.dock-header {
+  height: 60px;
+  padding: 0 24px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  border-bottom: 1px solid rgba(0, 242, 255, 0.1);
+}
+
+.dock-status-text {
+  font-family: 'Space Grotesk', sans-serif;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.3em;
+  color: rgba(0, 242, 255, 0.8);
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.voice-icon-group {
+  display: flex;
+  gap: 16px;
+  align-items: center;
+}
+
+.voice-icon-btn {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+  position: relative;
+  cursor: pointer;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  color: rgba(255, 255, 255, 0.5);
+}
+
+.voice-icon-btn:hover:not(:disabled) {
+  background: rgba(0, 242, 255, 0.1);
+  border-color: rgba(0, 242, 255, 0.5);
+  color: #ffffff;
+  transform: translateY(-2px);
+}
+
+.voice-icon-btn.is-active {
+  background: rgba(0, 242, 255, 0.2);
+  border-color: #00f2ff;
+  color: #00f2ff;
+  box-shadow: 0 0 20px rgba(0, 242, 255, 0.3);
+}
+
+.voice-icon-btn.is-active .mic-ring {
+  position: absolute;
+  inset: -4px;
+  border-radius: 50%;
+  border: 1px solid #00f2ff;
+  animation: voice-pulse 1.5s infinite;
+}
+
+@keyframes voice-pulse {
+  0% { transform: scale(1); opacity: 0.8; }
+  100% { transform: scale(1.5); opacity: 0; }
+}
+
+.voice-icon-btn.is-locked {
+  opacity: 0.3;
+  cursor: help;
+  filter: grayscale(1);
+}
+
+.voice-icon-btn.is-locked:hover {
+  transform: none;
+  background: rgba(255, 255, 255, 0.05);
+  border-color: rgba(255, 255, 255, 0.1);
+}
+
+.mini-orb {
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: radial-gradient(circle at 30% 30%, #ffffff, #00f2ff);
+  box-shadow: 0 0 10px rgba(0, 242, 255, 0.5);
+  transition: all 0.3s ease;
+}
+
+.voice-icon-btn.is-active .mini-orb {
+  animation: mini-orb-pulse 2s infinite ease-in-out;
+  box-shadow: 0 0 20px #00f2ff;
+}
+
+@keyframes mini-orb-pulse {
+  0% { transform: scale(1); filter: brightness(1); }
+  50% { transform: scale(1.1); filter: brightness(1.3); }
+  100% { transform: scale(1); filter: brightness(1); }
+}
+
+.dock-transcript {
+  flex: 1;
+  overflow-y: auto;
+  padding: 30px;
+  display: flex;
+  flex-direction: column;
+  gap: 25px;
+}
+
+.dock-input-area {
+  padding: 20px 30px 30px;
+  background: rgba(0, 0, 0, 0.2);
+  border-top: 1px solid rgba(0, 242, 255, 0.05);
+}
+
+.dock-input-wrapper {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.dock-input {
+  width: 100%;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 6px;
+  padding: 14px 20px;
+  padding-right: 50px;
+  color: white;
+  font-size: 15px;
+  font-family: 'Inter', sans-serif;
+  transition: all 0.3s ease;
+}
+
+.dock-input:focus {
+  outline: none;
+  background: rgba(255, 255, 255, 0.08);
+  border-color: rgba(0, 242, 255, 0.4);
+  box-shadow: 0 0 30px rgba(0, 242, 255, 0.1);
+}
+
+.dock-input::placeholder {
+  color: rgba(255, 255, 255, 0.2);
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  font-size: 11px;
+}
+
+.holographic-bubble {
+  padding: 12px 18px;
+  border-radius: 12px;
+  max-width: 80%;
+  position: relative;
+  font-size: 14px;
+  line-height: 1.6;
+}
+
+.bubble-lumina {
+  background: rgba(0, 242, 255, 0.05);
+  border-left: 3px solid #00f2ff;
+  color: #e5e7eb;
+}
+
+.bubble-user {
+  background: rgba(255, 255, 255, 0.05);
+  border-right: 3px solid rgba(255, 255, 255, 0.3);
+  color: #ffffff;
+  align-self: flex-end;
+}
+
+.watermark-container {
+  position: fixed;
+  top: 2rem;
+  left: 2.7rem; /* Slight nudge for breathing room near dyson sphere */
+  z-index: 5;
+  pointer-events: none;
+  opacity: 0.12;
+  user-select: none;
+  text-shadow: 
+    0 0 4px rgba(255, 255, 255, 0.35),
+    0 0 8px rgba(255, 255, 255, 0.2);
+}
+
+.watermark-wordmark {
+  font-family: 'Space Grotesk', sans-serif;
+  font-size: 20px;
+  font-weight: 300;
+  letter-spacing: 0.6em;
+  color: white;
+  text-transform: uppercase;
+  margin-bottom: 4px;
+}
+
+.watermark-subline {
+  font-family: 'Inter', sans-serif;
+  font-size: 10px;
+  font-weight: 300;
+  letter-spacing: 0.4em;
+  color: #00f2ff;
+  text-transform: uppercase;
+}

@@ -3,8 +3,26 @@
  * Defines the mapping between Smartsheet API response and the 3D Cosmic Dashboard.
  */
 
+export type SatelliteKind = 'permit' | 'prints' | 'redlines' | 'estimate' | 'bidmaster' | 'other';
+export type MoonState = 'needs_reply' | 'waiting' | 'inactive';
+
+export interface DriveSatellite {
+  id: string;
+  name: string;
+  mimeType: string;
+  webViewLink: string;
+  kind: SatelliteKind;
+}
+
+export interface GmailMoon {
+  threadId: string;
+  subject: string;
+  snippet: string;
+  state: MoonState;
+}
+
 export interface ConstructionJob {
-  id: string; // Smartsheet Row ID
+  rowId: string; // Smartsheet Row ID (was 'id')
   jobNumber: string; // From "Primary" column
   status: string; // From "Secondary Status" column
   address: string; // From "Address" column
@@ -16,6 +34,15 @@ export interface ConstructionJob {
   supervisor: string; // From "Construction Supervisor" column (Filter: "Billy Keesee")
   lat?: number;
   lng?: number;
+  driveFolderId?: string;
+}
+
+/**
+ * JobOrbit encompasses a job and its associated cosmic bodies.
+ */
+export interface JobOrbit extends ConstructionJob {
+  satellites: DriveSatellite[];
+  moon?: GmailMoon;
 }
 
 export interface SmartsheetColumn {
@@ -29,9 +56,19 @@ export interface SmartsheetCell {
   displayValue?: string;
 }
 
+export interface SmartsheetAttachment {
+  id: number;
+  name: string;
+  attachmentType: string;
+  mimeType?: string;
+  url?: string;
+  createdAt: string;
+}
+
 export interface SmartsheetRow {
-  id: string;
+  id: number;
   cells: SmartsheetCell[];
+  attachments?: SmartsheetAttachment[];
 }
 
 export interface SmartsheetResponse {
@@ -42,23 +79,47 @@ export interface SmartsheetResponse {
 /**
  * 3D SCENE TYPES
  */
-export interface PlanetData extends ConstructionJob {
+export interface PlanetData extends JobOrbit {
   position: [number, number, number];
   color: string;
   size: number;
 }
 
 export const STATUS_COLORS = [
-  '#00ff88', // green
-  '#00f2ff', // cyan
-  '#ffcc00', // gold
-  '#ff3333', // red
-  '#aa44ff', // violet
-  '#ff6600', // orange
-  '#00ffcc', // mint
-  '#ff44aa', // hot pink
-  '#88ff00', // lime
-  '#0088ff', // blue
-  '#ff8844', // peach
-  '#44ffee', // aqua
+  '#2a9d8f', // Complete: Muted Teal/Soft Cyan-Green
+  '#00d2ff', // Fielded-RTS: Bright Cyan-Blue
+  '#e76f51', // Needs Fielding: Orange-Red
+  '#ffcc33', // On Hold: Gold/Amber
+  '#9d4edd', // Pending: Violet-Blue
+  '#0077ff', // Routed to Sub: Electric Blue-Cyan
+  '#7209b7', // Scheduled: Magenta-Violet
 ];
+
+// Galaxy Tier Hierarchy
+export const GALAXY_CATEGORIES = [
+  'Complete',
+  'Fielded-RTS',
+  'Needs Fielding',
+  'On Hold',
+  'Pending',
+  'Routed to Sub',
+  'Scheduled'
+] as const;
+
+export type GalaxyType = typeof GALAXY_CATEGORIES[number];
+
+export const PENDING_SUBTYPES = [
+  'Pending Customer',
+  'Pending Engineering',
+  'Pending Gigs',
+  'Pending HSR',
+  'Pending Permit',
+  'Pending Splicing'
+];
+
+export const resolveGalaxy = (status: string): GalaxyType => {
+  const s = (status || '').trim();
+  if (PENDING_SUBTYPES.some(sub => s.includes(sub))) return 'Pending';
+  const found = GALAXY_CATEGORIES.find(cat => cat.toLowerCase() === s.toLowerCase());
+  return found || 'Scheduled'; // Fallback
+};

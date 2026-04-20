@@ -2,7 +2,7 @@ import { useMemo, useRef } from 'react';
 import { useFrame } from '@react-three/fiber';
 import * as THREE from 'three';
 
-export function LuminaStardust({ count = 5000, radius = 500 }) {
+export function LuminaStardust({ count = 15000, radius = 500 }) {
   const pointsRef = useRef<THREE.Points>(null!);
 
   const particles = useMemo(() => {
@@ -43,19 +43,23 @@ export function LuminaStardust({ count = 5000, radius = 500 }) {
       <bufferGeometry>
         <bufferAttribute
           attach="attributes-position"
-          args={[particles.positions, 3]}
+          count={particles.positions.length / 3}
+          array={particles.positions}
+          itemSize={3}
         />
         <bufferAttribute
           attach="attributes-color"
-          args={[particles.colors, 3]}
+          count={particles.colors.length / 3}
+          array={particles.colors}
+          itemSize={3}
         />
       </bufferGeometry>
       <pointsMaterial
-        size={0.6}
+        size={8.0}
         sizeAttenuation
         vertexColors
         transparent
-        opacity={0.6}
+        opacity={0.7}
         blending={THREE.AdditiveBlending}
         depthWrite={false}
       />

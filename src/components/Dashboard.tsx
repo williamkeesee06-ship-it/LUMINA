@@ -1,8 +1,8 @@
-import type { ConstructionJob } from '../types/lumina';
+import type { JobOrbit } from '../types/lumina';
 import { NeonGlobe } from './NeonGlobe';
 
 interface DashboardProps {
-  jobs: ConstructionJob[];
+  jobs: JobOrbit[];
   currentView: 'galaxy' | 'earth';
   onViewToggle: () => void;
 }

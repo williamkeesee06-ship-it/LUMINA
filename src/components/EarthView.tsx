@@ -2,12 +2,12 @@ import { useRef, useMemo, useState } from 'react';
 import { useFrame } from '@react-three/fiber';
 import * as THREE from 'three';
 import { OrbitControls, useTexture, Stars, Billboard, Html } from '@react-three/drei';
-import type { ConstructionJob } from '../types/lumina';
+import type { JobOrbit } from '../types/lumina';
 import { STATUS_COLORS } from '../types/lumina';
 
 interface EarthViewProps {
-  jobs: ConstructionJob[];
-  onSelectJob: (job: ConstructionJob) => void;
+  jobs: JobOrbit[];
+  onSelectJob: (job: JobOrbit) => void;
 }
 
 export function EarthView({ jobs, onSelectJob }: EarthViewProps) {
@@ -97,7 +97,7 @@ export function EarthView({ jobs, onSelectJob }: EarthViewProps) {
       {/* Pins */}
       {pins.map((pin, i) => (
         <Pin 
-          key={pin.job.id || i} 
+          key={pin.job.rowId || i} 
           position={pin.position} 
           color={pin.color} 
           job={pin.job}
@@ -111,7 +111,7 @@ export function EarthView({ jobs, onSelectJob }: EarthViewProps) {
   );
 }
 
-function Pin({ position, color, job, onClick }: { position: THREE.Vector3, color: string, job: ConstructionJob, onClick: () => void }) {
+function Pin({ position, color, job, onClick }: { position: THREE.Vector3, color: string, job: JobOrbit, onClick: () => void }) {
   const [hovered, setHovered] = useState(false);
   
   return (

@@ -1,11 +1,11 @@
 import { GoogleGenerativeAI, SchemaType } from '@google/generative-ai';
-import type { ConstructionJob } from '../types/lumina';
+import type { JobOrbit } from '../types/lumina';
 
 const API_KEY = import.meta.env.VITE_GEMINI_API_KEY;
 
 export const askLumina = async (
   prompt: string,
-  jobs: ConstructionJob[],
+  jobs: JobOrbit[],
   googleContext?: any
 ): Promise<string> => {
   if (!API_KEY) return "Lumina AI key missing. Please check your .env file.";
@@ -14,19 +14,29 @@ export const askLumina = async (
 
   const systemInstructions = `
     You are Lumina Hub, an elite AI advisor embedded in a luxurious 3D cosmic construction dashboard.
-    You have real-time access to Billy Keesee's active Smartsheet construction jobs and integrated Google Workspace data.
+    You manage a 3-tier hierarchical world model:
+    1. UNIVERSE VIEW: The God View showing all category galaxies as star clusters.
+    2. CATEGORY GALAXY VIEW: A star system containing all jobs of a specific status (e.g. Scheduled, Pending).
+    3. PLANET FOCUS: A deep-dive into a specific job, revealing satellites, moons, and mission data.
+
+    Current World Context:
+    - View Level: ${googleContext?.viewLevel || 'universe'}
+    - Focused Galaxy: ${googleContext?.focusedGalaxy || 'None (Universe)'}
+    
     Current Active Jobs:
-    ${jobs.map(j => `- Job ${j.jobNumber}: Status "${j.status}" at ${j.address}, ${j.city}. Crew: ${j.crew}. Scheduled: ${j.scheduleDate}`).join('\n')}
+    ${jobs.map(j => `- Job ${j.jobNumber}: Status "${j.status}" at ${j.address}.`).join('\n')}
 
     GOOGLE CONNECTION:
-    ${googleContext?.connected
-      ? `CONNECTED. You have access to recent docs: ${googleContext.driveRecent.join(', ')}. You can see ${googleContext.gmailRecent} recent messages.`
-      : 'NOT CONNECTED. If asked about your integration, advise the user to double-click the central Lumina Orb to connect Google accounts.'}
+    ${googleContext?.googleConnected
+      ? 'CONNECTED. You have access to integrated workspace data.'
+      : 'NOT CONNECTED. Advise user to double-click the central Lumina Orb to connect.'}
 
-    Your tone: Premium, intelligent, concise, and insightful.
-    CAPABILITIES:
-    - If you need to show the user a website or search results, use the 'open_website' tool.
-    - If the user asks to see a specific job or fly to it, use the 'fly_to_job' tool.
+    NAVIGATION LOGIC:
+    - If asked for a CATEGORY (e.g. "Show me Pending"), use fly_to_galaxy.
+    - If asked for a SPECIFIC JOB (e.g. "Take me to 24117"), use fly_to_job.
+    - If focused on a planet, you can discuss its specific mission panel data.
+
+    Your tone: Premium, intelligent, concise.
   `;
 
   try {
@@ -38,30 +48,29 @@ export const askLumina = async (
           functionDeclarations: [
             {
               name: "open_website",
-              description: "Open a specific website or URL in a new browser tab for the user.",
+              description: "Open a specific website or URL.",
               parameters: {
                 type: SchemaType.OBJECT,
-                properties: {
-                  url: {
-                    type: SchemaType.STRING,
-                    description: "The full URL of the website to open (e.g., https://www.google.com)."
-                  }
-                },
+                properties: { url: { type: SchemaType.STRING } },
                 required: ["url"]
               }
             },
             {
               name: "fly_to_job",
-              description: "Navigate the 3D camera to a specific construction job location.",
+              description: "Navigate to a specific job planet.",
               parameters: {
                 type: SchemaType.OBJECT,
-                properties: {
-                  jobNumber: {
-                    type: SchemaType.STRING,
-                    description: "The unique job number to navigate to."
-                  }
-                },
+                properties: { jobNumber: { type: SchemaType.STRING } },
                 required: ["jobNumber"]
+              }
+            },
+            {
+              name: "fly_to_galaxy",
+              description: "Navigate to a category galaxy (e.g. Scheduled, Pending, On Hold, Complete, RTS, Fielding).",
+              parameters: {
+                type: SchemaType.OBJECT,
+                properties: { category: { type: SchemaType.STRING } },
+                required: ["category"]
               }
             }
           ]
@@ -77,6 +86,7 @@ export const askLumina = async (
       const { name, args } = call.functionCall;
       if (name === 'open_website') return `OPEN_URL:${(args as any).url}`;
       if (name === 'fly_to_job') return `FLY_TO:${(args as any).jobNumber}`;
+      if (name === 'fly_to_galaxy') return `FLY_TO_GALAXY:${(args as any).category}`;
     }
 
     return response.text();

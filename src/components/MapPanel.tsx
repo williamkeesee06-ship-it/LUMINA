@@ -1,8 +1,8 @@
 import { motion, AnimatePresence } from 'framer-motion';
-import type { ConstructionJob } from '../types/lumina';
+import type { JobOrbit } from '../types/lumina';
 
 interface MapPanelProps {
-  job: ConstructionJob | null;
+  job: JobOrbit | null;
 }
 
 export function MapPanel({ job }: MapPanelProps) {

@@ -1,9 +1,9 @@
-import type { SmartsheetResponse, ConstructionJob } from '../types/lumina';
+import type { SmartsheetResponse, JobOrbit } from '../types/lumina';
 
 const TOKEN = import.meta.env.VITE_SMARTSHEET_TOKEN;
 const SHEET_ID = import.meta.env.VITE_SMARTSHEET_SHEET_ID || '1833739362822020';
 
-export const fetchConstructionJobs = async (): Promise<ConstructionJob[]> => {
+export const fetchConstructionJobs = async (): Promise<JobOrbit[]> => {
   if (!TOKEN) {
     console.warn('[Lumina] Smartsheet token missing. Please check VITE_SMARTSHEET_TOKEN in .env');
     return [];
@@ -11,7 +11,7 @@ export const fetchConstructionJobs = async (): Promise<ConstructionJob[]> => {
 
   try {
     // Explicitly using the /api/smartsheet proxy path with hardcoded ID as requested
-    const response = await fetch(`/api/smartsheet/2.0/sheets/${SHEET_ID}`, {
+    const response = await fetch(`/api/smartsheet/2.0/sheets/${SHEET_ID}?include=attachments`, {
       headers: {
         'Authorization': `Bearer ${TOKEN}`,
         'Content-Type': 'application/json'
@@ -42,8 +42,12 @@ export const fetchConstructionJobs = async (): Promise<ConstructionJob[]> => {
           return cell?.displayValue || cell?.value?.toString() || '';
         };
 
+        const driveFolderId = row.attachments?.find(a => 
+          a.attachmentType === 'GOOGLE_DRIVE' || (a.url && a.url.includes('drive.google.com'))
+        )?.url?.match(/([a-zA-Z0-9_-]{28,})/)?.[0];
+
         return {
-          id: row.id,
+          rowId: row.id,
           jobNumber: getVal('Work Order'),
           status: getVal('Secondary Job Status'),
           address: getVal('Address'),
@@ -53,7 +57,9 @@ export const fetchConstructionJobs = async (): Promise<ConstructionJob[]> => {
           scheduleDate: getVal('Schedule Date'),
           cpaSro: getVal('CPA/SRO'),
           supervisor: getVal('Construction Supervisor'),
-        } as ConstructionJob;
+          driveFolderId,
+          satellites: [],
+        } as JobOrbit;
       })
       .filter(job => job.supervisor === 'Billy Keesee');
 

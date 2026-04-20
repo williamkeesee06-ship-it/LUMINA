@@ -10,12 +10,13 @@ import { AnimatePresence, motion } from 'framer-motion';
 import { X } from 'lucide-react';
 import { useGoogleLogin } from '@react-oauth/google';
 import { useVoiceCommands } from './hooks/useVoiceCommands';
-import { fetchGmailUnreadCount, fetchDriveFiles } from './services/google';
-import type { ConstructionJob } from './types/lumina';
+import { fetchGmailUnreadCount, fetchDriveFiles, fetchFilesInFolder, classifyFile, fetchMoonForJob } from './services/google';
+import { resolveGalaxy } from './types/lumina';
+import type { JobOrbit } from './types/lumina';
 
 export default function App() {
-  const [jobs, setJobs] = useState<ConstructionJob[]>([]);
-  const [selectedJob, setSelectedJob] = useState<ConstructionJob | null>(null);
+  const [jobs, setJobs] = useState<JobOrbit[]>([]);
+  const [selectedJob, setSelectedJob] = useState<JobOrbit | null>(null);
   const [isChatOpen, setIsChatOpen] = useState(false);
   const [loading, setLoading] = useState(true);
   const [viewMode, setViewMode] = useState<'galaxy' | 'earth'>('galaxy');
@@ -24,6 +25,16 @@ export default function App() {
   const [driveFiles, setDriveFiles] = useState<any[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [voiceEnabled, setVoiceEnabled] = useState(false);
+  const [isThinking, setIsThinking] = useState(false);
+  const [isLimited, setIsLimited] = useState(false);
+  const [viewLevel, setViewLevel] = useState<'universe' | 'galaxy' | 'planet'>('universe');
+  const [focusedGalaxy, setFocusedGalaxy] = useState<string | null>(null);
+  const [isMounted, setIsMounted] = useState(false);
+
+  useEffect(() => {
+    const timer = setTimeout(() => setIsMounted(true), 150);
+    return () => clearTimeout(timer);
+  }, []);
   
   useVoiceCommands(voiceEnabled);
 
@@ -31,13 +42,54 @@ export default function App() {
     onSuccess: async (tokenResponse) => {
       setGoogleToken(tokenResponse.access_token);
       const count = await fetchGmailUnreadCount(tokenResponse.access_token);
-      const files = await fetchDriveFiles(tokenResponse.access_token);
       setUnreadCount(count);
+      
+      // Initial drive list (as backup or general context)
+      const files = await fetchDriveFiles(tokenResponse.access_token);
       setDriveFiles(files);
-      console.log('Google Auth Success | Gmail:', count, '| Drive Files:', files?.length);
+      
+      console.log('Google Auth Success | Gmail:', count, '| Feed:', files?.length);
     },
     scope: 'https://www.googleapis.com/auth/gmail.readonly https://www.googleapis.com/auth/drive.readonly'
   });
+
+  // Enrichment Logic: Once logged in, populate satellites and moons
+  useEffect(() => {
+    if (!googleToken || jobs.length === 0) return;
+
+    const enrich = async () => {
+      console.log('[LuminaHub] Starting Planetary Enrichment...');
+      const updatedJobs = await Promise.all(jobs.map(async (job) => {
+        try {
+          // 1. Fetch Satellites (Drive)
+          let satellites = job.satellites;
+          if (job.driveFolderId) {
+            const files = await fetchFilesInFolder(googleToken, job.driveFolderId);
+            satellites = files.map(f => ({
+              id: f.id,
+              name: f.name,
+              mimeType: f.mimeType,
+              webViewLink: f.webViewLink,
+              kind: classifyFile(f.name)
+            }));
+          }
+
+          // 2. Fetch Moon (Gmail)
+          const moon = await fetchMoonForJob(googleToken, job.jobNumber);
+
+          return { ...job, satellites, moon: moon || undefined };
+        } catch (err) {
+          console.error(`[LuminaHub] Failed to enrich Job ${job.jobNumber}:`, err);
+          return job;
+        }
+      }));
+      
+      setJobs(updatedJobs);
+      console.log('[LuminaHub] Orbital Data Synced | System Ready');
+    };
+
+    enrich();
+  }, [googleToken, jobs.length]); // jobs.length check to prevent re-triggering on local job updates
 
   useEffect(() => {
     const load = async () => {
@@ -47,6 +99,7 @@ export default function App() {
           console.warn('[Lumina] No jobs found for Billy Keesee');
         }
         setJobs(data);
+        console.log('[Lumina] Initial Load Sequence Complete. Jobs:', data.length);
       } catch (err: any) {
         console.error('[Lumina] Initial Load Failure:', err);
         setError("The primary data stream failed to initialize. Please check your Smartsheet connection.");
@@ -68,30 +121,46 @@ export default function App() {
   return (
     <div style={{ width: '100vw', height: '100vh', background: '#020205' }}>
       <div className="noise-overlay" />
-      <Canvas
-        shadows
-        camera={{ position: [0, 50, 600], fov: 45 }}
-        gl={{ antialias: true }}
-      >
-        <color attach="background" args={['#020205']} />
-        <Suspense fallback={null}>
-          {viewMode === 'galaxy' ? (
-            <Experience 
-              jobs={jobs} 
-              onSelectJob={(job) => setSelectedJob(job)} 
-              selectedJob={selectedJob}
-              onOpenAI={() => setIsChatOpen(true)}
-              onGoogleLogin={login}
-              isGoogleConnected={!!googleToken}
-            />
-          ) : (
-            <EarthView 
-              jobs={jobs} 
-              onSelectJob={(job) => setSelectedJob(job)} 
-            />
-          )}
-        </Suspense>
-      </Canvas>
+      {isMounted && (
+        <Canvas
+          shadows
+          camera={{ position: [0, 500, 1500], fov: 45, near: 1, far: 8000 }}
+          gl={{ 
+            antialias: true, 
+            alpha: true, 
+            stencil: false, 
+            powerPreference: "high-performance",
+            preserveDrawingBuffer: true 
+          }}
+        >
+          <color attach="background" args={['#020205']} />
+          
+          <Suspense key={viewMode} fallback={null}>
+            {viewMode === 'galaxy' ? (
+              <Experience 
+                jobs={jobs} 
+                onSelectJob={(job) => setSelectedJob(job)} 
+                selectedJob={selectedJob}
+                onOpenAI={() => setIsChatOpen(!isChatOpen)}
+                onGoogleLogin={login}
+                isGoogleConnected={!!googleToken}
+                voiceEnabled={voiceEnabled}
+                isThinking={isThinking}
+                isLimited={isLimited}
+                viewLevel={viewLevel}
+                setViewLevel={setViewLevel}
+                focusedGalaxy={focusedGalaxy}
+                setFocusedGalaxy={setFocusedGalaxy}
+              />
+            ) : (
+              <EarthView 
+                jobs={jobs} 
+                onSelectJob={(job) => setSelectedJob(job)} 
+              />
+            )}
+          </Suspense>
+        </Canvas>
+      )}
 
       {/* Right Command Bar Sidebar */}
       <CommandBar 
@@ -158,47 +227,69 @@ export default function App() {
             />
             
             <motion.div
-              initial={{ opacity: 0, scale: 0.9, x: 20, y: "-50%" }}
-              animate={{ opacity: 1, scale: 1, x: 0, y: "-50%" }}
-              exit={{ opacity: 0, scale: 0.9, x: 20, y: "-50%" }}
-              className="holograph-card-overlay"
+              initial={{ opacity: 0, x: 100 }}
+              animate={{ opacity: 1, x: 0 }}
+              exit={{ opacity: 0, x: 100 }}
+              className="mission-panel-sidebar"
             >
-              <div className="holograph-card">
+              <div className="mission-console">
+                {/* Tech Corners */}
+                <div className="tech-corner tech-corner-tl" />
+                <div className="tech-corner tech-corner-tr" />
+                <div className="tech-corner tech-corner-bl" />
+                <div className="tech-corner tech-corner-br" />
+                
                 <button 
                   onClick={() => setSelectedJob(null)}
-                  className="absolute top-4 right-4 p-2 text-white/30 hover:text-white transition-colors z-[60] bg-white/5 rounded-full hover:bg-white/10"
+                  className="absolute top-4 right-4 p-2 text-cyan-400/50 hover:text-cyan-400 transition-colors z-[60]"
                 >
-                  <X size={16} />
+                  <X size={18} />
                 </button>
                 
-                <div className="mb-6">
-                  <div className="holograph-label">Job Selection</div>
-                  <div className="holograph-value text-2xl font-bold tracking-tight text-white">{selectedJob.jobNumber}</div>
+                <header className="mb-6 border-b border-cyan-500/20 pb-4">
+                  <div className="text-[10px] uppercase tracking-[0.3em] text-cyan-500/60 mb-1">Active Vector</div>
+                  <h2 className="text-3xl font-bold tracking-tighter text-white uppercase italic">
+                    {selectedJob.jobNumber}
+                  </h2>
+                </header>
+
+                <div className="space-y-6">
+                  <section>
+                    <div className="text-[10px] uppercase tracking-[0.2em] text-white/40 mb-2">Operational Status</div>
+                    <div className="inline-block px-3 py-1 bg-cyan-500/10 border border-cyan-500/40 rounded-sm">
+                      <span className="text-xs font-bold text-cyan-400 uppercase tracking-[0.15em]">
+                        {selectedJob.status}
+                      </span>
+                    </div>
+                  </section>
+
+                  <section>
+                    <div className="text-[10px] uppercase tracking-[0.2em] text-white/40 mb-2">Location Coordinates</div>
+                    <div className="text-sm text-white font-medium tracking-wide uppercase">
+                      {selectedJob.address}
+                    </div>
+                    <div className="text-[11px] text-cyan-500/80 uppercase tracking-widest mt-0.5">
+                      {selectedJob.city}, US-NW
+                    </div>
+                  </section>
+
+                  <section className="flex flex-col">
+                    <div className="text-[10px] uppercase tracking-[0.2em] text-white/40 mb-2">NSC Project Notes</div>
+                    <div className="mission-notes-box neon-scrollbar">
+                      <p className="text-xs text-white/70 leading-relaxed font-light italic">
+                        {selectedJob.notes || "SIGNAL STABLE: No additional telemetry recorded for this vector."}
+                      </p>
+                      
+                      <div className="mt-4 pt-4 border-t border-white/5 opacity-20 text-[9px] uppercase tracking-[0.3em]">
+                        End of Log | Data Auth: Lumina-SYS
+                      </div>
+                    </div>
+                  </section>
                 </div>
 
-                <div className="holograph-content">
-                  <div className="holograph-label">Location Data</div>
-                  <div className="holograph-value text-sm">{selectedJob.address}</div>
-                  <div className="holograph-value text-sm opacity-60">{selectedJob.city}</div>
-
-                  <div className="holograph-label mt-4">Operational Status</div>
-                  <div className="holograph-value">
-                    <span className="px-2 py-0.5 rounded border border-cyan-500/30 bg-cyan-500/10 text-xs text-cyan-400 uppercase tracking-widest font-semibold">
-                      {selectedJob.status}
-                    </span>
-                  </div>
-
-                  <div className="holograph-label mt-4">NSC Project Notes</div>
-                  <div className="holograph-value text-sm opacity-80 leading-relaxed font-light italic">
-                    {selectedJob.notes || 'No terminal notes found in current data stream.'}
-                  </div>
-
-                  {/* Dummy data for scroll testing if notes are short */}
-                  {selectedJob.notes && selectedJob.notes.length < 100 && (
-                    <div className="mt-8 opacity-20 text-[10px] uppercase tracking-widest border-t border-white/5 pt-4">
-                      End of Transmission | Secure Link Stable
-                    </div>
-                  )}
+                <div className="absolute bottom-4 left-6 right-6 flex justify-between items-center opacity-30">
+                  <div className="text-[8px] uppercase tracking-widest">Secure Uplink 882-X</div>
+                  <div className="signal-dot" />
                 </div>
               </div>
             </motion.div>
@@ -207,17 +298,19 @@ export default function App() {
       </AnimatePresence>
       <MapPanel job={selectedJob} />
 
-      {isChatOpen && (
-        <ChatInterface 
-          onClose={() => setIsChatOpen(false)} 
-          jobs={jobs}
-          driveFiles={driveFiles}
-          onFlyTo={(job) => {
-            setSelectedJob(job);
-            setIsChatOpen(false);
-          }}
-        />
-      )}
+      <ChatInterface 
+        isOpen={isChatOpen}
+        onClose={() => setIsChatOpen(!isChatOpen)} 
+        jobs={jobs}
+        driveFiles={driveFiles}
+        onFlyTo={(job) => {
+          setFocusedGalaxy(resolveGalaxy(job.status));
+          setSelectedJob(job);
+          setIsChatOpen(false);
+        }}
+        viewLevel={viewLevel}
+        focusedGalaxy={focusedGalaxy}
+      />
 
       {/* Voice Status Indicator */}
       {voiceEnabled && (
@@ -230,9 +323,9 @@ export default function App() {
         </div>
       )}
 
-      <div className="fixed top-8 left-8 z-[110] pointer-events-none">
-        <h1 className="text-2xl font-bold tracking-[0.5em] text-white opacity-20 uppercase">LUMINA</h1>
-        <p className="text-[10px] tracking-[0.2em] text-cyan-500 uppercase">Cosmic Dashboard | Construction Ops</p>
+      <div className="watermark-container">
+        <div className="watermark-wordmark">North Sky</div>
+        <div className="watermark-subline">project Lumina // North Metro</div>
       </div>
     </div>
   );
