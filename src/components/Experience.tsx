@@ -180,7 +180,7 @@ function ExperienceContext({ jobs, onSelectJob, selectedJob, onOpenAI, onGoogleL
       <pointLight position={[0,  40, 0]}   intensity={500}   color="#ffffff" distance={400} decay={2} />
 
       {/* Bloom post-processing restored */}
-      <EffectComposer disableNormalPass>
+      <EffectComposer enableNormalPass={false}>
         <Bloom
           luminanceThreshold={0.0}
           intensity={2.0}
