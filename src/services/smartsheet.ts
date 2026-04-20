@@ -57,33 +57,7 @@ export const fetchConstructionJobs = async (): Promise<ConstructionJob[]> => {
       })
       .filter(job => job.supervisor === 'Billy Keesee');
 
-    // Geocoding Logic (City-based to respect rate limits & avoid hardcoding)
-    const cityCache: Record<string, { lat: number; lng: number }> = {};
-    const finalJobs = await Promise.all(jobs.map(async job => {
-      const city = job.city?.trim() || 'San Diego';
-      if (!cityCache[city]) {
-        try {
-          const res = await fetch(`/api/nominatim/search?format=json&q=${encodeURIComponent(city + ', CA')}&limit=1`);
-          const geoData = await res.json();
-          if (geoData?.[0]) {
-            cityCache[city] = { 
-              lat: parseFloat(geoData[0].lat), 
-              lng: parseFloat(geoData[0].lon) 
-            };
-          }
-        } catch (e) {
-          // Fallback if rate limited or offline
-          cityCache[city] = { lat: 32.7157, lng: -117.1611 }; 
-        }
-      }
-      return { 
-        ...job, 
-        lat: cityCache[city]?.lat, 
-        lng: cityCache[city]?.lng 
-      };
-    }));
-
-    return finalJobs;
+    return jobs;
   } catch (error) {
     console.error('Lumina Data Sync Error:', error);
     return [];

@@ -60,9 +60,9 @@ function ExperienceContext({ jobs, onSelectJob, selectedJob, onOpenAI, onGoogleL
       const phi = Math.acos(-1 + (2 * clusterIdx) / statusKeys.length); // Angle around vertical axis
       const theta = Math.sqrt(statusKeys.length * Math.PI) * phi;   // Spiral angle
       
-      const cx = 180 * Math.cos(theta) * Math.sin(phi);
-      const cy = 100 * Math.cos(phi); // Tighter vertical dispersion
-      const cz = 180 * Math.sin(theta) * Math.sin(phi);
+      const cx = 280 * Math.cos(theta) * Math.sin(phi);
+      const cy = 140 * Math.cos(phi);
+      const cz = 280 * Math.sin(theta) * Math.sin(phi);
       
       const color = STATUS_COLORS[clusterIdx % STATUS_COLORS.length];
 
@@ -74,21 +74,24 @@ function ExperienceContext({ jobs, onSelectJob, selectedJob, onOpenAI, onGoogleL
       });
 
       groupJobs.forEach((job, i) => {
-        const RING_SIZE = 8;
-        const ring = Math.floor(i / RING_SIZE);
-        const slot = i % RING_SIZE;
-        const localRadius = 6 + ring * 5;
-        const localAngle = (slot / RING_SIZE) * Math.PI * 2 + ring * 0.4;
-        
-        // Local cluster offset in 3D
-        const lx = Math.cos(localAngle) * localRadius;
-        const ly = Math.sin(i * 1.5) * 3;
-        const lz = Math.sin(localAngle) * localRadius;
+        const total = groupJobs.length;
+        const goldenAngle = Math.PI * (3 - Math.sqrt(5));
+        const yFrac = total > 1 ? 1 - (2 * i) / (total - 1) : 0; // -1 to 1
+        const sinTheta = Math.sqrt(Math.max(0, 1 - yFrac * yFrac));
+        const phi3D = goldenAngle * i;
+        const spread = 45;
 
-        result.push({ 
-          job, 
-          position: [cx + lx, cy + ly, cz + lz], 
-          clusterColor: color 
+        const lx = Math.cos(phi3D) * sinTheta * spread;
+        const ly = yFrac * spread;
+        const lz = Math.sin(phi3D) * sinTheta * spread;
+
+        const statusIndex = statusKeys.indexOf(status);
+        const clusterColor = STATUS_COLORS[statusIndex % STATUS_COLORS.length];
+
+        result.push({
+          job,
+          position: [cx + lx, cy + ly, cz + lz],
+          clusterColor,
         });
       });
     });
@@ -169,23 +172,23 @@ function ExperienceContext({ jobs, onSelectJob, selectedJob, onOpenAI, onGoogleL
       <CameraLerp zoomTarget={zoomTarget} onComplete={() => setZoomTarget(null)} />
 
       {/* Atmospheric neon point lights — no center pink orb light */}
-      <ambientLight intensity={0.05} />
-      <pointLight position={[50, 30, -50]}  intensity={3}   color="#00f2ff" distance={200} decay={2} />
-      <pointLight position={[-50,-20, 50]}  intensity={2}   color="#ffcc00" distance={150} decay={2} />
-      <pointLight position={[0, -30, 0]}   intensity={1.5} color="#aa00ff" distance={120} decay={2} />
-      <pointLight position={[0,  40, 0]}   intensity={1.5} color="#ffffff" distance={180} decay={2} />
+      <ambientLight intensity={1.5} />
+      <pointLight position={[100, 100, 100]} intensity={10000} color="#00f2ff" />
+      <pointLight position={[-100, -100, -100]} intensity={8000} color="#ff00ea" />
+      <spotLight position={[0, 200, 0]} angle={0.3} penumbra={1} intensity={10000} color="#ffffff" castShadow />
+      <pointLight position={[0, -30, 0]}   intensity={500}   color="#aa00ff" distance={300} decay={2} />
+      <pointLight position={[0,  40, 0]}   intensity={500}   color="#ffffff" distance={400} decay={2} />
 
-      {/* Bloom post-processing */}
-      <EffectComposer enableNormalPass={false}>
+      {/* Bloom post-processing restored */}
+      <EffectComposer disableNormalPass>
         <Bloom
-          luminanceThreshold={0.4}
-          mipmapBlur
-          intensity={1.2}
-          radius={0.7}
-          levels={6}
+          luminanceThreshold={0.0}
+          intensity={2.0}
+          radius={0.4}
         />
       </EffectComposer>
 
+      <LuminaStardust count={8000} radius={1200} />
       <MouseTrail />
       <LuminaOrb 
         onClick={onOpenAI} 
@@ -193,7 +196,7 @@ function ExperienceContext({ jobs, onSelectJob, selectedJob, onOpenAI, onGoogleL
         isConnected={isGoogleConnected} 
       />
 
-      <LuminaStardust count={2500} radius={800} />
+
 
       {/* ── Construction Job Universe — One cluster per unique Secondary Job Status ── */}
       {clusteredJobs.result.map(({ job, position, clusterColor }) => (
@@ -292,7 +295,8 @@ function LuminaOrb({ onClick, onDoubleClick, isConnected }: {
   }, [hovered]);
 
   useFrame(() => {
-    const t = performance.now() * 0.001; // Safer non-deprecated time source
+    if (!groupRef.current || !meshRef.current) return;
+    const t = performance.now() * 0.001; 
     const orbitT = t * 0.1;
     groupRef.current.position.x = Math.cos(orbitT) * 25;
     groupRef.current.position.z = Math.sin(orbitT) * 25;
@@ -318,13 +322,8 @@ function LuminaOrb({ onClick, onDoubleClick, isConnected }: {
         
         {/* Core orb — larger and brighter */}
         <mesh ref={meshRef}>
-          <sphereGeometry args={[2.0, 64, 64]} />
-          <meshStandardMaterial
-            color={isConnected ? "#00ff88" : "#00f2ff"} 
-            emissive={isConnected ? "#00ff88" : "#00f2ff"}
-            emissiveIntensity={isConnected ? (hovered ? 60 : 40) : (hovered ? 30 : 20)}
-            metalness={0.3} roughness={0.1}
-          />
+          <sphereGeometry args={[5.0, 64, 64]} />
+          <meshBasicMaterial color="#ffffff" />
         </mesh>
 
         {/* Outer halo */}
@@ -335,7 +334,7 @@ function LuminaOrb({ onClick, onDoubleClick, isConnected }: {
 
         {/* Rotating gold equatorial ring */}
         <mesh ref={ringRef} rotation={[-Math.PI / 2, 0, 0]}>
-          <ringGeometry args={[2.6, 3.0, 128]} />
+          <ringGeometry args={[6.5, 7.5, 128]} />
           <meshStandardMaterial
             color="#ffcc00" emissive="#ffaa00" emissiveIntensity={12}
             transparent opacity={0.9} side={THREE.DoubleSide} depthWrite={false}
@@ -344,7 +343,7 @@ function LuminaOrb({ onClick, onDoubleClick, isConnected }: {
 
         {/* Second tilted ring for depth */}
         <mesh rotation={[-Math.PI / 3.5, Math.PI / 6, 0]}>
-          <ringGeometry args={[2.9, 3.1, 128]} />
+          <ringGeometry args={[7.0, 7.6, 128]} />
           <meshStandardMaterial
             color="#ffcc00" emissive="#ffaa00" emissiveIntensity={6}
             transparent opacity={0.35} side={THREE.DoubleSide} depthWrite={false}
@@ -352,12 +351,12 @@ function LuminaOrb({ onClick, onDoubleClick, isConnected }: {
         </mesh>
 
         <Text 
-          position={[0, -2.8, 0]} 
-          fontSize={0.7} 
+          position={[0, -7.0, 0]} 
+          fontSize={1.8} 
           color={isConnected ? '#00ff88' : (hovered ? '#ffffff' : '#00f2ff')} 
           anchorX="center" 
           anchorY="middle"
-          outlineWidth={0.04} 
+          outlineWidth={0.1} 
           outlineColor="#003344"
         >
           {isConnected ? 'LUMINA HUB' : 'LUMINA AI'}
@@ -397,16 +396,10 @@ function Planet({ job, position, clusterColor, onSelect }: {
     <group position={position}>
       <Float speed={1.5} rotationIntensity={0.8} floatIntensity={0.8}>
 
-        {/* Custom Neon Glow Shell using NeonGlowShader */}
-        <mesh scale={[1.3, 1.3, 1.3]}>
-          <sphereGeometry args={[0.8, 32, 32]} />
-          {/* @ts-ignore */}
-          <neonMaterial 
-            ref={glowRef}
-            transparent 
-            depthWrite={false}
-            side={THREE.BackSide}
-          />
+        {/* Atmospheric glow haze — colored rim around dark planet */}
+        <mesh scale={[1.45, 1.45, 1.45]}>
+          <sphereGeometry args={[4.0, 32, 32]} />
+          <meshStandardMaterial color={clusterColor} emissive={clusterColor} emissiveIntensity={2} transparent opacity={0.12} side={THREE.BackSide} depthWrite={false} />
         </mesh>
 
         {/* Core planet — near-black body, rim lit by the shell above */}
@@ -416,37 +409,31 @@ function Planet({ job, position, clusterColor, onSelect }: {
           onPointerOver={() => setHovered(true)}
           onPointerOut={() => setHovered(false)}
         >
-          <sphereGeometry args={[0.8, 32, 32]} />
-          <meshStandardMaterial
-            color={hovered ? '#0a0a14' : '#000000'}
-            emissive={clusterColor}
-            emissiveIntensity={hovered ? 4 : 0.1}
-            metalness={1}
-            roughness={0.02}
-          />
+          <sphereGeometry args={[4.0, 32, 32]} />
+          <meshStandardMaterial color="#0a0a18" roughness={0.7} metalness={0.3} />
         </mesh>
 
         {/* Neon status ring */}
         <mesh rotation={[-Math.PI / 2.5, 0, 0]}>
-          <ringGeometry args={[1.1, 1.32, 64]} />
+          <ringGeometry args={[5.5, 6.5, 64]} />
           <meshStandardMaterial
             color={clusterColor} 
             emissive={clusterColor} 
-            emissiveIntensity={10}
-            transparent opacity={0.6}
+            emissiveIntensity={20}
+            transparent opacity={0.7}
             side={THREE.DoubleSide} depthWrite={false}
           />
         </mesh>
       </Float>
 
       {/* Job Number label */}
-      <Billboard position={[0, 1.6, 0]} follow={true}>
+      <Billboard position={[0, 8.0, 0]} follow={true}>
         <Text
-          fontSize={0.45}
+          fontSize={2.8}
           color="#ffffff"
           anchorX="center"
           anchorY="middle"
-          outlineWidth={0.05}
+          outlineWidth={0.2}
           outlineColor="#000000"
         >
           {label}

@@ -62,9 +62,9 @@ export function EarthView({ jobs, onSelectJob }: EarthViewProps) {
         maxDistance={60} 
       />
       
-      <ambientLight intensity={0.2} />
-      <pointLight position={[50, 50, 50]} intensity={2.5} color="#ffffff" />
-      <pointLight position={[-50, -50, -50]} intensity={0.5} color="#4444ff" />
+      <ambientLight intensity={0.5} />
+      <pointLight position={[100, 100, 100]} intensity={25} color="#ffffff" />
+      <pointLight position={[-100, -100, -100]} intensity={10} color="#4444ff" />
 
       {/* Earth Globe */}
       <mesh ref={globeRef}>
@@ -91,7 +91,7 @@ export function EarthView({ jobs, onSelectJob }: EarthViewProps) {
       {/* Neon Atmosphere Glow */}
       <mesh>
         <sphereGeometry args={[15.5, 64, 64]} />
-        <meshBasicMaterial color="#00f2ff" transparent opacity={0.05} side={THREE.BackSide} />
+        <meshBasicMaterial color="#00f2ff" transparent opacity={0.15} side={THREE.BackSide} />
       </mesh>
 
       {/* Pins */}

@@ -70,7 +70,7 @@ export default function App() {
       <div className="noise-overlay" />
       <Canvas
         shadows
-        camera={{ position: [0, 20, 40], fov: 45 }}
+        camera={{ position: [0, 50, 600], fov: 45 }}
         gl={{ antialias: true }}
       >
         <color attach="background" args={['#020205']} />
@@ -121,16 +121,25 @@ export default function App() {
       )}
 
       {error && (
-        <div className="absolute inset-0 flex items-center justify-center z-[100] bg-black/80 backdrop-blur-sm">
-          <div className="max-w-md p-8 border border-red-500/50 bg-red-500/5 rounded-2xl text-center">
-            <h2 className="text-red-400 font-bold mb-2 uppercase tracking-widest text-sm">System Interruption</h2>
-            <p className="text-white/80 text-xs mb-6 leading-relaxed">{error}</p>
+        <div className="fixed inset-0 flex items-center justify-center z-[60] p-4">
+          <div className="holograph-card border-red border-l-4">
+            <h2 className="text-xl font-bold mb-2 text-red-500 tracking-widest uppercase">System Interruption</h2>
+            <p className="text-white/80 font-light mb-6 leading-relaxed">{error}</p>
             <button 
               onClick={() => window.location.reload()}
-              className="px-6 py-2 bg-red-500/20 hover:bg-red-500/40 text-red-100 rounded border border-red-500/50 transition-colors text-[10px] uppercase font-bold tracking-[0.2em]"
+              className="px-6 py-2 bg-red-500/10 border border-red-500/30 text-red-500 rounded hover:bg-red-500/20 transition-all uppercase tracking-widest text-xs"
             >
-              Restart Stream
+              Force Uplink Reset
             </button>
+          </div>
+        </div>
+      )}
+
+      {!loading && !error && jobs.length === 0 && (
+        <div className="fixed inset-0 flex items-center justify-center z-40 p-4 pointer-events-none">
+          <div className="holograph-card opacity-80 border-cyan-500">
+            <h2 className="text-lg font-bold mb-2 text-cyan-400 tracking-widest uppercase">Zero Signal</h2>
+            <p className="text-white/60 font-light mb-0 leading-relaxed">No active construction vectors detected for Billy Keesee.</p>
           </div>
         </div>
       )}
