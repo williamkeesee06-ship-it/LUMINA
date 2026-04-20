@@ -2,7 +2,7 @@
   "rewrites": [
     {
       "source": "/api/smartsheet/:path*",
-      "destination": "/api/smartsheet"
+      "destination": "https://api.smartsheet.com/:path*"
     },
     {
       "source": "/api/nominatim/:path*",
