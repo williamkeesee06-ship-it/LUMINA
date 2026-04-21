@@ -55,7 +55,7 @@ export function LuminaStardust({ count = 15000, radius = 500 }) {
         />
       </bufferGeometry>
       <pointsMaterial
-        size={8.0}
+        size={2.5}
         sizeAttenuation
         vertexColors
         transparent

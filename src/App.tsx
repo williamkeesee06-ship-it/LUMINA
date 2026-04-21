@@ -1,4 +1,5 @@
 import { Canvas } from '@react-three/fiber';
+import { Html } from '@react-three/drei';
 import { Suspense, useState, useEffect } from 'react';
 import { Experience } from './components/Experience';
 import { ChatInterface } from './components/ChatInterface';
@@ -13,6 +14,25 @@ import { useVoiceCommands } from './hooks/useVoiceCommands';
 import { fetchGmailUnreadCount, fetchDriveFiles, fetchFilesInFolder, classifyFile, fetchMoonForJob } from './services/google';
 import { resolveGalaxy } from './types/lumina';
 import type { JobOrbit } from './types/lumina';
+import React from 'react';
+
+class ErrorBoundary extends React.Component<{ fallback: React.ReactNode, children: React.ReactNode }, { hasError: boolean, error: Error | null }> {
+  constructor(props) {
+    super(props);
+    this.state = { hasError: false, error: null };
+  }
+
+  static getDerivedStateFromError(error: Error) {
+    return { hasError: true, error };
+  }
+
+  render() {
+    if (this.state.hasError) {
+      return this.props.fallback(this.state.error);
+    }
+    return this.props.children;
+  }
+}
 
 export default function App() {
   const [jobs, setJobs] = useState<JobOrbit[]>([]);
@@ -136,28 +156,37 @@ export default function App() {
           <color attach="background" args={['#020205']} />
           
           <Suspense key={viewMode} fallback={null}>
-            {viewMode === 'galaxy' ? (
-              <Experience 
-                jobs={jobs} 
-                onSelectJob={(job) => setSelectedJob(job)} 
-                selectedJob={selectedJob}
-                onOpenAI={() => setIsChatOpen(!isChatOpen)}
-                onGoogleLogin={login}
-                isGoogleConnected={!!googleToken}
-                voiceEnabled={voiceEnabled}
-                isThinking={isThinking}
-                isLimited={isLimited}
-                viewLevel={viewLevel}
-                setViewLevel={setViewLevel}
-                focusedGalaxy={focusedGalaxy}
-                setFocusedGalaxy={setFocusedGalaxy}
-              />
-            ) : (
-              <EarthView 
-                jobs={jobs} 
-                onSelectJob={(job) => setSelectedJob(job)} 
-              />
-            )}
+            <ErrorBoundary fallback={(error) => (
+              <Html center>
+                <div style={{ color: 'red', background: 'black', padding: 20 }}>
+                  <h2>Experience crashed</h2>
+                  <p>{error?.message}</p>
+                </div>
+              </Html>
+            )}>
+              {viewMode === 'galaxy' ? (
+                <Experience 
+                  jobs={jobs} 
+                  onSelectJob={(job) => setSelectedJob(job)} 
+                  selectedJob={selectedJob}
+                  onOpenAI={() => setIsChatOpen(!isChatOpen)}
+                  onGoogleLogin={login}
+                  isGoogleConnected={!!googleToken}
+                  voiceEnabled={voiceEnabled}
+                  isThinking={isThinking}
+                  isLimited={isLimited}
+                  viewLevel={viewLevel}
+                  setViewLevel={setViewLevel}
+                  focusedGalaxy={focusedGalaxy}
+                  setFocusedGalaxy={setFocusedGalaxy}
+                />
+              ) : (
+                <EarthView 
+                  jobs={jobs} 
+                  onSelectJob={(job) => setSelectedJob(job)} 
+                />
+              )}
+            </ErrorBoundary>
           </Suspense>
         </Canvas>
       )}
@@ -227,6 +256,7 @@ export default function App() {
             />
             
             <motion.div
+              key={selectedJob.rowId}
               initial={{ opacity: 0, x: 100 }}
               animate={{ opacity: 1, x: 0 }}
               exit={{ opacity: 0, x: 100 }}

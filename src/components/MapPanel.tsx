@@ -14,10 +14,12 @@ export function MapPanel({ job }: MapPanelProps) {
     <AnimatePresence>
       {job && (
         <motion.div
-          initial={{ opacity: 0, x: 100 }}
-          animate={{ opacity: 1, x: 0 }}
-          exit={{ opacity: 0, x: 100 }}
-          className="fixed bottom-12 right-12 z-50 w-[450px] h-[300px]"
+          key={job.rowId}
+          initial={{ opacity: 0, y: 40 }}
+          animate={{ opacity: 1, y: 0 }}
+          exit={{ opacity: 0, y: 40 }}
+          transition={{ duration: 0.25 }}
+          className="fixed bottom-12 left-12 z-50 w-[450px] h-[300px]"
         >
           <div className="holograph-card !p-1 overflow-hidden border-[#00f2ff40] h-full shadow-[0_0_30px_rgba(0,242,255,0.15)]">
             {API_KEY && API_KEY !== 'your_google_maps_key_here' ? (

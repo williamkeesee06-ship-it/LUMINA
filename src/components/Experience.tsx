@@ -1,4 +1,4 @@
-import { OrbitControls, Float, Text, Points, PointMaterial, Billboard, Line } from '@react-three/drei';
+import { OrbitControls, Float, Text, Points, PointMaterial, Billboard, Line, Html } from '@react-three/drei';
 import { useFrame, useThree, extend } from '@react-three/fiber';
 import { useRef, useEffect, useState, useMemo } from 'react';
 import { EffectComposer, Bloom } from '@react-three/postprocessing';
@@ -17,6 +17,42 @@ const NeonMaterial = shaderMaterial(
 );
 
 extend({ NeonMaterial });
+
+// ────────────────────────────────────────────────────────────────────────
+// CANONICAL GALAXY CENTERS
+// ────────────────────────────────────────────────────────────────────────
+export const GALAXY_CENTERS: Record<string, [number, number, number]> = {
+  'Complete': [0, 0, 0],
+  'Fielded-RTS': [0, 0, 0],
+  'Needs Fielding': [0, 0, 0],
+  'On Hold': [0, 0, 0],
+  'Pending': [0, 0, 0],
+  'Routed to Sub': [0, 0, 0],
+  'Scheduled': [0, 0, 0]
+};
+
+GALAXY_CATEGORIES.forEach((galaxy, idx) => {
+  const phi = Math.acos(-1 + (2 * idx) / GALAXY_CATEGORIES.length);
+  const theta = Math.sqrt(GALAXY_CATEGORIES.length * Math.PI) * phi;
+  const dist = 600;
+  GALAXY_CENTERS[galaxy] = [
+    dist * Math.cos(theta) * Math.sin(phi),
+    (dist * 0.5) * Math.cos(phi),
+    dist * Math.sin(theta) * Math.sin(phi)
+  ];
+});
+
+export function normalizeStatusKey(status: string): string | null {
+  const s = status.toLowerCase();
+  if (s.includes('complete')) return 'Complete';
+  if (s.includes('fielded-rts') || s === 'fielding') return 'Fielded-RTS';
+  if (s.includes('needs fielding')) return 'Needs Fielding';
+  if (s.includes('hold')) return 'On Hold';
+  if (s.includes('pending')) return 'Pending';
+  if (s.includes('routed')) return 'Routed to Sub';
+  if (s.includes('scheduled')) return 'Scheduled';
+  return null; // NO silent fallback to orb
+}
 
 interface ExperienceProps {
   jobs: JobOrbit[];
@@ -42,15 +78,18 @@ export function Experience(props: ExperienceProps) {
   return <ExperienceContext {...props} />;
 }
 
-function ExperienceContext({ 
-  jobs, onSelectJob, selectedJob, onOpenAI, onGoogleLogin, 
+function ExperienceContext({
+  jobs, onSelectJob, selectedJob, onOpenAI, onGoogleLogin,
   isGoogleConnected, voiceEnabled, isThinking, isLimited,
   viewLevel, setViewLevel, focusedGalaxy, setFocusedGalaxy
 }: ExperienceProps) {
-  const { camera } = useThree();
   const controlsRef = useRef<any>(null);
   const [zoomTarget, setZoomTarget] = useState<{ center: THREE.Vector3, cameraPos: THREE.Vector3 } | null>(null);
   const [isNavigating, setIsNavigating] = useState(false);
+
+  // Explicit universe view modes as requested
+  const [viewMode, setViewMode] = useState<'god' | 'galaxy'>('god');
+  const [activeStatus, setActiveStatus] = useState<string | null>(null);
 
   useEffect(() => {
     console.log('[Experience] Mounted | Camera View:', viewLevel, '| Jobs:', jobs.length);
@@ -77,34 +116,26 @@ function ExperienceContext({
     const galaxyLabels: Array<{ text: string; position: [number, number, number]; color: string }> = [];
 
     GALAXY_CATEGORIES.forEach((galaxy, idx) => {
-      const groupJobs = galaxyGroups[galaxy];
-      
-      // Position galaxies on a wide sphere in deep space
-      const phi = Math.acos(-1 + (2 * idx) / GALAXY_CATEGORIES.length);
-      const theta = Math.sqrt(GALAXY_CATEGORIES.length * Math.PI) * phi;
-      
-      const dist = 600; // Galaxy distance from center
-      const gx = dist * Math.cos(theta) * Math.sin(phi);
-      const gy = (dist * 0.5) * Math.cos(phi); // Flatten the universe slightly
-      const gz = dist * Math.sin(theta) * Math.sin(phi);
-      
+      const [gx, gy, gz] = GALAXY_CENTERS[galaxy];
       const color = STATUS_COLORS[idx % STATUS_COLORS.length];
 
       galaxyLabels.push({
-        text: galaxy.toUpperCase(),
-        position: [gx, gy + 80, gz], 
+        text: galaxy.toUpperCase(), // Display text
+        position: [gx, gy + 80, gz], // Visual offset
         color: color
       });
 
-      if (groupJobs.length === 0) return;
+      const jobsForGalaxy = galaxyGroups[galaxy] ?? [];
 
-      groupJobs.forEach((job, i) => {
-        const total = groupJobs.length;
+      if (jobsForGalaxy.length === 0) return;
+
+      jobsForGalaxy.forEach((job, i) => {
+        const total = jobsForGalaxy.length;
         const goldenAngle = Math.PI * (3 - Math.sqrt(5));
         const yFrac = total > 1 ? 1 - (2 * i) / (total - 1) : 0;
         const sinTheta = Math.sqrt(Math.max(0, 1 - yFrac * yFrac));
         const phi3D = goldenAngle * i;
-        const spread = 150; // Inner galaxy planet spread (increased to reduce bunching)
+        const spread = 240; // Planet spread within galaxy — wider fan to eliminate clumping
 
         const lx = Math.cos(phi3D) * sinTheta * spread;
         const ly = yFrac * spread;
@@ -158,6 +189,8 @@ function ExperienceContext({
           });
           setIsNavigating(true);
           setViewLevel('galaxy');
+          setViewMode('galaxy');
+          setActiveStatus(label.text);
         }
       }
     }
@@ -170,29 +203,40 @@ function ExperienceContext({
       onSelectJob(null); // Deselect current job if any
 
       if (status === 'Total') {
+        console.log(`[CLICK RECEIVED] HUD Status: ${status} | target: Total Universe | viewMode before: ${viewMode} -> after: god`);
         setZoomTarget({
           center: new THREE.Vector3(0, 0, 0),
           cameraPos: new THREE.Vector3(0, 500, 1500)
         });
         setIsNavigating(true);
         setViewLevel('universe');
+        setViewMode('god');
+        setActiveStatus(null);
         return;
       }
 
-      const label = clusteredJobs.galaxyLabels.find(l => 
-        l.text.toLowerCase().includes(status.toLowerCase())
-      );
-
-      if (label) {
-        const [cx, cy, cz] = label.position;
-        setFocusedGalaxy(label.text);
-        setZoomTarget({
-          center: new THREE.Vector3(cx, cy - 80, cz),
-          cameraPos: new THREE.Vector3(cx + 120, cy + 80, cz + 120)
-        });
-        setIsNavigating(true);
-        setViewLevel('galaxy');
+      const canonicalKey = normalizeStatusKey(status);
+      if (!canonicalKey) {
+        console.error(`[ABORT DIVE] Could not resolve canonical key for status: ${status}`);
+        return;
       }
+
+      const center = GALAXY_CENTERS[canonicalKey];
+      if (!center) {
+        console.error(`[ABORT DIVE] Center missing for canonical key: ${canonicalKey}`);
+        return;
+      }
+
+      console.log(`[CLICK RECEIVED] HUD Status: ${status} -> Key: ${canonicalKey} | center: [${Math.round(center[0])}, ${Math.round(center[1])}, ${Math.round(center[2])}]`);
+      setFocusedGalaxy(canonicalKey);
+      setActiveStatus(canonicalKey);
+      setViewMode('galaxy');
+      setZoomTarget({
+        center: new THREE.Vector3(center[0], center[1], center[2]),
+        cameraPos: new THREE.Vector3(center[0], center[1] + 120, center[2] + 260)
+      });
+      setIsNavigating(true);
+      setViewLevel('galaxy');
     };
     window.addEventListener('lumina-zoom-to-status', handleZoom);
     return () => window.removeEventListener('lumina-zoom-to-status', handleZoom);
@@ -203,6 +247,8 @@ function ExperienceContext({
     const handleReset = () => {
       onSelectJob(null);
       setFocusedGalaxy(null);
+      setActiveStatus(null);
+      setViewMode('god');
       setZoomTarget({
         center: new THREE.Vector3(0, 0, 0),
         cameraPos: new THREE.Vector3(0, 500, 1500)
@@ -211,7 +257,11 @@ function ExperienceContext({
       setViewLevel('universe');
     };
     window.addEventListener('lumina-reset-camera', handleReset);
-    return () => window.removeEventListener('lumina-reset-camera', handleReset);
+    window.addEventListener('lumina-exit-galaxy', handleReset);
+    return () => {
+      window.removeEventListener('lumina-reset-camera', handleReset);
+      window.removeEventListener('lumina-exit-galaxy', handleReset);
+    };
   }, [onSelectJob]);
 
   return (
@@ -227,25 +277,28 @@ function ExperienceContext({
         dampingFactor={0.05}
       />
 
-      <CameraLerp 
+      {/* TEMPORARY BYPASS:
+      <HardCameraSnap 
         zoomTarget={zoomTarget} 
+        viewMode={viewMode}
         onComplete={() => {
           setZoomTarget(null);
           setIsNavigating(false);
         }} 
       />
+      */}
 
       <ambientLight intensity={4.0} />
       <pointLight position={[100, 100, 100]} intensity={10000} color="#00f2ff" />
       <pointLight position={[-100, -100, -100]} intensity={8000} color="#ff00ea" />
       <spotLight position={[0, 200, 0]} angle={0.3} penumbra={1} intensity={10000} color="#ffffff" castShadow />
-      
+
       <LuminaStardust count={40000} radius={6000} />
       <InterstellarDust />
       <MouseTrail />
-      <LuminaOrb 
-        onClick={onOpenAI} 
-        onDoubleClick={onGoogleLogin} 
+      <LuminaOrb
+        onClick={onOpenAI}
+        onDoubleClick={onGoogleLogin}
         isConnected={isGoogleConnected}
         isThinking={isThinking}
         voiceEnabled={voiceEnabled}
@@ -256,74 +309,139 @@ function ExperienceContext({
 
 
 
-      {/* â”€â”€ Galaxy-Scale Swirls â”€â”€ */}
-      {clusteredJobs.galaxyLabels.map((g, i) => (
-        <group key={`galaxy-system-${i}`} position={[g.position[0], g.position[1]-80, g.position[2]]}>
-          <GalaxySwirl color={g.color} />
-        </group>
-      ))}
+      {/* ─── Galaxy-Scale Swirls ─── */}
+      {clusteredJobs.galaxyLabels.map((g, i) => {
+        const isSelected = viewMode === 'galaxy' && activeStatus === g.text;
+        const isHidden = viewMode === 'galaxy' && activeStatus !== g.text;
 
-      {/* â”€â”€ Construction Job Universe â”€â”€ */}
-      {clusteredJobs.result.map((item) => {
-        const { visible, lowDetail } = getPlanetDetails(item.galaxy);
-        if (!visible) return null;
+        if (isHidden) return null;
+
+        const tiltX = Math.sin(i * 13.5) * 0.15;
+        const tiltZ = Math.cos(i * 42.1) * 0.15;
+        const baseScale = 0.85 + Math.sin(i * 21.0) * 0.25;
+        const scale = isSelected ? baseScale * 1.25 : baseScale;
+
+        const canonicalKey = normalizeStatusKey(g.text);
+        const center = canonicalKey ? GALAXY_CENTERS[canonicalKey] : null;
+
+        const diveIntoGalaxy = () => {
+          if (!canonicalKey || !center) return;
+          console.log(`[CLICK RECEIVED] Galaxy Mesh: ${g.text} | center: [${Math.round(center[0])}, ${Math.round(center[1])}, ${Math.round(center[2])}]`);
+          setActiveStatus(canonicalKey);
+          setViewMode('galaxy');
+          setFocusedGalaxy(canonicalKey);
+          setZoomTarget({
+            center: new THREE.Vector3(center[0], center[1], center[2]),
+            cameraPos: new THREE.Vector3(center[0], center[1] + 120, center[2] + 260)
+          });
+          setIsNavigating(true);
+          setViewLevel('galaxy');
+        };
 
         return (
-          <Planet
-            key={item.job.rowId}
-            job={item.job}
-            position={item.position}
-            clusterColor={item.clusterColor}
-            onSelect={() => {
-              onSelectJob(item.job);
-              setViewLevel('planet');
-            }}
-            isSelected={selectedJob?.rowId === item.job.rowId}
-            isAnyFocused={!!selectedJob}
+          <group
+            key={`galaxy-system-${i}`}
+            position={[g.position[0], g.position[1] - 80, g.position[2]]}
+          >
+            {/* Hitbox for reliable clicking over particle meshes */}
+            <mesh
+              visible={false}
+              scale={[150, 40, 150]}
+              onClick={(e) => {
+                if (viewMode === 'god') {
+                  e.stopPropagation();
+                  diveIntoGalaxy();
+                }
+              }}
+              onPointerEnter={() => { if (viewMode === 'god') document.body.style.cursor = 'pointer'; }}
+              onPointerLeave={() => { document.body.style.cursor = 'default'; }}
+            >
+              <sphereGeometry args={[1, 16, 16]} />
+              <meshBasicMaterial transparent opacity={0.0} />
+            </mesh>
+
+            <GalaxySwirl color={g.color} tilt={[tiltX, 0, tiltZ]} scale={scale} rotationSpeed={0.7 + Math.abs(Math.sin(i * 7.3)) * 0.7} />
+          </group>
+        );
+      })}
+
+      {/* ─── Construction Job Universe ─── */}
+      {viewMode === 'galaxy' && activeStatus && clusteredJobs.result
+        .filter((item) => item.galaxy === activeStatus)
+        .map((item) => {
+          return (
+            <Planet
+              key={item.job.rowId}
+              job={item.job}
+              position={item.position}
+              clusterColor={item.clusterColor}
+              onSelect={() => {
+                onSelectJob(item.job);
+                setViewLevel('planet');
+              }}
+              isSelected={selectedJob?.rowId === item.job.rowId}
+              isAnyFocused={!!selectedJob}
+              viewLevel={viewLevel}
+              lowDetail={false} // Since we only render when inside a specific galaxy
+            />
+          );
+        })}
+
+      {/* â”€â”€ Celestial Galaxy Labels â”€â”€ */}
+      {clusteredJobs.galaxyLabels.map((label, i) => {
+        const isHidden = viewMode === 'galaxy' && activeStatus !== label.text;
+        if (isHidden) return null;
+
+        return (
+          <CelestialGalaxyLabel
+            key={`label-${i}`}
+            label={label}
             viewLevel={viewLevel}
-            lowDetail={lowDetail}
+            isNavigating={isNavigating}
+            onClick={() => {
+              if (viewMode === 'god') {
+                const canonicalKey = normalizeStatusKey(label.text);
+                const center = canonicalKey ? GALAXY_CENTERS[canonicalKey] : null;
+                if (!canonicalKey || !center) return;
+
+                console.log(`[CLICK RECEIVED] Celestial Label: ${label.text} | center: [${Math.round(center[0])}, ${Math.round(center[1])}, ${Math.round(center[2])}]`);
+                setActiveStatus(canonicalKey);
+                setViewMode('galaxy');
+                setFocusedGalaxy(canonicalKey);
+                setZoomTarget({
+                  center: new THREE.Vector3(center[0], center[1], center[2]),
+                  cameraPos: new THREE.Vector3(center[0], center[1] + 120, center[2] + 260)
+                });
+                setIsNavigating(true);
+                setViewLevel('galaxy');
+              }
+            }}
           />
         );
       })}
 
-      {/* â”€â”€ Celestial Galaxy Labels â”€â”€ */}
-      {clusteredJobs.galaxyLabels.map((label, i) => (
-        <CelestialGalaxyLabel
-          key={`label-${i}`}
-          label={label}
-          viewLevel={viewLevel}
-          isNavigating={isNavigating}
-          onClick={() => {
-            const [cx, cy, cz] = label.position;
-            setFocusedGalaxy(label.text);
-            setZoomTarget({
-              center: new THREE.Vector3(cx, cy - 80, cz),
-              cameraPos: new THREE.Vector3(cx + 120, cy + 80, cz + 120)
-            });
-            setIsNavigating(true);
-            setViewLevel('galaxy');
-          }}
-        />
-      ))}
+      <EffectComposer disableNormalPass>
+        <Bloom luminanceThreshold={1} mipmapBlur intensity={0.75} />
+      </EffectComposer>
     </>
   );
 }
 
 // â”€â”€â”€ Celestial Galaxy Label â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-function CelestialGalaxyLabel({ label, viewLevel, isNavigating, onClick }: { 
-  label: any, 
-  viewLevel: string, 
-  isNavigating: boolean, 
-  onClick: () => void 
+function CelestialGalaxyLabel({ label, viewLevel, isNavigating, onClick }: {
+  label: any,
+  viewLevel: string,
+  isNavigating: boolean,
+  onClick: () => void
 }) {
   const isUniverse = viewLevel === 'universe';
   const isGalaxy = viewLevel === 'galaxy';
-  
+
   // Fade out logic: Labels are fully visible only in Universe view.
   // In Galaxy view, they fade significantly to prioritize planet focus.
   // In Planet view, they disappear.
   const opacity = isUniverse ? 0.9 : (isGalaxy ? 0.25 : 0);
-  
+
   if (opacity === 0) return null;
 
   return (
@@ -340,16 +458,16 @@ function CelestialGalaxyLabel({ label, viewLevel, isNavigating, onClick }: {
         >
           {label.text.toUpperCase()}
         </Text>
-        
+
         {/* Observatory Coordinate Line */}
-        <Line 
-          points={[[0, -2, 0], [0, -15, 0]]} 
-          color="#ffffff" 
-          lineWidth={0.5} 
-          transparent 
-          opacity={opacity * 0.5} 
+        <Line
+          points={[[0, -2, 0], [0, -15, 0]]}
+          color="#ffffff"
+          lineWidth={0.5}
+          transparent
+          opacity={opacity * 0.5}
         />
-        
+
         {/* Small marker at text base */}
         <mesh position={[0, -2, 0]}>
           <planeGeometry args={[10, 0.1]} />
@@ -366,9 +484,9 @@ function InterstellarDust() {
   const positions = useMemo(() => {
     const pos = new Float32Array(count * 3);
     for (let i = 0; i < count; i++) {
-        pos[i * 3] = (Math.random() - 0.5) * 3000;
-        pos[i * 3 + 1] = (Math.random() - 0.5) * 1500;
-        pos[i * 3 + 2] = (Math.random() - 0.5) * 3000;
+      pos[i * 3] = (Math.random() - 0.5) * 3000;
+      pos[i * 3 + 1] = (Math.random() - 0.5) * 1500;
+      pos[i * 3 + 2] = (Math.random() - 0.5) * 3000;
     }
     return pos;
   }, []);
@@ -379,22 +497,22 @@ function InterstellarDust() {
         <PointMaterial
           transparent
           color="#88ccff"
-          size={15}
+          size={3}
           sizeAttenuation
           depthWrite={false}
           blending={THREE.AdditiveBlending}
-          opacity={0.15}
+          opacity={0.12}
         />
       </Points>
       <Points positions={positions.map(v => v * 1.1)} stride={3}>
         <PointMaterial
           transparent
           color="#aa44ff"
-          size={25}
+          size={5}
           sizeAttenuation
           depthWrite={false}
           blending={THREE.AdditiveBlending}
-          opacity={0.08}
+          opacity={0.06}
         />
       </Points>
     </group>
@@ -415,7 +533,7 @@ function MouseTrail() {
     const x = (mouse.x * viewport.width) / 2;
     const y = (mouse.y * viewport.height) / 2;
     for (let i = count - 1; i > 0; i--) {
-      positions[i * 3]     = positions[(i - 1) * 3];
+      positions[i * 3] = positions[(i - 1) * 3];
       positions[i * 3 + 1] = positions[(i - 1) * 3 + 1];
       positions[i * 3 + 2] = positions[(i - 1) * 3 + 2];
     }
@@ -437,10 +555,10 @@ function MouseTrail() {
 
 
 // â”€â”€â”€ Lumina AI Orb â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-function LuminaOrb({ 
-  onClick, onDoubleClick, isConnected, isThinking, voiceEnabled, isLimited, isNavigating 
-}: { 
-  onClick: () => void; 
+function LuminaOrb({
+  onClick, onDoubleClick, isConnected, isThinking, voiceEnabled, isLimited, isNavigating
+}: {
+  onClick: () => void;
   onDoubleClick: () => void;
   isConnected: boolean;
   isThinking: boolean;
@@ -449,10 +567,10 @@ function LuminaOrb({
   isNavigating: boolean;
 }) {
   const groupRef = useRef<THREE.Group>(null!);
-  const meshRef  = useRef<THREE.Mesh>(null!);
+  const meshRef = useRef<THREE.Mesh>(null!);
   const coreMatRef = useRef<THREE.MeshStandardMaterial>(null!);
   const haloMatRef = useRef<THREE.MeshStandardMaterial>(null!);
-  const ringRef  = useRef<THREE.Mesh>(null!);
+  const ringRef = useRef<THREE.Mesh>(null!);
   const [hovered, setHovered] = useState(false);
 
   useEffect(() => {
@@ -464,12 +582,12 @@ function LuminaOrb({
     if (!groupRef.current || !meshRef.current) return;
     const t = state.clock.getElapsedTime();
     const orbitT = t * 0.05;
-    
+
     // Very subtle idle movement, kept close to center
     groupRef.current.position.x = Math.cos(orbitT) * 10;
     groupRef.current.position.z = Math.sin(orbitT) * 10;
     groupRef.current.position.y = Math.sin(orbitT * 2) * 1.5;
-    
+
     const pulseScale = 1 + Math.sin(t * 2) * 0.07;
     meshRef.current.scale.set(pulseScale, pulseScale, pulseScale);
     if (ringRef.current) ringRef.current.rotation.z += 0.008;
@@ -483,17 +601,17 @@ function LuminaOrb({
         // slow cyan-to-violet shimmer
         const lerpVal = (Math.sin(t * 2) + 1) / 2;
         emissive.lerp(new THREE.Color("#aa00ff"), lerpVal);
-        intensity = 4;
+        intensity = 2.5;
       } else if (voiceEnabled) {
         // vivid teal pulse
         emissive = new THREE.Color("#00ffcc");
-        intensity = 6 + Math.sin(t * 8) * 3;
+        intensity = 3.5 + Math.sin(t * 8) * 1.5;
       } else if (isNavigating) {
         // brighter cyan pulse
         emissive = new THREE.Color("#88ffff");
-        intensity = 8 + Math.sin(t * 10) * 4;
+        intensity = 4 + Math.sin(t * 10) * 1.5;
       } else if (isConnected) {
-        intensity = 3;
+        intensity = 2;
       }
 
       coreMatRef.current.emissive = emissive;
@@ -524,16 +642,16 @@ function LuminaOrb({
           <sphereGeometry args={[4, 16, 16]} />
           <meshBasicMaterial transparent opacity={0} depthWrite={false} />
         </mesh>
-        
-        {/* Core orb — larger and brighter */}
+
+        {/* Core orb — toned down Dyson sphere core */}
         <mesh ref={meshRef}>
-          <sphereGeometry args={[22.0, 64, 64]} />
-          <meshStandardMaterial 
+          <sphereGeometry args={[14.0, 64, 64]} />
+          <meshStandardMaterial
             ref={coreMatRef}
-            color="#ffffff" 
+            color="#cceeff"
             emissive="#00f2ff"
-            emissiveIntensity={10}
-            roughness={0}
+            emissiveIntensity={3}
+            roughness={0.1}
             metalness={1}
             toneMapped={false}
           />
@@ -542,51 +660,65 @@ function LuminaOrb({
         {/* Outer halo */}
         <mesh scale={[1.4, 1.4, 1.4]}>
           <sphereGeometry args={[22, 32, 32]} />
-          <meshStandardMaterial 
+          <meshStandardMaterial
             ref={haloMatRef}
-            color="#00f2ff" 
-            transparent 
-            opacity={0.05} 
-            side={THREE.BackSide} 
-            depthWrite={false} 
+            color="#00f2ff"
+            transparent
+            opacity={0.05}
+            side={THREE.BackSide}
+            depthWrite={false}
           />
         </mesh>
 
-        {/* Rotating equatorial ring - emphasize when connected */}
+        {/* Rotating equatorial ring */}
         <mesh ref={ringRef} rotation={[-Math.PI / 2, 0, 0]}>
-          <ringGeometry args={[28.0, 32.0, 128]} />
+          <ringGeometry args={[18.0, 22.0, 128]} />
           <meshStandardMaterial
-            color={isConnected ? "#ffcc00" : "#ffffff"} 
-            emissive="#ffcc00" 
-            emissiveIntensity={isConnected ? 15 : 2}
-            transparent 
-            opacity={isConnected ? 0.6 : 0.2} 
-            side={THREE.DoubleSide} 
+            color={isConnected ? "#ffcc00" : "#88ccff"}
+            emissive={isConnected ? "#ffcc00" : "#00aaff"}
+            emissiveIntensity={isConnected ? 4 : 1.5}
+            transparent
+            opacity={isConnected ? 0.5 : 0.25}
+            side={THREE.DoubleSide}
             depthWrite={false}
           />
         </mesh>
 
         {/* Second tilted ring for depth */}
         <mesh rotation={[-Math.PI / 3.5, Math.PI / 6, 0]}>
-          <ringGeometry args={[4.0, 4.2, 128]} />
+          <ringGeometry args={[16.5, 17.5, 128]} />
           <meshStandardMaterial
-            color="#ffcc00" 
-            emissive="#ffaa00" 
-            emissiveIntensity={isConnected ? 4 : 1}
-            transparent 
-            opacity={isConnected ? 0.2 : 0.05} 
-            side={THREE.DoubleSide} 
+            color="#ffcc00"
+            emissive="#ffaa00"
+            emissiveIntensity={isConnected ? 2 : 0.8}
+            transparent
+            opacity={isConnected ? 0.2 : 0.1}
+            side={THREE.DoubleSide}
             depthWrite={false}
           />
         </mesh>
 
-        <Text 
-          position={[0, -5.0, 0]} 
-          fontSize={1.2} 
-          color={isConnected ? '#00ff88' : (hovered ? '#ffffff' : '#00f2ff')} 
-          anchorX="center" 
+        {/* Third Dyson segment ring — perpendicular axis */}
+        <mesh rotation={[0, Math.PI / 4, -Math.PI / 3]}>
+          <ringGeometry args={[20.0, 20.8, 96]} />
+          <meshStandardMaterial
+            color="#00f2ff"
+            emissive="#00f2ff"
+            emissiveIntensity={0.6}
+            transparent
+            opacity={0.08}
+            side={THREE.DoubleSide}
+            depthWrite={false}
+          />
+        </mesh>
+
+        <Text
+          position={[0, -5.0, 0]}
+          fontSize={1.2}
+          color={isConnected ? '#00ff88' : (hovered ? '#ffffff' : '#00f2ff')}
+          anchorX="center"
           anchorY="middle"
-          outlineWidth={0.1} 
+          outlineWidth={0.1}
           outlineColor="#003344"
         >
           {isConnected ? 'LUMINA HUB' : 'LUMINA AI'}
@@ -606,24 +738,24 @@ function Moon({ state }: { state: 'needs_reply' | 'waiting' | 'inactive' }) {
 
   const { color, emissive, emissiveIntensity } = useMemo(() => {
     switch (state) {
-      case 'needs_reply': 
-        return { 
-          color: '#ffffff', 
-          emissive: '#efd5ff', 
+      case 'needs_reply':
+        return {
+          color: '#ffffff',
+          emissive: '#efd5ff',
           emissiveIntensity: 18 // outshines satellites (10), but less than planet core (25)
         };
-      case 'waiting': 
-        return { 
-          color: '#aa88ff', 
-          emissive: '#aa88ff', 
-          emissiveIntensity: 7 
+      case 'waiting':
+        return {
+          color: '#aa88ff',
+          emissive: '#aa88ff',
+          emissiveIntensity: 7
         };
       case 'inactive':
-      default: 
-        return { 
-          color: '#2a2a35', 
-          emissive: '#2a2a35', 
-          emissiveIntensity: 0.2 
+      default:
+        return {
+          color: '#2a2a35',
+          emissive: '#2a2a35',
+          emissiveIntensity: 0.2
         };
     }
   }, [state]);
@@ -631,7 +763,7 @@ function Moon({ state }: { state: 'needs_reply' | 'waiting' | 'inactive' }) {
   useFrame(({ clock }) => {
     const t = clock.getElapsedTime();
     const orbitT = t * speed;
-    
+
     // Position
     meshRef.current.position.set(
       Math.cos(orbitT) * R_MOON,
@@ -654,9 +786,9 @@ function Moon({ state }: { state: 'needs_reply' | 'waiting' | 'inactive' }) {
   return (
     <mesh ref={meshRef}>
       <sphereGeometry args={[1.2, 24, 24]} />
-      <meshStandardMaterial 
-        color={color} 
-        emissive={emissive} 
+      <meshStandardMaterial
+        color={color}
+        emissive={emissive}
         emissiveIntensity={emissiveIntensity}
         metalness={0.9}
         roughness={0.1}
@@ -669,31 +801,31 @@ function Moon({ state }: { state: 'needs_reply' | 'waiting' | 'inactive' }) {
 }
 
 // â”€â”€â”€ Satellite â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-function Satellite({ kind, orbitRadius, angleOffset, speed }: { 
-  kind: string, 
-  orbitRadius: number, 
+function Satellite({ kind, orbitRadius, angleOffset, speed }: {
+  kind: string,
+  orbitRadius: number,
   angleOffset: number,
   speed: number
 }) {
   const meshRef = useRef<THREE.Mesh>(null!);
   const ledRef = useRef<THREE.PointLight>(null!);
   const ledMeshRef = useRef<THREE.Mesh>(null!);
-  
+
   const color = useMemo(() => {
     switch (kind) {
-      case 'permit':   return '#ffcc00'; // Gold
-      case 'prints':   return '#0088ff'; // Blue
+      case 'permit': return '#ffcc00'; // Gold
+      case 'prints': return '#0088ff'; // Blue
       case 'redlines': return '#ff3333'; // Red
       case 'estimate':
       case 'bidmaster': return '#00ff88'; // Green
-      default:         return '#ffffff'; // White
+      default: return '#ffffff'; // White
     }
   }, [kind]);
 
   useFrame(({ clock }) => {
     const t = clock.getElapsedTime();
     const orbitT = (t * speed) + angleOffset;
-    
+
     // Position the satellite on its orbit
     meshRef.current.position.set(
       Math.cos(orbitT) * orbitRadius,
@@ -704,7 +836,7 @@ function Satellite({ kind, orbitRadius, angleOffset, speed }: {
     // LED Pulse: baseIntensity * (0.8 + 0.2 * sin(t * pulseSpeed))
     const pulseSpeed = 4.0;
     const pulse = 0.8 + 0.2 * Math.sin(t * pulseSpeed);
-    
+
     if (ledRef.current) ledRef.current.intensity = 2.0 * pulse;
     if (ledMeshRef.current) {
       const mat = ledMeshRef.current.material as THREE.MeshStandardMaterial;
@@ -715,22 +847,22 @@ function Satellite({ kind, orbitRadius, angleOffset, speed }: {
   return (
     <mesh ref={meshRef}>
       <sphereGeometry args={[0.5, 16, 16]} />
-      <meshStandardMaterial 
-        color={color} 
-        emissive={color} 
-        emissiveIntensity={2} 
+      <meshStandardMaterial
+        color={color}
+        emissive={color}
+        emissiveIntensity={2}
         metalness={0.9}
         roughness={0.1}
       />
-      
+
       {/* Attached LED (Child Mesh) */}
       <group position={[0, 0.6, 0]}>
         <mesh ref={ledMeshRef}>
           <sphereGeometry args={[0.15, 8, 8]} />
-          <meshStandardMaterial 
-            color={color} 
-            emissive={color} 
-            emissiveIntensity={10} 
+          <meshStandardMaterial
+            color={color}
+            emissive={color}
+            emissiveIntensity={10}
           />
         </mesh>
         <pointLight ref={ledRef} color={color} distance={4} decay={2} />
@@ -740,79 +872,141 @@ function Satellite({ kind, orbitRadius, angleOffset, speed }: {
 }
 
 // ─── Galaxy Swirl ──────────────────────────────────────────────────────────
-function GalaxySwirl({ color }: { color: string }) {
+function GalaxySwirl({ color, tilt = [0, 0, 0], scale = 1.0, rotationSpeed = 1.0 }: { color: string, tilt?: [number, number, number], scale?: number, rotationSpeed?: number }) {
+  const groupRef = useRef<THREE.Group>(null!);
   const pointsRef = useRef<THREE.Points>(null!);
-  const count = 4000; // Increased count for better spiral definition
-  const positions = useMemo(() => {
-    const pos = new Float32Array(count * 3);
-    for (let i = 0; i < count; i++) {
-        // Logarithmic spiral distribution
-        const r = Math.pow(Math.random(), 2.0); // Bias towards center
-        const radius = 5 + r * 120; // 5 to 125 spread
-        
-        // Two main arms + random scatter
-        const armIndex = i % 2;
-        const armOffset = Math.PI * armIndex; // Alternate sides
-        
-        // The further out, the more it wraps around (spiral effect)
-        const wrap = radius * 0.05;
-        const scatter = (1.0 - r) * (Math.random() - 0.5) * Math.PI * 0.8; // More scattered outside
-        
-        const finalAngle = armOffset + wrap + scatter;
-        
-        pos[i * 3] = Math.cos(finalAngle) * radius;
-        // Thicken the center, flatten the outer edges
-        pos[i * 3 + 1] = (Math.random() - 0.5) * (15 * (1.0 - Math.min(1.0, r * 1.5)));
-        pos[i * 3 + 2] = Math.sin(finalAngle) * radius;
-    }
-    return pos;
-  }, []);
+  const outerPointsRef = useRef<THREE.Points>(null!);
+  const count = 5000;
 
-  useFrame((state) => {
+  const { positions, colors, outerPositions, outerColors } = useMemo(() => {
+    const pos = new Float32Array(count * 3);
+    const col = new Float32Array(count * 3);
+
+    // An outer "gas" cloud with fewer particles but much larger sizes
+    const outerCount = 1500;
+    const outerPos = new Float32Array(outerCount * 3);
+    const outerCol = new Float32Array(outerCount * 3);
+
+    const baseColor = new THREE.Color(color);
+    const coreColor = baseColor.clone().lerp(new THREE.Color('#ffffff'), 0.5);
+    const edgeColor = baseColor.clone().multiplyScalar(0.3);
+
+    for (let i = 0; i < count; i++) {
+      const r = Math.pow(Math.random(), 2.0);
+      const radius = 5 + r * 120;
+
+      const armIndex = i % 2;
+      const armOffset = Math.PI * armIndex;
+
+      const wrap = radius * 0.05;
+      const scatter = (1.0 - r) * (Math.random() - 0.5) * Math.PI * 0.8;
+
+      const finalAngle = armOffset + wrap + scatter;
+
+      pos[i * 3] = Math.cos(finalAngle) * radius;
+      pos[i * 3 + 1] = (Math.random() - 0.5) * (15 * (1.0 - Math.min(1.0, r * 1.5)));
+      pos[i * 3 + 2] = Math.sin(finalAngle) * radius;
+
+      const mixed = new THREE.Color();
+      if (r < 0.15) {
+        mixed.lerpColors(coreColor, baseColor, r / 0.15);
+      } else {
+        mixed.lerpColors(baseColor, edgeColor, (r - 0.15) / 0.85);
+      }
+
+      col[i * 3] = mixed.r;
+      col[i * 3 + 1] = mixed.g;
+      col[i * 3 + 2] = mixed.b;
+    }
+
+    for (let i = 0; i < outerCount; i++) {
+      const r = Math.pow(Math.random(), 1.5);
+      const radius = 20 + r * 140;
+      const angle = Math.random() * Math.PI * 2;
+
+      outerPos[i * 3] = Math.cos(angle) * radius;
+      outerPos[i * 3 + 1] = (Math.random() - 0.5) * 35 * (1.0 - r * 0.5);
+      outerPos[i * 3 + 2] = Math.sin(angle) * radius;
+
+      // Outer cloud uses desaturated base color
+      const outerMixed = edgeColor.clone().multiplyScalar(0.7);
+      outerCol[i * 3] = outerMixed.r;
+      outerCol[i * 3 + 1] = outerMixed.g;
+      outerCol[i * 3 + 2] = outerMixed.b;
+    }
+
+    return { positions: pos, colors: col, outerPositions: outerPos, outerColors: outerCol };
+  }, [color]);
+
+  useFrame(({ clock }) => {
+    const t = clock.getElapsedTime();
+    // Rotate the whole group (including tilt) so spin is visible from any angle
+    if (groupRef.current) {
+      groupRef.current.rotation.y += 0.0012 * rotationSpeed;
+    }
+    // Differential inner/outer counter-drift for arm shimmer
     if (pointsRef.current) {
-      pointsRef.current.rotation.y += 0.0003;
+      pointsRef.current.rotation.y += 0.0004 * rotationSpeed;
+    }
+    if (outerPointsRef.current) {
+      outerPointsRef.current.rotation.y -= 0.0002 * rotationSpeed;
+    }
+    // Subtle galactic precession wobble
+    if (groupRef.current) {
+      groupRef.current.rotation.x = tilt[0] + Math.sin(t * 0.08 * rotationSpeed) * 0.015;
     }
   });
 
   return (
-    <group>
-      {/* Primary colored gas/dust (larger, softer particles) */}
-      <Points ref={pointsRef} positions={positions} stride={3}>
+    <group ref={groupRef} rotation={tilt as any} scale={scale}>
+      {/* Primary spiral structure */}
+      <points ref={pointsRef}>
+        <bufferGeometry>
+          <bufferAttribute attach="attributes-position" array={positions} count={count} itemSize={3} />
+          <bufferAttribute attach="attributes-color" array={colors} count={count} itemSize={3} />
+        </bufferGeometry>
         <PointMaterial
           transparent
-          color={color}
-          size={25.0} // Smaller than before so it looks like matter, not blobs
+          vertexColors
+          size={11.0}
           sizeAttenuation
           depthWrite={false}
           blending={THREE.AdditiveBlending}
-          opacity={0.35} // Reduced opacity so it doesn't wash out
+          opacity={0.20}
+          toneMapped={false}
         />
-      </Points>
-      
-      {/* Core Star Cluster (tighter, brighter) */}
-      <Points positions={positions.slice(0, 1500 * 3)} stride={3}>
+      </points>
+
+      {/* Outer gaseous cloud */}
+      <points ref={outerPointsRef}>
+        <bufferGeometry>
+          <bufferAttribute attach="attributes-position" array={outerPositions} count={outerPositions.length / 3} itemSize={3} />
+          <bufferAttribute attach="attributes-color" array={outerColors} count={outerPositions.length / 3} itemSize={3} />
+        </bufferGeometry>
         <PointMaterial
           transparent
-          color="#ffffff"
-          size={12.0}
+          vertexColors
+          size={45.0} // Huge, soft particles
           sizeAttenuation
           depthWrite={false}
           blending={THREE.AdditiveBlending}
-          opacity={0.5}
+          opacity={0.08}
+          toneMapped={false}
         />
-      </Points>
-      
-      {/* Intense colored core (no more white sphere) */}
+      </points>
+
+      {/* Intense colored core disk to anchor the glowing middle */}
       <mesh scale={[1.0, 0.15, 1.0]}>
-        <sphereGeometry args={[25, 32, 32]} />
-        <meshStandardMaterial 
-          color={color} 
-          emissive={color} 
-          emissiveIntensity={8.0}
-          transparent 
-          opacity={0.25} 
-          depthWrite={false} 
+        <sphereGeometry args={[20, 32, 32]} />
+        <meshStandardMaterial
+          color={color}
+          emissive={color}
+          emissiveIntensity={3.0}
+          transparent
+          opacity={0.25}
+          depthWrite={false}
           blending={THREE.AdditiveBlending}
+          toneMapped={false}
         />
       </mesh>
     </group>
@@ -861,14 +1055,14 @@ function Planet({ job, position, clusterColor, onSelect, isSelected, isAnyFocuse
         {/* Atmospheric glow haze */}
         <mesh scale={[1.45, 1.45, 1.45]}>
           <sphereGeometry args={[4.0, 32, 32]} />
-          <meshStandardMaterial 
-            color={clusterColor} 
-            emissive={clusterColor} 
-            emissiveIntensity={glowIntensity} 
-            transparent 
-            opacity={glowOpacity} 
-            side={THREE.BackSide} 
-            depthWrite={false} 
+          <meshStandardMaterial
+            color={clusterColor}
+            emissive={clusterColor}
+            emissiveIntensity={glowIntensity}
+            transparent
+            opacity={glowOpacity}
+            side={THREE.BackSide}
+            depthWrite={false}
           />
         </mesh>
 
@@ -881,10 +1075,10 @@ function Planet({ job, position, clusterColor, onSelect, isSelected, isAnyFocuse
             onPointerOut={() => setHovered(false)}
           >
             <sphereGeometry args={[4.0, 32, 32]} />
-            <meshStandardMaterial 
-              color={isAnyFocused && !isSelected ? "#050510" : "#0a0a18"} 
-              roughness={0.7} 
-              metalness={0.3} 
+            <meshStandardMaterial
+              color={isAnyFocused && !isSelected ? "#050510" : "#0a0a18"}
+              roughness={0.7}
+              metalness={0.3}
               transparent={isSelected}
               opacity={bodyOpacity}
             />
@@ -912,12 +1106,12 @@ function Planet({ job, position, clusterColor, onSelect, isSelected, isAnyFocuse
           <mesh rotation={[-Math.PI / 2.5, 0, 0]}>
             <ringGeometry args={[5.5, 6.5, 64]} />
             <meshStandardMaterial
-              color={clusterColor} 
-              emissive={clusterColor} 
+              color={clusterColor}
+              emissive={clusterColor}
               emissiveIntensity={isSelected ? 25 : (isAnyFocused ? 2 : 20)}
-              transparent 
+              transparent
               opacity={isSelected ? 0.9 : (isAnyFocused ? 0.2 : 0.7)}
-              side={THREE.DoubleSide} 
+              side={THREE.DoubleSide}
               depthWrite={false}
             />
           </mesh>
@@ -928,12 +1122,12 @@ function Planet({ job, position, clusterColor, onSelect, isSelected, isAnyFocuse
 
         {/* Satellites - Only in Focus Mode for selected */}
         {showSatellites && visibleSatellites.map((sat, i) => (
-          <Satellite 
+          <Satellite
             key={sat.id}
             kind={sat.kind}
             orbitRadius={8.0} // R_PLANET * 2.0 (Inner Documents Orbit)
             angleOffset={(i / visibleSatellites.length) * Math.PI * 2}
-            speed={0.8 + (i * 0.1)} 
+            speed={0.8 + (i * 0.1)}
           />
         ))}
       </Float>
@@ -959,26 +1153,37 @@ function Planet({ job, position, clusterColor, onSelect, isSelected, isAnyFocuse
   );
 }
 
-// â”€â”€â”€ Camera Smooth Interpolation â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-function CameraLerp({ zoomTarget, onComplete }: { zoomTarget: any, onComplete: () => void }) {
+// ─── Camera Snap (Bypasses OrbitControls Drift) ──────────────────────────
+function HardCameraSnap({ zoomTarget, viewMode, onComplete }: { zoomTarget: any, viewMode: string, onComplete: () => void }) {
   const { camera } = useThree();
   const controls = useThree(state => state.controls) as any;
 
-  useFrame(() => {
+  // 1) Explicit snap when zoomTarget changes
+  useEffect(() => {
     if (!zoomTarget) return;
 
-    // Smoothly lerp camera position
-    camera.position.lerp(zoomTarget.cameraPos, 0.05);
-
-    // Smoothly lerp controls target
     if (controls) {
-      controls.target.lerp(zoomTarget.center, 0.05);
-      controls.update();
+      controls.target.copy(zoomTarget.center);
+      camera.position.copy(zoomTarget.cameraPos);
+      controls.update(); // Let orbit controls recalculate its spherical boundaries
+    } else {
+      camera.position.copy(zoomTarget.cameraPos);
+      camera.lookAt(zoomTarget.center);
     }
 
-    // Stop and finalize if very close to destination
-    if (camera.position.distanceTo(zoomTarget.cameraPos) < 0.2) {
-      onComplete();
+    // Immediately conclude the navigation state to enable UI 
+    setTimeout(onComplete, 50);
+
+  }, [zoomTarget, camera, controls, onComplete]);
+
+  // 2) Per-frame lock to ensure no stray orbit drifting breaks the dive
+  useFrame(() => {
+    if (viewMode === 'galaxy' && zoomTarget && controls) {
+      // If OrbitControls somehow drifts the target away from the strict center, force it back
+      if (controls.target.distanceTo(zoomTarget.center) > 1.0) {
+        controls.target.copy(zoomTarget.center);
+        controls.update();
+      }
     }
   });
 

@@ -724,12 +724,7 @@ body {
   position: relative;
   display: flex;
   flex-direction: column;
-  animation: slideInRight 0.5s cubic-bezier(0.16, 1, 0.3, 1);
-}
-
-@keyframes slideInRight {
-  from { transform: translateX(50px); opacity: 0; }
-  to { transform: translateX(0); opacity: 1; }
+  /* slideInRight removed — framer-motion owns the entrance animation */
 }
 
 .mission-notes-box {
