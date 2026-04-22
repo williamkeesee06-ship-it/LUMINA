@@ -1,11 +1,9 @@
 import { motion, AnimatePresence } from 'framer-motion';
-import type { JobOrbit } from '../types/lumina';
+import { useLumina } from '../store/LuminaContext';
 
-interface MapPanelProps {
-  job: JobOrbit | null;
-}
-
-export function MapPanel({ job }: MapPanelProps) {
+export function MapPanel() {
+  const { jobs, selectedJobId } = useLumina();
+  const job = jobs.find(j => j.rowId === selectedJobId) || null;
   const API_KEY = import.meta.env.VITE_GOOGLE_MAPS_API_KEY;
   const address = job ? encodeURIComponent(`${job.address}, ${job.city}`) : '';
   const mapUrl = `https://www.google.com/maps/embed/v1/place?key=${API_KEY}&q=${address}`;

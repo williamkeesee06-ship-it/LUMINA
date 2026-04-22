@@ -47,9 +47,10 @@ export async function fetchFilesInFolder(token: string, folderId: string) {
 export function classifyFile(fileName: string) {
   const n = fileName.toLowerCase();
   if (n.includes('permit')) return 'permit';
-  if (n.includes('print') || n.includes('drawing') || n.includes('map') || n.includes('plan')) return 'prints';
-  if (n.includes('redline') || n.includes('mark')) return 'redlines';
-  if (n.includes('bid') || n.includes('quote') || n.includes('cost') || n.includes('master')) return 'bidmaster';
+  if (n.includes('print') || n.includes('drawing') || n.includes('map') || n.includes('plan') || n.includes('sheet')) return 'prints';
+  if (n.includes('redline') || n.includes('mark') || n.includes('markup')) return 'redlines';
+  if (n.includes('bid') || n.includes('quote') || n.includes('cost') || n.includes('master') || n.includes('pricing')) return 'bidmaster';
+  if (n.includes('revisit') || n.includes('return') || n.includes('fix') || n.includes('snag')) return 'revisit';
   return 'other';
 }
 

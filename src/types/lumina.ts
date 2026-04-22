@@ -3,22 +3,24 @@
  * Defines the mapping between Smartsheet API response and the 3D Cosmic Dashboard.
  */
 
-export type SatelliteKind = 'permit' | 'prints' | 'redlines' | 'estimate' | 'bidmaster' | 'other';
-export type MoonState = 'needs_reply' | 'waiting' | 'inactive';
+export type SatelliteKind = 'communication' | 'attachment' | 'scheduling' | 'route' | 'ai_status' | 'other';
+export type MoonKind = 'permit' | 'prints' | 'redlines' | 'bidmaster' | 'revisit' | 'other';
+export type LuminaState = 'ok' | 'warning' | 'alert' | 'inactive' | 'waiting' | 'needs_reply';
 
-export interface DriveSatellite {
+export interface JobMoon {
   id: string;
-  name: string;
-  mimeType: string;
-  webViewLink: string;
-  kind: SatelliteKind;
+  label: string;
+  kind: MoonKind;
+  state: LuminaState;
 }
 
-export interface GmailMoon {
-  threadId: string;
-  subject: string;
-  snippet: string;
-  state: MoonState;
+export interface JobSatellite {
+  id: string;
+  kind: SatelliteKind;
+  label: string;
+  state: LuminaState;
+  link?: string;
+  payload?: any;
 }
 
 export interface ConstructionJob {
@@ -41,8 +43,8 @@ export interface ConstructionJob {
  * JobOrbit encompasses a job and its associated cosmic bodies.
  */
 export interface JobOrbit extends ConstructionJob {
-  satellites: DriveSatellite[];
-  moon?: GmailMoon;
+  moons: JobMoon[];
+  satellites: JobSatellite[];
 }
 
 export interface SmartsheetColumn {
@@ -123,3 +125,55 @@ export const resolveGalaxy = (status: string): GalaxyType => {
   const found = GALAXY_CATEGORIES.find(cat => cat.toLowerCase() === s.toLowerCase());
   return found || 'Scheduled'; // Fallback
 };
+
+/**
+ * ---------------------------------------------------------
+ * UI / STATE CONTRACTS
+ * ---------------------------------------------------------
+ */
+
+/**
+ * ViewMode governs the macro transition state of the application.
+ * - 'galaxy': The cosmic, universe overview mode.
+ * - 'earth': Transition state or focused singular planet view.
+ * - 'map': Tactical 2D map mode covering the Puget Sound territory.
+ */
+export type ViewMode = 'galaxy' | 'earth' | 'map';
+
+/**
+ * SelectionState drives the central selection and focus rules.
+ * This is shared across App.tsx, Experience.tsx, EarthView.tsx, and MapPanel.tsx.
+ */
+export interface SelectionState {
+  selectedJobId: string | null;  // The ID of the currently selected job (if any)
+  focusedGalaxy: GalaxyType | null; // Which galaxy we are currently zoomed into / viewing
+  viewMode: ViewMode;            // Current macro view mode
+}
+
+/**
+ * MapModeState handles the operational constraints of the tactical map.
+ * Governs the HUD latching behavior and filtered isolation.
+ */
+export interface MapModeState {
+  isolatedCategory: GalaxyType | null; // The category being isolated on the map (null means show all)
+  isLatched: boolean;                  // True if the HUD widget is visually "latched" (indicates active filter)
+}
+
+/**
+ * UniversalJobCardState defines the data contract for the one unified job card.
+ * Minimal, operational, and decoupled from the specific rendering layer (3D or 2D).
+ */
+export interface UniversalJobCardState {
+  isOpen: boolean;        // Whether the universal card should be visible as a HUD overlay
+  jobId: string | null;   // ID of the job to display
+}
+
+/**
+ * LuminaUIState combines all UI state contracts into a single root shape.
+ * Stores / Context providers should implement this interface.
+ */
+export interface LuminaUIState {
+  selection: SelectionState;
+  mapMode: MapModeState;
+  jobCard: UniversalJobCardState;
+}

@@ -1,4 +1,4 @@
-import { OrbitControls, Float, Text, Points, PointMaterial, Billboard, Line, Html } from '@react-three/drei';
+import { OrbitControls, Float, Text, Points, PointMaterial, Billboard, Line } from '@react-three/drei';
 import { useFrame, useThree, extend } from '@react-three/fiber';
 import { useRef, useEffect, useState, useMemo } from 'react';
 import { EffectComposer, Bloom } from '@react-three/postprocessing';
@@ -6,9 +6,10 @@ import { shaderMaterial } from '@react-three/drei';
 import * as THREE from 'three';
 
 import type { JobOrbit, GalaxyType } from '../types/lumina';
-import { STATUS_COLORS, GALAXY_CATEGORIES, PENDING_SUBTYPES, resolveGalaxy } from '../types/lumina';
+import { STATUS_COLORS, GALAXY_CATEGORIES, resolveGalaxy } from '../types/lumina';
 import { LuminaStardust } from './LuminaStardust';
 import { NeonGlowShader } from './shaders/NeonGlowShader';
+import { useLumina } from '../store/LuminaContext';
 
 const NeonMaterial = shaderMaterial(
   NeonGlowShader.uniforms,
@@ -42,7 +43,7 @@ GALAXY_CATEGORIES.forEach((galaxy, idx) => {
   ];
 });
 
-export function normalizeStatusKey(status: string): string | null {
+export function normalizeStatusKey(status: string): GalaxyType | null {
   const s = status.toLowerCase();
   if (s.includes('complete')) return 'Complete';
   if (s.includes('fielded-rts') || s === 'fielding') return 'Fielded-RTS';
@@ -51,45 +52,52 @@ export function normalizeStatusKey(status: string): string | null {
   if (s.includes('pending')) return 'Pending';
   if (s.includes('routed')) return 'Routed to Sub';
   if (s.includes('scheduled')) return 'Scheduled';
-  return null; // NO silent fallback to orb
+  return null;
 }
 
-interface ExperienceProps {
-  jobs: JobOrbit[];
-  onSelectJob: (job: JobOrbit | null) => void;
-  selectedJob: JobOrbit | null;
-  onOpenAI: () => void;
-  onGoogleLogin: () => void;
-  isGoogleConnected: boolean;
-  voiceEnabled: boolean;
-  isThinking: boolean;
-  isLimited: boolean;
-  viewLevel: 'universe' | 'galaxy' | 'planet';
-  setViewLevel: (l: 'universe' | 'galaxy' | 'planet') => void;
-  focusedGalaxy: string | null;
-  setFocusedGalaxy: (g: string | null) => void;
-}
+// State managed via useLumina hook now.
 
 
 // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 
-export function Experience(props: ExperienceProps) {
-  return <ExperienceContext {...props} />;
+export function Experience() {
+  return <UniverseScene />;
 }
 
-function ExperienceContext({
-  jobs, onSelectJob, selectedJob, onOpenAI, onGoogleLogin,
-  isGoogleConnected, voiceEnabled, isThinking, isLimited,
-  viewLevel, setViewLevel, focusedGalaxy, setFocusedGalaxy
-}: ExperienceProps) {
+function UniverseScene() {
+  const { 
+    jobs,
+    selectedJobId,
+    viewLevel,
+    setViewLevel,
+    viewMode,
+    setViewMode,
+    focusedGalaxy,
+    setFocusedGalaxy,
+    activeStatus,
+    setActiveStatus,
+    toggleChat,
+    googleToken,
+    voiceEnabled,
+    orbMode,
+    selectJob,
+    clearSelectedJob
+  } = useLumina();
+
+  const selectedJob = jobs.find((j: JobOrbit) => j.rowId === selectedJobId) || null;
+  const isGoogleConnected = !!googleToken;
+  const isThinking = orbMode === 'thinking';
+
+  const onSelectJob = (job: JobOrbit | null) => {
+    if (job) selectJob(job.rowId, job.jobNumber);
+    else clearSelectedJob();
+  };
+  const onOpenAI = toggleChat;
+  const onGoogleLogin = () => {}; 
   const controlsRef = useRef<any>(null);
   const [zoomTarget, setZoomTarget] = useState<{ center: THREE.Vector3, cameraPos: THREE.Vector3 } | null>(null);
   const [isNavigating, setIsNavigating] = useState(false);
-
-  // Explicit universe view modes as requested
-  const [viewMode, setViewMode] = useState<'god' | 'galaxy'>('god');
-  const [activeStatus, setActiveStatus] = useState<string | null>(null);
 
   useEffect(() => {
     console.log('[Experience] Mounted | Camera View:', viewLevel, '| Jobs:', jobs.length);
@@ -107,12 +115,12 @@ function ExperienceContext({
       'Scheduled': []
     } as any;
 
-    jobs.forEach(job => {
+    jobs.forEach((job: JobOrbit) => {
       const g = resolveGalaxy(job.status);
       galaxyGroups[g].push(job);
     });
 
-    const result: Array<{ job: JobOrbit; position: [number, number, number]; clusterColor: string }> = [];
+    const result: Array<{ job: JobOrbit; position: [number, number, number]; clusterColor: string; galaxy: GalaxyType }> = [];
     const galaxyLabels: Array<{ text: string; position: [number, number, number]; color: string }> = [];
 
     GALAXY_CATEGORIES.forEach((galaxy, idx) => {
@@ -153,16 +161,6 @@ function ExperienceContext({
     return { result, galaxyLabels };
   }, [jobs]);
 
-  // Planet visibility filter
-  const getPlanetDetails = (jobGalaxy: string) => {
-    if (viewLevel === 'universe') return { visible: true, lowDetail: true };
-    if (viewLevel === 'galaxy' || viewLevel === 'planet') {
-      if (jobGalaxy === focusedGalaxy) return { visible: true, lowDetail: false };
-      return { visible: true, lowDetail: true }; // Other galaxies stay in low detail
-    }
-    return { visible: true, lowDetail: false };
-  };
-
   // Camera: focus/defocus logic
   useEffect(() => {
     if (selectedJob) {
@@ -196,73 +194,74 @@ function ExperienceContext({
     }
   }, [selectedJob, clusteredJobs, focusedGalaxy, viewLevel]);
 
-  // Handle status-based zoom signature
+  // Camera: react to activeStatus / viewLevel changes (Replaces event bus)
   useEffect(() => {
-    const handleZoom = (e: any) => {
-      const { status } = e.detail;
-      onSelectJob(null); // Deselect current job if any
+    if (selectedJobId && selectedJob) {
+      // Planet Focus logic is handled in the selectedJob effect below
+      return;
+    }
 
-      if (status === 'Total') {
-        console.log(`[CLICK RECEIVED] HUD Status: ${status} | target: Total Universe | viewMode before: ${viewMode} -> after: god`);
-        setZoomTarget({
-          center: new THREE.Vector3(0, 0, 0),
-          cameraPos: new THREE.Vector3(0, 500, 1500)
-        });
-        setIsNavigating(true);
-        setViewLevel('universe');
-        setViewMode('god');
-        setActiveStatus(null);
-        return;
-      }
-
-      const canonicalKey = normalizeStatusKey(status);
-      if (!canonicalKey) {
-        console.error(`[ABORT DIVE] Could not resolve canonical key for status: ${status}`);
-        return;
-      }
-
-      const center = GALAXY_CENTERS[canonicalKey];
-      if (!center) {
-        console.error(`[ABORT DIVE] Center missing for canonical key: ${canonicalKey}`);
-        return;
-      }
-
-      console.log(`[CLICK RECEIVED] HUD Status: ${status} -> Key: ${canonicalKey} | center: [${Math.round(center[0])}, ${Math.round(center[1])}, ${Math.round(center[2])}]`);
-      setFocusedGalaxy(canonicalKey);
-      setActiveStatus(canonicalKey);
-      setViewMode('galaxy');
-      setZoomTarget({
-        center: new THREE.Vector3(center[0], center[1], center[2]),
-        cameraPos: new THREE.Vector3(center[0], center[1] + 120, center[2] + 260)
-      });
-      setIsNavigating(true);
-      setViewLevel('galaxy');
-    };
-    window.addEventListener('lumina-zoom-to-status', handleZoom);
-    return () => window.removeEventListener('lumina-zoom-to-status', handleZoom);
-  }, [clusteredJobs, onSelectJob]);
-
-  // Handle manual reset signal
-  useEffect(() => {
-    const handleReset = () => {
-      onSelectJob(null);
-      setFocusedGalaxy(null);
-      setActiveStatus(null);
-      setViewMode('god');
+    if (viewLevel === 'universe') {
+      console.log(`[Experience] Sync: Universal View`);
       setZoomTarget({
         center: new THREE.Vector3(0, 0, 0),
         cameraPos: new THREE.Vector3(0, 500, 1500)
       });
       setIsNavigating(true);
-      setViewLevel('universe');
-    };
-    window.addEventListener('lumina-reset-camera', handleReset);
-    window.addEventListener('lumina-exit-galaxy', handleReset);
-    return () => {
-      window.removeEventListener('lumina-reset-camera', handleReset);
-      window.removeEventListener('lumina-exit-galaxy', handleReset);
-    };
-  }, [onSelectJob]);
+      return;
+    }
+
+    if (activeStatus) {
+      const canonicalKey = normalizeStatusKey(activeStatus) || activeStatus;
+      
+      if (activeStatus === 'Total') {
+        setViewLevel('universe');
+        return;
+      }
+
+      const center = GALAXY_CENTERS[canonicalKey];
+      if (center) {
+        console.log(`[Experience] Sync: Jump to ${canonicalKey}`);
+        setZoomTarget({
+          center: new THREE.Vector3(center[0], center[1], center[2]),
+          cameraPos: new THREE.Vector3(center[0], center[1] + 120, center[2] + 260)
+        });
+        setIsNavigating(true);
+        setViewLevel('galaxy');
+      }
+    }
+  }, [activeStatus, viewLevel]);
+
+  // Handle Planet-level focus
+  useEffect(() => {
+    if (selectedJob) {
+      const entry = clusteredJobs.result.find(e => e.job.rowId === selectedJob.rowId);
+      if (entry) {
+        const [px, py, pz] = entry.position;
+        setZoomTarget({
+          center: new THREE.Vector3(px, py, pz),
+          cameraPos: new THREE.Vector3(px + 12, py + 8, pz + 12)
+        });
+        setIsNavigating(true);
+        setViewLevel('planet');
+      }
+    } else if (viewLevel === 'planet') {
+      // If deselected, go back to galaxy
+      if (focusedGalaxy) {
+        const center = GALAXY_CENTERS[focusedGalaxy];
+        if (center) {
+          setZoomTarget({
+            center: new THREE.Vector3(center[0], center[1], center[2]),
+            cameraPos: new THREE.Vector3(center[0], center[1] + 120, center[2] + 260)
+          });
+          setIsNavigating(true);
+          setViewLevel('galaxy');
+        }
+      } else {
+        setViewLevel('universe');
+      }
+    }
+  }, [selectedJobId, clusteredJobs]);
 
   return (
     <>
@@ -277,7 +276,6 @@ function ExperienceContext({
         dampingFactor={0.05}
       />
 
-      {/* TEMPORARY BYPASS:
       <HardCameraSnap 
         zoomTarget={zoomTarget} 
         viewMode={viewMode}
@@ -286,7 +284,6 @@ function ExperienceContext({
           setIsNavigating(false);
         }} 
       />
-      */}
 
       <ambientLight intensity={4.0} />
       <pointLight position={[100, 100, 100]} intensity={10000} color="#00f2ff" />
@@ -302,7 +299,7 @@ function ExperienceContext({
         isConnected={isGoogleConnected}
         isThinking={isThinking}
         voiceEnabled={voiceEnabled}
-        isLimited={isLimited}
+        isLimited={orbMode === 'limited'}
         isNavigating={isNavigating}
       />
 
@@ -321,7 +318,7 @@ function ExperienceContext({
         const baseScale = 0.85 + Math.sin(i * 21.0) * 0.25;
         const scale = isSelected ? baseScale * 1.25 : baseScale;
 
-        const canonicalKey = normalizeStatusKey(g.text);
+        const canonicalKey = normalizeStatusKey(g.text) as GalaxyType;
         const center = canonicalKey ? GALAXY_CENTERS[canonicalKey] : null;
 
         const diveIntoGalaxy = () => {
@@ -348,12 +345,12 @@ function ExperienceContext({
               visible={false}
               scale={[150, 40, 150]}
               onClick={(e) => {
-                if (viewMode === 'god') {
+                if (viewLevel === 'universe') {
                   e.stopPropagation();
                   diveIntoGalaxy();
                 }
               }}
-              onPointerEnter={() => { if (viewMode === 'god') document.body.style.cursor = 'pointer'; }}
+              onPointerEnter={() => { if (viewLevel === 'universe') document.body.style.cursor = 'pointer'; }}
               onPointerLeave={() => { document.body.style.cursor = 'default'; }}
             >
               <sphereGeometry args={[1, 16, 16]} />
@@ -397,10 +394,9 @@ function ExperienceContext({
             key={`label-${i}`}
             label={label}
             viewLevel={viewLevel}
-            isNavigating={isNavigating}
             onClick={() => {
-              if (viewMode === 'god') {
-                const canonicalKey = normalizeStatusKey(label.text);
+              if (viewLevel === 'universe') {
+                const canonicalKey = normalizeStatusKey(label.text) as GalaxyType;
                 const center = canonicalKey ? GALAXY_CENTERS[canonicalKey] : null;
                 if (!canonicalKey || !center) return;
 
@@ -420,7 +416,7 @@ function ExperienceContext({
         );
       })}
 
-      <EffectComposer disableNormalPass>
+      <EffectComposer enableNormalPass={false}>
         <Bloom luminanceThreshold={1} mipmapBlur intensity={0.75} />
       </EffectComposer>
     </>
@@ -428,11 +424,10 @@ function ExperienceContext({
 }
 
 // â”€â”€â”€ Celestial Galaxy Label â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-function CelestialGalaxyLabel({ label, viewLevel, isNavigating, onClick }: {
+function CelestialGalaxyLabel({ label, viewLevel, onClick }: {
   label: any,
   viewLevel: string,
-  isNavigating: boolean,
-  onClick: () => void
+  onClick?: () => void
 }) {
   const isUniverse = viewLevel === 'universe';
   const isGalaxy = viewLevel === 'galaxy';
@@ -447,13 +442,29 @@ function CelestialGalaxyLabel({ label, viewLevel, isNavigating, onClick }: {
   return (
     <group position={label.position}>
       <Billboard>
+        {/* Clickable Hitbox for Label */}
+        <mesh
+          visible={false}
+          position={[0, isUniverse ? 0 : -2, 0]}
+          onClick={(e) => {
+            if (isUniverse && onClick) {
+              e.stopPropagation();
+              onClick();
+            }
+          }}
+          onPointerEnter={() => { if (isUniverse) document.body.style.cursor = 'pointer'; }}
+          onPointerLeave={() => { document.body.style.cursor = 'default'; }}
+        >
+          <planeGeometry args={[60, 20]} />
+          <meshBasicMaterial transparent opacity={0} />
+        </mesh>
+
         <Text
           fontSize={isUniverse ? 14 : 8}
           color="#ffffff"
           anchorX="center"
           anchorY="bottom"
-          material-transparent={true}
-          material-opacity={opacity}
+          fillOpacity={opacity}
           letterSpacing={0.4}
         >
           {label.text.toUpperCase()}
@@ -730,143 +741,110 @@ function LuminaOrb({
 
 
 // â”€â”€â”€ Moon â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-function Moon({ state }: { state: 'needs_reply' | 'waiting' | 'inactive' }) {
-  const meshRef = useRef<THREE.Mesh>(null!);
-  const R_PLANET = 4.0;
-  const R_MOON = R_PLANET * 2.8; // outer moon orbit (11.2)
-  const speed = 0.22; // slow, supervisory feel
-
-  const { color, emissive, emissiveIntensity } = useMemo(() => {
-    switch (state) {
-      case 'needs_reply':
-        return {
-          color: '#ffffff',
-          emissive: '#efd5ff',
-          emissiveIntensity: 18 // outshines satellites (10), but less than planet core (25)
-        };
-      case 'waiting':
-        return {
-          color: '#aa88ff',
-          emissive: '#aa88ff',
-          emissiveIntensity: 7
-        };
-      case 'inactive':
-      default:
-        return {
-          color: '#2a2a35',
-          emissive: '#2a2a35',
-          emissiveIntensity: 0.2
-        };
-    }
-  }, [state]);
-
-  useFrame(({ clock }) => {
-    const t = clock.getElapsedTime();
-    const orbitT = t * speed;
-
-    // Position
-    meshRef.current.position.set(
-      Math.cos(orbitT) * R_MOON,
-      Math.sin(orbitT * 0.4) * (R_MOON * 0.08), // calm supervisory float
-      Math.sin(orbitT) * R_MOON
-    );
-
-    // Pulse animation logic
-    if (state === 'needs_reply') {
-      const pulse = 1.0 + Math.sin(t * 2.5) * 0.06; // subtle but noticeable pulse
-      meshRef.current.scale.set(pulse, pulse, pulse);
-    } else if (state === 'waiting') {
-      const pulse = 1.0 + Math.sin(t * 0.6) * 0.02; // very slow, gentle pulse
-      meshRef.current.scale.set(pulse, pulse, pulse);
-    } else {
-      meshRef.current.scale.set(1, 1, 1); // dormant
-    }
-  });
-
-  return (
-    <mesh ref={meshRef}>
-      <sphereGeometry args={[1.2, 24, 24]} />
-      <meshStandardMaterial
-        color={color}
-        emissive={emissive}
-        emissiveIntensity={emissiveIntensity}
-        metalness={0.9}
-        roughness={0.1}
-      />
-      {state === 'needs_reply' && (
-        <pointLight color={emissive} intensity={1.2} distance={12} decay={2} />
-      )}
-    </mesh>
-  );
-}
-
-// â”€â”€â”€ Satellite â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-function Satellite({ kind, orbitRadius, angleOffset, speed }: {
-  kind: string,
+function Moon({ kind, orbitRadius, angleOffset, speed }: { 
+  kind: string, 
   orbitRadius: number,
   angleOffset: number,
   speed: number
 }) {
   const meshRef = useRef<THREE.Mesh>(null!);
-  const ledRef = useRef<THREE.PointLight>(null!);
-  const ledMeshRef = useRef<THREE.Mesh>(null!);
-
-  const color = useMemo(() => {
+  
+  const { color, emissive, intensity, size, speedMult, pulseFreq } = useMemo(() => {
     switch (kind) {
-      case 'permit': return '#ffcc00'; // Gold
-      case 'prints': return '#0088ff'; // Blue
-      case 'redlines': return '#ff3333'; // Red
-      case 'estimate':
-      case 'bidmaster': return '#00ff88'; // Green
-      default: return '#ffffff'; // White
+      case 'permit': return { color: '#ffcc00', emissive: '#ffaa00', intensity: 2, size: 0.8, speedMult: 1.0, pulseFreq: 1.5 };
+      case 'prints': return { color: '#0088ff', emissive: '#00ccff', intensity: 2, size: 1.2, speedMult: 0.8, pulseFreq: 1.0 }; // Larger, steady
+      case 'redlines': return { color: '#ff3333', emissive: '#ff6666', intensity: 2, size: 0.9, speedMult: 1.2, pulseFreq: 2.5 }; // Urgent
+      case 'bidmaster': return { color: '#00ff88', emissive: '#33ffaa', intensity: 2, size: 1.0, speedMult: 1.0, pulseFreq: 1.5 };
+      case 'revisit': return { color: '#ff00ea', emissive: '#ff00ea', intensity: 3, size: 1.4, speedMult: 1.5, pulseFreq: 4.0 }; // Priority / Distinct
+      default: return { color: '#88aaff', emissive: '#88aaff', intensity: 1, size: 0.7, speedMult: 1.0, pulseFreq: 1.5 };
     }
   }, [kind]);
 
   useFrame(({ clock }) => {
     const t = clock.getElapsedTime();
-    const orbitT = (t * speed) + angleOffset;
+    const orbitT = (t * speed * speedMult) + angleOffset;
 
-    // Position the satellite on its orbit
     meshRef.current.position.set(
       Math.cos(orbitT) * orbitRadius,
-      Math.sin(orbitT * 0.5) * (orbitRadius * 0.1), // subtle wobble
+      Math.sin(orbitT * 0.3) * (orbitRadius * 0.15), 
       Math.sin(orbitT) * orbitRadius
     );
 
-    // LED Pulse: baseIntensity * (0.8 + 0.2 * sin(t * pulseSpeed))
-    const pulseSpeed = 4.0;
-    const pulse = 0.8 + 0.2 * Math.sin(t * pulseSpeed);
+    // Organic soft pulse - faster for priority moons
+    const pulse = 1.0 + Math.sin(t * pulseFreq) * (kind === 'revisit' ? 0.15 : 0.05);
+    meshRef.current.scale.set(pulse, pulse, pulse);
+    meshRef.current.rotation.y += 0.01;
+  });
 
-    if (ledRef.current) ledRef.current.intensity = 2.0 * pulse;
+  return (
+    <mesh ref={meshRef}>
+      <sphereGeometry args={[size, 32, 32]} />
+      <meshStandardMaterial
+        color={color}
+        emissive={emissive}
+        emissiveIntensity={intensity}
+        roughness={0.8}
+        metalness={0.2}
+        transparent
+        opacity={0.9}
+      />
+    </mesh>
+  );
+}
+
+// â”€â”€â”€ Satellite â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+function Satellite({ state, orbitRadius, angleOffset, speed }: {
+  state: string,
+  orbitRadius: number,
+  angleOffset: number,
+  speed: number
+}) {
+  const meshRef = useRef<THREE.Mesh>(null!);
+  const ledMeshRef = useRef<THREE.Mesh>(null!);
+
+  const color = useMemo(() => {
+    if (state === 'alert' || state === 'needs_reply') return '#ff3333';
+    if (state === 'warning' || state === 'waiting') return '#ffcc00';
+    if (state === 'inactive') return '#444455';
+    return '#00f2ff'; // 'ok'
+  }, [state]);
+
+  useFrame(({ clock }) => {
+    const t = clock.getElapsedTime();
+    const orbitT = (t * speed) + angleOffset;
+
+    meshRef.current.position.set(
+      Math.cos(orbitT) * orbitRadius,
+      Math.sin(orbitT * 0.8) * (orbitRadius * 0.05),
+      Math.sin(orbitT) * orbitRadius
+    );
+
+    // Technical sharp pulse
+    const pulse = 0.5 + 0.5 * Math.sin(t * 8.0);
     if (ledMeshRef.current) {
       const mat = ledMeshRef.current.material as THREE.MeshStandardMaterial;
-      mat.emissiveIntensity = 20 * pulse;
+      mat.emissiveIntensity = 15 * pulse;
     }
   });
 
   return (
     <mesh ref={meshRef}>
-      <sphereGeometry args={[0.5, 16, 16]} />
+      <boxGeometry args={[0.5, 0.5, 0.5]} />
       <meshStandardMaterial
-        color={color}
-        emissive={color}
-        emissiveIntensity={2}
-        metalness={0.9}
+        color="#444455"
+        metalness={1}
         roughness={0.1}
       />
 
-      {/* Attached LED (Child Mesh) */}
-      <group position={[0, 0.6, 0]}>
-        <mesh ref={ledMeshRef}>
-          <sphereGeometry args={[0.15, 8, 8]} />
-          <meshStandardMaterial
-            color={color}
-            emissive={color}
-            emissiveIntensity={10}
-          />
-        </mesh>
-        <pointLight ref={ledRef} color={color} distance={4} decay={2} />
-      </group>
+      {/* Signal LED */}
+      <mesh ref={ledMeshRef} position={[0, 0.4, 0]}>
+        <sphereGeometry args={[0.15, 8, 8]} />
+        <meshStandardMaterial
+          color={color}
+          emissive={color}
+          emissiveIntensity={10}
+        />
+      </mesh>
     </mesh>
   );
 }
@@ -962,8 +940,8 @@ function GalaxySwirl({ color, tilt = [0, 0, 0], scale = 1.0, rotationSpeed = 1.0
       {/* Primary spiral structure */}
       <points ref={pointsRef}>
         <bufferGeometry>
-          <bufferAttribute attach="attributes-position" array={positions} count={count} itemSize={3} />
-          <bufferAttribute attach="attributes-color" array={colors} count={count} itemSize={3} />
+          <bufferAttribute attach="attributes-position" args={[positions, 3]} count={count} itemSize={3} />
+          <bufferAttribute attach="attributes-color" args={[colors, 3]} count={count} itemSize={3} />
         </bufferGeometry>
         <PointMaterial
           transparent
@@ -980,8 +958,8 @@ function GalaxySwirl({ color, tilt = [0, 0, 0], scale = 1.0, rotationSpeed = 1.0
       {/* Outer gaseous cloud */}
       <points ref={outerPointsRef}>
         <bufferGeometry>
-          <bufferAttribute attach="attributes-position" array={outerPositions} count={outerPositions.length / 3} itemSize={3} />
-          <bufferAttribute attach="attributes-color" array={outerColors} count={outerPositions.length / 3} itemSize={3} />
+          <bufferAttribute attach="attributes-position" args={[outerPositions, 3]} count={outerPositions.length / 3} itemSize={3} />
+          <bufferAttribute attach="attributes-color" args={[outerColors, 3]} count={outerPositions.length / 3} itemSize={3} />
         </bufferGeometry>
         <PointMaterial
           transparent
@@ -1013,11 +991,6 @@ function GalaxySwirl({ color, tilt = [0, 0, 0], scale = 1.0, rotationSpeed = 1.0
   );
 }
 
-function shouldRenderSatellites(job: JobOrbit): boolean {
-  const s = job.status.toLowerCase();
-  if (s.includes('complete') || s.includes('on hold')) return false;
-  return true;
-}
 
 // â”€â”€â”€ Planet â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 function Planet({ job, position, clusterColor, onSelect, isSelected, isAnyFocused, viewLevel, lowDetail }: {
@@ -1030,14 +1003,11 @@ function Planet({ job, position, clusterColor, onSelect, isSelected, isAnyFocuse
   viewLevel: 'universe' | 'galaxy' | 'planet';
   lowDetail: boolean;
 }) {
-  const [hovered, setHovered] = useState(false);
   const planetRef = useRef<THREE.Mesh>(null!);
   const label = job.jobNumber && job.jobNumber.trim() !== ''
     ? job.jobNumber
     : `â€¦${String(job.rowId).slice(-6)}`;
 
-  const showSatellites = isSelected;
-  const showMoon = (viewLevel === 'galaxy' && !lowDetail) || isSelected;
   const showLabel = (viewLevel === 'galaxy' && !lowDetail && !isAnyFocused);
 
   // If lowDetail, we only show the atmospheric glow (star-like) and hide the body
@@ -1046,7 +1016,12 @@ function Planet({ job, position, clusterColor, onSelect, isSelected, isAnyFocuse
   const glowIntensity = isSelected ? 3 : (lowDetail ? (viewLevel === 'universe' ? 18 : 2) : (isAnyFocused ? 0.2 : 1.2));
   const glowOpacity = isSelected ? 0.2 : (lowDetail ? (viewLevel === 'universe' ? 0.4 : 0.05) : (isAnyFocused ? 0.03 : 0.15));
 
-  const visibleSatellites = (job.satellites || []).slice(0, 15);
+  const [hovered, setHovered] = useState(false);
+
+  useEffect(() => {
+    document.body.style.cursor = hovered ? 'pointer' : 'default';
+    return () => { document.body.style.cursor = 'default'; };
+  }, [hovered]);
 
   return (
     <group position={position}>
@@ -1066,7 +1041,7 @@ function Planet({ job, position, clusterColor, onSelect, isSelected, isAnyFocuse
           />
         </mesh>
 
-        {/* Core planet â€” hide if lowDetail */}
+        {/* Core planet — hide if lowDetail */}
         {!lowDetail && (
           <mesh
             ref={planetRef}
@@ -1093,8 +1068,7 @@ function Planet({ job, position, clusterColor, onSelect, isSelected, isAnyFocuse
               color="#ffffff"
               anchorX="center"
               anchorY="middle"
-              material-transparent
-              material-opacity={0.9}
+              fillOpacity={0.9}
             >
               {label}
             </Text>
@@ -1117,17 +1091,25 @@ function Planet({ job, position, clusterColor, onSelect, isSelected, isAnyFocuse
           </mesh>
         )}
 
-        {/* Moon (Communication Status) */}
-        {showMoon && job.moon && <Moon state={job.moon.state} />}
+        {/* Moons - Subordinate Attributes (Drive Files / Permits / etc) */}
+        {isSelected && (job.moons || []).slice(0, 8).map((moon, i) => (
+          <Moon
+            key={moon.id}
+            kind={moon.kind}
+            orbitRadius={12.0}
+            angleOffset={(i / 8) * Math.PI * 2}
+            speed={0.3 + (i * 0.05)}
+          />
+        ))}
 
-        {/* Satellites - Only in Focus Mode for selected */}
-        {showSatellites && visibleSatellites.map((sat, i) => (
+        {/* Satellites - Operational Metadata (Gmail / System Notifications) */}
+        {isSelected && (job.satellites || []).slice(0, 5).map((sat, i) => (
           <Satellite
             key={sat.id}
-            kind={sat.kind}
-            orbitRadius={8.0} // R_PLANET * 2.0 (Inner Documents Orbit)
-            angleOffset={(i / visibleSatellites.length) * Math.PI * 2}
-            speed={0.8 + (i * 0.1)}
+            state={sat.state}
+            orbitRadius={16.0}
+            angleOffset={(i / 5) * Math.PI * 2 + Math.PI / 4}
+            speed={1.2 + (i * 0.2)}
           />
         ))}
       </Float>
@@ -1142,8 +1124,7 @@ function Planet({ job, position, clusterColor, onSelect, isSelected, isAnyFocuse
             anchorY="middle"
             outlineWidth={0.2}
             outlineColor="#000000"
-            opacity={0.8}
-            transparent
+            fillOpacity={0.8}
           >
             {label}
           </Text>

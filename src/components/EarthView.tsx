@@ -3,16 +3,18 @@ import { useFrame } from '@react-three/fiber';
 import * as THREE from 'three';
 import { OrbitControls, useTexture, Stars, Billboard, Html } from '@react-three/drei';
 import type { JobOrbit } from '../types/lumina';
-import { STATUS_COLORS } from '../types/lumina';
+import { STATUS_COLORS, GALAXY_CATEGORIES, resolveGalaxy } from '../types/lumina';
+import { useLumina } from '../store/LuminaContext';
 
-interface EarthViewProps {
-  jobs: JobOrbit[];
-  onSelectJob: (job: JobOrbit) => void;
-}
-
-export function EarthView({ jobs, onSelectJob }: EarthViewProps) {
+export function EarthView() {
   const globeRef = useRef<THREE.Mesh>(null!);
   const cloudsRef = useRef<THREE.Mesh>(null!);
+  const { jobs, selectJob, clearSelectedJob, latchedStatus, setLatchedStatus } = useLumina();
+
+  const onSelectJob = (job: JobOrbit | null) => {
+    if (job) selectJob(job.rowId, job.jobNumber);
+    else clearSelectedJob();
+  };
   
   const [colorMap, normalMap, specularMap, cloudsMap] = useTexture([
     'https://raw.githubusercontent.com/mrdoob/three.js/master/examples/textures/planets/earth_atmos_2048.jpg',
@@ -32,7 +34,9 @@ export function EarthView({ jobs, onSelectJob }: EarthViewProps) {
   };
 
   const pins = useMemo(() => {
-    return jobs.map((job) => {
+    return jobs
+      .filter(job => !latchedStatus || latchedStatus === 'Total' || resolveGalaxy(job.status) === latchedStatus)
+      .map((job) => {
       // Use real geodata from Smartsheet/Nominatim
       // Add slight jitter (0.005 degrees) to prevent overlapping pins in the same city
       const jitterLat = (Math.random() - 0.5) * 0.15;
@@ -42,10 +46,12 @@ export function EarthView({ jobs, onSelectJob }: EarthViewProps) {
       const lng = (job.lng || -117.1611) + jitterLng;
       
       const position = latLongToVector3(lat, lng, 15.1);
-      const color = STATUS_COLORS[0]; // Simplified for build stability, will map properly later
+      const category = resolveGalaxy(job.status);
+      const colorIndex = GALAXY_CATEGORIES.indexOf(category);
+      const color = colorIndex !== -1 ? STATUS_COLORS[colorIndex] : STATUS_COLORS[0];
       return { job, position, color };
     });
-  }, [jobs]);
+  }, [jobs, latchedStatus]);
 
   useFrame((_state, delta) => {
     if (globeRef.current) globeRef.current.rotation.y += delta * 0.05;
@@ -102,6 +108,11 @@ export function EarthView({ jobs, onSelectJob }: EarthViewProps) {
           color={pin.color} 
           job={pin.job}
           onClick={() => onSelectJob(pin.job)} 
+          onDoubleClick={() => {
+            const category = resolveGalaxy(pin.job.status);
+            setLatchedStatus(latchedStatus === category ? null : category);
+          }}
+          isLatched={latchedStatus === resolveGalaxy(pin.job.status)}
         />
       ))}
 
@@ -111,7 +122,7 @@ export function EarthView({ jobs, onSelectJob }: EarthViewProps) {
   );
 }
 
-function Pin({ position, color, job, onClick }: { position: THREE.Vector3, color: string, job: JobOrbit, onClick: () => void }) {
+function Pin({ position, color, job, onClick, onDoubleClick, isLatched }: { position: THREE.Vector3, color: string, job: JobOrbit, onClick: () => void, onDoubleClick: () => void, isLatched: boolean }) {
   const [hovered, setHovered] = useState(false);
   
   return (
@@ -123,6 +134,10 @@ function Pin({ position, color, job, onClick }: { position: THREE.Vector3, color
           onClick={(e) => {
             e.stopPropagation();
             onClick();
+          }}
+          onDoubleClick={(e) => {
+            e.stopPropagation();
+            onDoubleClick();
           }}
         >
           <sphereGeometry args={[0.2, 16, 16]} />
@@ -137,6 +152,14 @@ function Pin({ position, color, job, onClick }: { position: THREE.Vector3, color
             <circleGeometry args={[0.3, 32]} />
             <meshBasicMaterial color={color} transparent opacity={0.1} />
           </mesh>
+          
+          {/* Latch Indicator (Ring) */}
+          {isLatched && (
+            <mesh scale={4.5}>
+              <ringGeometry args={[0.25, 0.35, 32]} />
+              <meshBasicMaterial color="#ffffff" transparent opacity={0.8} />
+            </mesh>
+          )}
         </mesh>
       </Billboard>
       

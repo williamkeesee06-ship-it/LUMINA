@@ -1,20 +1,24 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
-import { Send, Mic, Terminal, Volume2, Lock, Minus } from 'lucide-react';
+import { Send, Mic, Lock, Minus } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { askLumina } from '../services/gemini';
+import { resolveGalaxy } from '../types/lumina';
 import type { JobOrbit } from '../types/lumina';
+import { useLumina } from '../store/LuminaContext';
 
-interface ChatInterfaceProps {
-  isOpen: boolean;
-  onClose: () => void; // Used to minimize in this new dock context
-  jobs: JobOrbit[];
-  driveFiles?: any[];
-  onFlyTo: (job: JobOrbit) => void;
-  viewLevel: 'universe' | 'galaxy' | 'planet';
-  focusedGalaxy: string | null;
-}
+export function ChatInterface() {
+  const { 
+    isChatOpen: isOpen, 
+    toggleChat: onClose, 
+    jobs, 
+    viewLevel, 
+    focusedGalaxy,
+    setFocusedGalaxy,
+    selectJob,
+    googleToken,
+    setActiveStatus
+  } = useLumina();
 
-export function ChatInterface({ isOpen, onClose, jobs, driveFiles = [], onFlyTo, viewLevel, focusedGalaxy }: ChatInterfaceProps) {
   const [messages, setMessages] = useState<{ role: 'ai' | 'user', text: string }[]>([
     { role: 'ai', text: "Lumina Uplink active. Local ops mode engaged. How may I assist your coordination?" }
   ]);
@@ -24,6 +28,12 @@ export function ChatInterface({ isOpen, onClose, jobs, driveFiles = [], onFlyTo,
   const [isFullVoice, setIsFullVoice] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
   const recognitionRef = useRef<any>(null);
+
+  const onFlyTo = (job: JobOrbit) => {
+    setFocusedGalaxy(resolveGalaxy(job.status));
+    selectJob(job.rowId, job.jobNumber);
+    onClose();
+  };
 
   useEffect(() => {
     if (scrollRef.current) {
@@ -53,7 +63,7 @@ export function ChatInterface({ isOpen, onClose, jobs, driveFiles = [], onFlyTo,
       const aiResponse = await askLumina(textToSubmit, jobs, {
         viewLevel,
         focusedGalaxy,
-        googleConnected: !!localStorage.getItem('google_token') // basic check or just use truthy value if passed
+        googleConnected: !!googleToken
       });
       
       // Clean up commands from response
@@ -76,9 +86,7 @@ export function ChatInterface({ isOpen, onClose, jobs, driveFiles = [], onFlyTo,
       if (aiResponse.includes('FLY_TO_GALAXY:')) {
         const match = aiResponse.match(/FLY_TO_GALAXY:([^\s]+)/);
         if (match) {
-          window.dispatchEvent(new CustomEvent('lumina-zoom-to-status', { 
-            detail: { status: match[1] } 
-          }));
+          setActiveStatus(match[1]);
         }
       }
     } catch (err) {
@@ -127,7 +135,7 @@ export function ChatInterface({ isOpen, onClose, jobs, driveFiles = [], onFlyTo,
 
       recognitionRef.current = rec;
     }
-  }, [isFullVoice, isDictating, jobs, onFlyTo, addMessage]);
+  }, [isFullVoice, isDictating, jobs, addMessage]);
 
   const toggleDictation = () => {
     if (isDictating) {
@@ -140,20 +148,6 @@ export function ChatInterface({ isOpen, onClose, jobs, driveFiles = [], onFlyTo,
     }
   };
 
-  const toggleFullVoice = () => {
-    // Locked for now as per directive
-    return; // Remove this to enable
-    /*
-    if (isFullVoice) {
-      recognitionRef.current?.stop();
-      setIsFullVoice(false);
-    } else {
-      setIsDictating(false);
-      setIsFullVoice(true);
-      recognitionRef.current?.start();
-    }
-    */
-  };
 
   return (
     <div className="lumina-dock-outer">

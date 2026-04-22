@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
+import { useLumina } from '../store/LuminaContext';
 
 declare global {
   interface Window {
@@ -9,25 +10,40 @@ declare global {
 
 export function useVoiceCommands(enabled: boolean) {
   const [isListening, setIsListening] = useState(false);
+  const { 
+    resetUI, 
+    setActiveStatus, 
+    setFocusedGalaxy, 
+    setViewMode,
+    viewMode
+  } = useLumina();
 
   const processCommand = useCallback((transcript: string) => {
     const command = transcript.toLowerCase().trim();
     console.log('[Lumina Voice] Heard:', command);
 
     if (command.includes('reset') || command.includes('home')) {
-      window.dispatchEvent(new CustomEvent('lumina-reset-camera'));
+      resetUI();
     } else if (command.includes('fielding')) {
-      window.dispatchEvent(new CustomEvent('lumina-zoom-to-status', { detail: { status: 'Fielding' } }));
+      setActiveStatus('Needs Fielding');
+      setFocusedGalaxy('Needs Fielding');
+      setViewMode('galaxy');
     } else if (command.includes('rts') || command.includes('ready')) {
-      window.dispatchEvent(new CustomEvent('lumina-zoom-to-status', { detail: { status: 'RTS' } }));
+      setActiveStatus('Fielded-RTS');
+      setFocusedGalaxy('Fielded-RTS');
+      setViewMode('galaxy');
     } else if (command.includes('scheduled')) {
-      window.dispatchEvent(new CustomEvent('lumina-zoom-to-status', { detail: { status: 'Scheduled' } }));
+      setActiveStatus('Scheduled');
+      setFocusedGalaxy('Scheduled');
+      setViewMode('galaxy');
     } else if (command.includes('earth') || command.includes('switch view')) {
-      window.dispatchEvent(new CustomEvent('lumina-toggle-view'));
+      setViewMode(viewMode === 'earth' ? 'galaxy' : 'earth');
+    } else if (command.includes('map')) {
+      setViewMode(viewMode === 'map' ? 'galaxy' : 'map');
     } else if (command.includes('galaxy')) {
-        window.dispatchEvent(new CustomEvent('lumina-toggle-view')); // simple toggle for now
+      setViewMode('galaxy');
     }
-  }, []);
+  }, [resetUI, setActiveStatus, setFocusedGalaxy, setViewMode, viewMode]);
 
   useEffect(() => {
     if (!enabled) return;

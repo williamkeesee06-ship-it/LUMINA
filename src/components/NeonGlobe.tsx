@@ -1,32 +1,7 @@
-import { useRef } from 'react';
-import { Canvas, useFrame } from '@react-three/fiber';
-import * as THREE from 'three';
 
 interface NeonGlobeProps {
   onClick: () => void;
   isActive: boolean;
-}
-
-function GlobeCore({ isActive }: { isActive: boolean }) {
-  const meshRef = useRef<THREE.Mesh>(null!);
-  
-  useFrame(() => {
-    meshRef.current.rotation.y += 0.015;
-    meshRef.current.rotation.x += 0.005;
-  });
-
-  return (
-    <mesh ref={meshRef}>
-      <sphereGeometry args={[1, 32, 32]} />
-      <meshStandardMaterial 
-        color={isActive ? "#00ff88" : "#004422"} 
-        emissive={isActive ? "#00ff88" : "#004422"}
-        emissiveIntensity={isActive ? 2 : 0.5}
-        wireframe
-      />
-      <pointLight intensity={2} color="#00ff88" />
-    </mesh>
-  );
 }
 
 export function NeonGlobe({ onClick, isActive }: NeonGlobeProps) {

@@ -47,7 +47,7 @@ export const fetchConstructionJobs = async (): Promise<JobOrbit[]> => {
         )?.url?.match(/([a-zA-Z0-9_-]{28,})/)?.[0];
 
         return {
-          rowId: row.id,
+          rowId: String(row.id),
           jobNumber: getVal('Work Order'),
           status: getVal('Secondary Job Status'),
           address: getVal('Address'),
@@ -58,6 +58,7 @@ export const fetchConstructionJobs = async (): Promise<JobOrbit[]> => {
           cpaSro: getVal('CPA/SRO'),
           supervisor: getVal('Construction Supervisor'),
           driveFolderId,
+          moons: [],
           satellites: [],
         } as JobOrbit;
       })
