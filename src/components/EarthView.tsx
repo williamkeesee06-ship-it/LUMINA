@@ -35,8 +35,8 @@ export function EarthView() {
 
   const pins = useMemo(() => {
     return jobs
-      .filter(job => !latchedStatus || latchedStatus === 'Total' || resolveGalaxy(job.status) === latchedStatus)
-      .map((job) => {
+      .filter((job: JobOrbit) => !latchedStatus || latchedStatus === 'Total' || resolveGalaxy(job.status) === latchedStatus)
+      .map((job: JobOrbit) => {
       // Use real geodata from Smartsheet/Nominatim
       // Add slight jitter (0.005 degrees) to prevent overlapping pins in the same city
       const jitterLat = (Math.random() - 0.5) * 0.15;
@@ -101,7 +101,7 @@ export function EarthView() {
       </mesh>
 
       {/* Pins */}
-      {pins.map((pin, i) => (
+      {pins.map((pin: { job: JobOrbit; position: THREE.Vector3; color: string }, i: number) => (
         <Pin 
           key={pin.job.rowId || i} 
           position={pin.position} 

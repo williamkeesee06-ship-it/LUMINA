@@ -7,7 +7,7 @@ import type {
 } from '../types/store';
 import type { JobOrbit } from '../types/lumina';
 
-interface LuminaState {
+export interface LuminaState {
   // Data
   jobs: JobOrbit[];
   loading: boolean;

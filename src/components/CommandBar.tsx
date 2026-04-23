@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { Globe, Mic, MicOff, Map as MapIcon, RotateCcw } from 'lucide-react';
 import type { LuminaLatchTarget } from '../types/store';
+import type { JobOrbit } from '../types/lumina';
 import { useLumina } from '../store/LuminaContext';
 
 export function CommandBar() {
@@ -23,13 +24,13 @@ export function CommandBar() {
 
   const stats = {
     total: jobs.length,
-    complete: jobs.filter(j => j.status?.toLowerCase().includes('complete')).length,
-    fieldedRts: jobs.filter(j => j.status?.toLowerCase().includes('fielded') || j.status?.toLowerCase().includes('rts')).length,
-    needsFielding: jobs.filter(j => j.status?.toLowerCase().includes('fielding') && !j.status?.toLowerCase().includes('fielded')).length,
-    onHold: jobs.filter(j => j.status?.toLowerCase().includes('hold')).length,
-    pending: jobs.filter(j => j.status?.toLowerCase().includes('pending')).length,
-    routedToSub: jobs.filter(j => j.status?.toLowerCase().includes('routed')).length,
-    scheduled: jobs.filter(j => j.status?.toLowerCase().includes('scheduled') || !!j.scheduleDate).length,
+    complete: jobs.filter((j: JobOrbit) => j.status?.toLowerCase().includes('complete')).length,
+    fieldedRts: jobs.filter((j: JobOrbit) => j.status?.toLowerCase().includes('fielded') || j.status?.toLowerCase().includes('rts')).length,
+    needsFielding: jobs.filter((j: JobOrbit) => j.status?.toLowerCase().includes('fielding') && !j.status?.toLowerCase().includes('fielded')).length,
+    onHold: jobs.filter((j: JobOrbit) => j.status?.toLowerCase().includes('hold')).length,
+    pending: jobs.filter((j: JobOrbit) => j.status?.toLowerCase().includes('pending')).length,
+    routedToSub: jobs.filter((j: JobOrbit) => j.status?.toLowerCase().includes('routed')).length,
+    scheduled: jobs.filter((j: JobOrbit) => j.status?.toLowerCase().includes('scheduled') || !!j.scheduleDate).length,
     gmail: unreadCount
   };
 

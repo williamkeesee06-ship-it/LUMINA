@@ -1,14 +1,16 @@
-import { createContext, useContext, useEffect } from 'react';
+import { createContext, useContext } from 'react';
 import type { ReactNode } from 'react';
 import { useUIStore } from './useUIStore';
+import type { LuminaState } from './useUIStore';
 
-const LuminaContext = createContext<ReturnType<typeof useUIStore> | undefined>(undefined);
+type LuminaContextType = LuminaState & { login: () => void };
+
+const LuminaContext = createContext<LuminaContextType | null>(null);
 
 interface LuminaProviderProps {
   children: ReactNode;
   login: () => void;
 }
-
 
 export function LuminaProvider({ 
   children, 
@@ -23,10 +25,9 @@ export function LuminaProvider({
   );
 }
 
-
 export function useLumina() {
   const context = useContext(LuminaContext);
-  if (context === undefined) {
+  if (context === null) {
     throw new Error('useLumina must be used within a LuminaProvider');
   }
   return context;
