@@ -8,7 +8,7 @@ export function UniversalJobCard() {
   const { jobs, selectedJobId, clearSelectedJob } = useLumina();
   
   // Read the active job from the centralized state
-  const activeJob = jobs.find(j => j.rowId === selectedJobId);
+  const activeJob = jobs.find((j: any) => j.rowId === selectedJobId);
 
   return (
     <AnimatePresence>
@@ -77,7 +77,7 @@ export function UniversalJobCard() {
                     <div className="text-[10px] uppercase tracking-[0.2em] text-white/40 mb-3">Enriched Telemetry</div>
                     <div className="space-y-2">
                       {/* Satellites: Operational / Gmail */}
-                      {activeJob.satellites?.map(sat => (
+                      {activeJob.satellites?.map((sat: any) => (
                         <div key={sat.id} className="flex items-center gap-2 p-2 border border-white/5 rounded-sm bg-white/5">
                           <div className={`w-1.5 h-1.5 rounded-full ${
                             sat.state === 'needs_reply' ? 'bg-red-500' : 
@@ -94,7 +94,7 @@ export function UniversalJobCard() {
                       ))}
 
                       {/* Moons: Subordinate / Drive Files */}
-                      {activeJob.moons?.map(moon => {
+                      {activeJob.moons?.map((moon: any) => {
                         const getMoonColor = (kind: string) => {
                           switch (kind) {
                             case 'permit': return 'bg-[#ffcc00]';

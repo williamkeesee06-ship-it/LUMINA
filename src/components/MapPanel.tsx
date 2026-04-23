@@ -43,7 +43,7 @@ export function MapPanel() {
   const isMapMode = viewMode === 'map';
   
   const selectedJob = useMemo(() => 
-    jobs.find(j => j.rowId === selectedJobId) || null
+    jobs.find((j: any) => j.rowId === selectedJobId) || null
   , [jobs, selectedJobId]);
 
   const mapCenter = selectedJob ? getJobCoord(selectedJob) : SEATTLE_CENTER;
@@ -103,7 +103,7 @@ export function MapPanel() {
             />
             <MapUpdater center={mapCenter} zoom={mapZoom} />
             
-            {jobs.map(job => {
+            {jobs.map((job: any) => {
               const pos = getJobCoord(job);
               return (
                 <Marker 

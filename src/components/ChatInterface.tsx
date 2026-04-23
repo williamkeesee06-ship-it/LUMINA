@@ -97,7 +97,7 @@ export function ChatInterface() {
       if (aiResponse.includes('FLY_TO:')) {
         const match = aiResponse.match(/FLY_TO:([^\s]+)/);
         if (match) {
-          const job = jobs.find(j => j.jobNumber.includes(match[1]));
+          const job = jobs.find((j: any) => j.jobNumber.includes(match[1]));
           if (job) onFlyTo(job);
         }
       }

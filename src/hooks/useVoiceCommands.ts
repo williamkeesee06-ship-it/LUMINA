@@ -47,7 +47,7 @@ export function useVoiceCommands(enabled: boolean) {
 
       if (response.startsWith('FLY_TO:')) {
         const jobNumber = response.replace('FLY_TO:', '').trim();
-        const job = jobs.find(j => j.jobNumber === jobNumber);
+        const job = jobs.find((j: any) => j.jobNumber === jobNumber);
         if (job) {
           selectJob(job.rowId, job.jobNumber);
           setOrbMode('navigating');
@@ -68,7 +68,7 @@ export function useVoiceCommands(enabled: boolean) {
     } catch (err) {
       console.error('[Lumina Voice] AI Processing Error:', err);
     } finally {
-      setOrbMode(enabled ? 'voice' : 'connected');
+      setOrbMode(enabled ? 'voice' : 'idle');
     }
   }, [
     jobs, googleToken, viewMode, focusedGalaxy, 

@@ -12,7 +12,7 @@ interface CinematicCameraProps {
  * CinematicCamera handles smooth transitions between view modes.
  * It replaces the previous 'hard snap' logic with dampened interpolation.
  */
-export function HardCameraSnap({ zoomTarget, viewMode, onComplete }: CinematicCameraProps) {
+export function HardCameraSnap({ zoomTarget, onComplete }: CinematicCameraProps) {
   const { camera } = useThree();
   const controls = useThree(state => state.controls) as any;
   const isTransitioning = useRef(false);

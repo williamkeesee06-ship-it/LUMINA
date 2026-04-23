@@ -29,7 +29,6 @@ function UniverseScene() {
     selectedJobId,
     viewMode,
     setViewMode,
-    focusedGalaxy,
     setFocusedGalaxy,
     activeStatus,
     setActiveStatus,
