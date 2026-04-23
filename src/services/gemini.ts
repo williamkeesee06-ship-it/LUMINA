@@ -1,4 +1,4 @@
-import { GoogleGenerativeAI, SchemaType } from '@google/generative-ai';
+import { GoogleGenAI, Type } from '@google/genai';
 import type { JobOrbit } from '../types/lumina';
 
 const API_KEY = import.meta.env.VITE_GEMINI_API_KEY;
@@ -10,7 +10,9 @@ export const askLumina = async (
 ): Promise<string> => {
   if (!API_KEY) return "Lumina AI key missing. Please check your .env file.";
 
-  const genAI = new GoogleGenerativeAI(API_KEY);
+  const ai = new GoogleGenAI({
+    apiKey: API_KEY,
+  });
 
   const systemInstructions = `
     You are Lumina, the sentient intelligence of this cosmic dashboard.
@@ -44,56 +46,57 @@ export const askLumina = async (
   `;
 
   try {
-    const model = genAI.getGenerativeModel({
-      model: "gemini-1.5-pro",
-      systemInstruction: systemInstructions,
-      tools: [
-        {
-          functionDeclarations: [
-            {
-              name: "open_website",
-              description: "Open a specific website or URL.",
-              parameters: {
-                type: SchemaType.OBJECT,
-                properties: { url: { type: SchemaType.STRING } },
-                required: ["url"]
+    const response = await ai.models.generateContent({
+      model: "gemini-2.5-flash",
+      contents: prompt,
+      config: {
+        systemInstruction: systemInstructions,
+        tools: [
+          {
+            functionDeclarations: [
+              {
+                name: "open_website",
+                description: "Open a specific website or URL.",
+                parameters: {
+                  type: Type.OBJECT,
+                  properties: { url: { type: Type.STRING } },
+                  required: ["url"]
+                }
+              },
+              {
+                name: "fly_to_job",
+                description: "Navigate to a specific job planet.",
+                parameters: {
+                  type: Type.OBJECT,
+                  properties: { jobNumber: { type: Type.STRING } },
+                  required: ["jobNumber"]
+                }
+              },
+              {
+                name: "fly_to_galaxy",
+                description: "Navigate to a category galaxy (e.g. Scheduled, Pending, On Hold, Complete, RTS, Fielding).",
+                parameters: {
+                  type: Type.OBJECT,
+                  properties: { category: { type: Type.STRING } },
+                  required: ["category"]
+                }
               }
-            },
-            {
-              name: "fly_to_job",
-              description: "Navigate to a specific job planet.",
-              parameters: {
-                type: SchemaType.OBJECT,
-                properties: { jobNumber: { type: SchemaType.STRING } },
-                required: ["jobNumber"]
-              }
-            },
-            {
-              name: "fly_to_galaxy",
-              description: "Navigate to a category galaxy (e.g. Scheduled, Pending, On Hold, Complete, RTS, Fielding).",
-              parameters: {
-                type: SchemaType.OBJECT,
-                properties: { category: { type: SchemaType.STRING } },
-                required: ["category"]
-              }
-            }
-          ]
-        }
-      ]
+            ]
+          }
+        ]
+      }
     });
 
-    const result = await model.generateContent(prompt);
-    const response = await result.response;
-    const call = response.candidates?.[0].content.parts.find(p => p.functionCall);
+    const call = response.functionCalls?.[0];
 
-    if (call && call.functionCall) {
-      const { name, args } = call.functionCall;
+    if (call) {
+      const { name, args } = call;
       if (name === 'open_website') return `OPEN_URL:${(args as any).url}`;
       if (name === 'fly_to_job') return `FLY_TO:${(args as any).jobNumber}`;
       if (name === 'fly_to_galaxy') return `FLY_TO_GALAXY:${(args as any).category}`;
     }
 
-    return response.text();
+    return response.text || "";
   } catch (error: any) {
     console.error("Lumina AI Error:", error);
     const details = error.message || "Unknown error";
