@@ -17,6 +17,7 @@ import { InterstellarDust } from './experience/InterstellarDust';
 import { MouseTrail } from './experience/MouseTrail';
 import { LuminaAISurface } from './experience/LuminaAISurface';
 import { HardCameraSnap } from './experience/HardCameraSnap';
+import { NavigationStreaks } from './experience/NavigationStreaks';
 
 export function Experience() {
   return <UniverseScene />;
@@ -74,12 +75,6 @@ function UniverseScene() {
     });
   }, []);
 
-  // 2. Dynamic Cluster Computation
-  // Stability Key: only re-calculate if job count or status strings change
-  const clusterStabilityKey = useMemo(() => {
-    return jobs.map((j: JobOrbit) => `${j.rowId}-${j.status}`).join('|');
-  }, [jobs]);
-
   const clusteredJobs = useMemo(() => {
     const galaxyGroups: Record<GalaxyType, JobOrbit[]> = {
       'Complete': [],
@@ -126,7 +121,7 @@ function UniverseScene() {
     });
 
     return result;
-  }, [clusterStabilityKey, galaxyMetadata, jobs]);
+  }, [galaxyMetadata, jobs]);
 
 
   // Camera Orchestrator: Unified effect to handle all navigation transitions
@@ -209,6 +204,7 @@ function UniverseScene() {
       <LuminaStardust count={20000} radius={6000} />
       <InterstellarDust />
       <MouseTrail />
+      <NavigationStreaks isNavigating={isNavigating} />
       <LuminaAISurface 
         onClick={onOpenAI}
         onDoubleClick={onGoogleLogin}

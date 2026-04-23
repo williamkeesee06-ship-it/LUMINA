@@ -63,14 +63,14 @@ export function CommandBar() {
         <div className={`w-1 h-4 bg-cyan-400 rounded-full transition-transform ${isCollapsed ? 'rotate-180' : ''}`} />
       </button>
 
-      <div className="flex flex-col items-center w-full h-full overflow-y-auto no-scrollbar pt-4">
+      <div className="flex flex-col items-center w-full h-full pt-4">
         {/* Reset Command */}
-        <button className="command-icon-btn mb-6" onClick={resetUniverse} title="Reset Universe">
+        <button className="command-icon-btn mb-6 flex-shrink-0" onClick={resetUniverse} title="Reset Universe">
           <RotateCcw size={20} className="text-cyan-500/50 hover:text-cyan-500 transition-colors" />
         </button>
         
-        {/* Tactical Gauges */}
-        <div className="flex flex-col items-center gap-6 pb-12">
+        {/* Tactical Gauges (Scrollable) */}
+        <div className="flex flex-col items-center gap-6 pb-4 overflow-y-auto no-scrollbar flex-1 w-full min-h-0">
           <div 
             className={getGaugeClass('Total')} 
             onClick={() => handleGaugeClick('Total')} 
@@ -173,35 +173,35 @@ export function CommandBar() {
             </div>
             {!isCollapsed && <span className="gauge-label">Gmail</span>}
           </div>
+        </div>
 
-          {/* Mode Controls */}
-          <div className="flex flex-col gap-6 mt-8 items-center border-t border-white/10 pt-8 w-full">
-            <button 
-              className={`command-icon-btn ${voiceEnabled ? 'voice-active' : ''}`}
-              onClick={() => setVoiceEnabled(!voiceEnabled)}
-              title={voiceEnabled ? "Disable Voice" : "Enable Voice"}
-            >
-              {voiceEnabled ? <Mic size={22} className="text-cyan-400" /> : <MicOff size={22} className="opacity-40" />}
-            </button>
+        {/* Mode Controls (Fixed at bottom) */}
+        <div className="flex flex-col gap-6 items-center border-t border-white/10 pt-6 pb-6 w-full bg-[#0a0a14b3] flex-shrink-0">
+          <button 
+            className={`command-icon-btn !mt-0 ${voiceEnabled ? 'voice-active' : ''}`}
+            onClick={() => setVoiceEnabled(!voiceEnabled)}
+            title={voiceEnabled ? "Disable Voice" : "Enable Voice"}
+          >
+            {voiceEnabled ? <Mic size={22} className="text-cyan-400" /> : <MicOff size={22} className="opacity-40" />}
+          </button>
 
-            <button 
-              className={`command-icon-btn flex-col gap-1 !rounded-lg px-2 py-3 h-auto ${viewMode === 'map' ? 'bg-cyan-500/20 border-cyan-400 text-cyan-400 shadow-[0_0_15px_rgba(0,242,255,0.3)]' : 'opacity-40 hover:opacity-100'}`}
-              onClick={() => setViewMode(viewMode === 'map' ? 'galaxy' : 'map')}
-              id="tactical-map-btn"
-              title="Tactical Map"
-            >
-              <MapIcon size={20} />
-              <span className="text-[8px] uppercase tracking-tighter font-bold">Map</span>
-            </button>
+          <button 
+            className={`command-icon-btn !mt-0 flex-col gap-1 !rounded-lg px-2 py-3 h-auto ${viewMode === 'map' ? 'bg-cyan-500/20 border-cyan-400 text-cyan-400 shadow-[0_0_15px_rgba(0,242,255,0.3)]' : 'opacity-40 hover:opacity-100'}`}
+            onClick={() => setViewMode(viewMode === 'map' ? 'galaxy' : 'map')}
+            id="tactical-map-btn"
+            title="Tactical Map"
+          >
+            <MapIcon size={20} />
+            <span className="text-[8px] uppercase tracking-tighter font-bold">Map</span>
+          </button>
 
-            <button 
-              className={`command-icon-btn ${viewMode === 'earth' ? 'bg-cyan-500/20 border-cyan-400 text-cyan-400' : 'opacity-40 hover:opacity-100'}`}
-              onClick={() => setViewMode(viewMode === 'earth' ? 'galaxy' : 'earth')}
-              title="Earth Focus"
-            >
-              <Globe size={22} strokeWidth={1.5} />
-            </button>
-          </div>
+          <button 
+            className={`command-icon-btn !mt-0 ${viewMode === 'earth' ? 'bg-cyan-500/20 border-cyan-400 text-cyan-400' : 'opacity-40 hover:opacity-100'}`}
+            onClick={() => setViewMode(viewMode === 'earth' ? 'galaxy' : 'earth')}
+            title="Earth Focus"
+          >
+            <Globe size={22} strokeWidth={1.5} />
+          </button>
         </div>
       </div>
     </div>
