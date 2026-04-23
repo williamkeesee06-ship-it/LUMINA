@@ -1,4 +1,5 @@
-import { Coordinates } from '../src/services/geocoding';
+/// <reference types="node" />
+import { Coordinates } from '../src/types/lumina.js';
 
 export const config = {
   runtime: 'edge',

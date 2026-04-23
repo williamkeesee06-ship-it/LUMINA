@@ -7,6 +7,11 @@ export type SatelliteKind = 'communication' | 'attachment' | 'scheduling' | 'rou
 export type MoonKind = 'permit' | 'prints' | 'redlines' | 'bidmaster' | 'revisit' | 'other';
 export type MoonState = 'ok' | 'warning' | 'alert' | 'inactive' | 'waiting' | 'needs_reply';
 
+export interface Coordinates {
+  lat: number;
+  lng: number;
+}
+
 export interface GmailSatellite {
   id: string;
   label: string;
