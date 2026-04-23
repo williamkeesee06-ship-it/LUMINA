@@ -9,8 +9,9 @@
       "destination": "https://nominatim.openstreetmap.org/:path*"
     },
     {
-      "source": "/(.*)",
+      "source": "/((?!api/|assets/|favicon|manifest.json|noise.svg).*)",
       "destination": "/index.html"
     }
   ]
 }
+

@@ -3,7 +3,10 @@ import type { ReactNode } from 'react';
 import { useUIStore } from './useUIStore';
 import type { LuminaState } from './useUIStore';
 
-type LuminaContextType = LuminaState & { login: () => void };
+export interface LuminaContextType extends LuminaState {
+  login: () => void;
+}
+
 
 const LuminaContext = createContext<LuminaContextType | null>(null);
 

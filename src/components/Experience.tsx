@@ -101,7 +101,8 @@ function UniverseScene() {
       const goldenAngle = Math.PI * (3 - Math.sqrt(5));
       const spread = 240;
 
-      jobsForGalaxy.forEach((job, i) => {
+      jobsForGalaxy.forEach((job, i: number) => {
+
         const yFrac = total > 1 ? 1 - (2 * i) / (total - 1) : 0;
         const sinTheta = Math.sqrt(Math.max(0, 1 - yFrac * yFrac));
         const phi3D = goldenAngle * i;

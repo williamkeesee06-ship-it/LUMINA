@@ -1,5 +1,5 @@
 /// <reference types="node" />
-import { Coordinates } from '../src/types/lumina.js';
+import type { Coordinates } from '../src/types/lumina.js';
 
 export const config = {
   runtime: 'edge',
@@ -10,7 +10,9 @@ export default async function handler(req: Request) {
   const address = url.searchParams.get('address');
   
   // SECURE: Key is read from environment variable on server, never exposed to client
+  // @ts-ignore - process.env is provided by Vercel in Edge runtime
   const API_KEY = process.env.VITE_GOOGLE_MAPS_API_KEY;
+
 
   if (!address) {
     return new Response(JSON.stringify({ error: 'Address required' }), {
