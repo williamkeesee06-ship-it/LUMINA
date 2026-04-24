@@ -2,7 +2,7 @@ import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { Send, Mic, Lock, Minus } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { askLumina } from '../services/gemini';
-import { resolveGalaxy } from '../types/lumina';
+import { resolveGalaxy } from '../lib/lumina';
 import type { JobOrbit } from '../types/lumina';
 import { useLumina } from '../store/LuminaContext';
 
@@ -105,7 +105,7 @@ export function ChatInterface() {
       if (aiResponse.includes('FLY_TO_GALAXY:')) {
         const match = aiResponse.match(/FLY_TO_GALAXY:([^\s]+)/);
         if (match) {
-          setActiveStatus(match[1]);
+          setActiveStatus(resolveGalaxy(match[1]));
         }
       }
     } catch (err) {

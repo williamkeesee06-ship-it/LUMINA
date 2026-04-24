@@ -1,4 +1,4 @@
-import { GALAXY_CATEGORIES, type GalaxyType } from '../../types/lumina';
+import { GALAXY_CATEGORIES } from '../../types/lumina';
 
 export const GALAXY_CENTERS: Record<string, [number, number, number]> = {
   'Complete': [0, 0, 0],

@@ -3,7 +3,7 @@ import { useFrame } from '@react-three/fiber';
 import * as THREE from 'three';
 import { OrbitControls, useTexture, Stars, Billboard, Html } from '@react-three/drei';
 import type { JobOrbit } from '../types/lumina';
-import { STATUS_COLORS, resolveGalaxy } from '../types/lumina';
+import { STATUS_COLORS, resolveGalaxy } from '../lib/lumina';
 import { useLumina } from '../store/LuminaContext';
 
 export function EarthView() {

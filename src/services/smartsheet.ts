@@ -1,5 +1,5 @@
 import type { SmartsheetResponse, JobOrbit } from '../types/lumina';
-import { normalizeStatus } from '../lib/normalizeStatus';
+import { resolveGalaxy } from '../lib/lumina';
 
 const TOKEN = import.meta.env.VITE_SMARTSHEET_TOKEN;
 const SHEET_ID = import.meta.env.VITE_SMARTSHEET_SHEET_ID || '1833739362822020';
@@ -45,7 +45,7 @@ export const fetchConstructionJobs = async (): Promise<JobOrbit[]> => {
         return {
           rowId: String(row.id),
           jobNumber: getVal('Primary'),
-          status: normalizeStatus(getVal('Secondary Job Status')),
+          status: resolveGalaxy(getVal('Secondary Job Status')),
           address: getVal('Address'),
           city: getVal('City'),
           notes: getVal('NSC Project Notes'),

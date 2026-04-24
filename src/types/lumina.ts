@@ -95,21 +95,8 @@ export interface PlanetData extends JobOrbit {
   size: number;
 }
 
-import { STATUS_COLORS } from '../lib/lumina';
-export { STATUS_COLORS };
-
-// Galaxy Tier Hierarchy
-export const GALAXY_CATEGORIES = [
-  'Complete',
-  'Fielded-RTS',
-  'Needs Fielding',
-  'On Hold',
-  'Pending',
-  'Routed to Sub',
-  'Scheduled'
-] as const;
-
-export type GalaxyType = typeof GALAXY_CATEGORIES[number];
+import { GALAXY_CATEGORIES, type GalaxyType, STATUS_COLORS, resolveGalaxy } from '../lib/lumina';
+export { GALAXY_CATEGORIES, type GalaxyType, STATUS_COLORS, resolveGalaxy };
 
 
 

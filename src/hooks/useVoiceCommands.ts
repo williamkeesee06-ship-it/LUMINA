@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { useLumina } from '../store/LuminaContext';
 import { askLumina } from '../services/gemini';
+import { resolveGalaxy } from '../lib/lumina';
 
 declare global {
   interface Window {
@@ -54,8 +55,9 @@ export function useVoiceCommands(enabled: boolean) {
         }
       } else if (response.startsWith('FLY_TO_GALAXY:')) {
         const cat = response.replace('FLY_TO_GALAXY:', '').trim();
-        setActiveStatus(cat);
-        setFocusedGalaxy(cat);
+        const normalized = resolveGalaxy(cat);
+        setActiveStatus(normalized);
+        setFocusedGalaxy(normalized);
         setViewMode('galaxy');
         setOrbMode('navigating');
       } else if (response.startsWith('OPEN_URL:')) {
