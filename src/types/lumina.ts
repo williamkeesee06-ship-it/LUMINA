@@ -34,7 +34,7 @@ export interface DriveMoon {
 export interface ConstructionJob {
   rowId: string; // Smartsheet Row ID (was 'id')
   jobNumber: string; // From "Primary" column
-  status: string; // From "Secondary Status" column
+  status: GalaxyType; // Canonical status mapping
   address: string; // From "Address" column
   city: string; // From "City" column
   notes: string; // From "NSC Project Notes" column
@@ -95,15 +95,8 @@ export interface PlanetData extends JobOrbit {
   size: number;
 }
 
-export const STATUS_COLORS = [
-  '#2a9d8f', // Complete: Muted Teal/Soft Cyan-Green
-  '#00d2ff', // Fielded-RTS: Bright Cyan-Blue
-  '#e76f51', // Needs Fielding: Orange-Red
-  '#ffcc33', // On Hold: Gold/Amber
-  '#9d4edd', // Pending: Violet-Blue
-  '#0077ff', // Routed to Sub: Electric Blue-Cyan
-  '#7209b7', // Scheduled: Magenta-Violet
-];
+import { STATUS_COLORS } from '../lib/lumina';
+export { STATUS_COLORS };
 
 // Galaxy Tier Hierarchy
 export const GALAXY_CATEGORIES = [
@@ -118,20 +111,5 @@ export const GALAXY_CATEGORIES = [
 
 export type GalaxyType = typeof GALAXY_CATEGORIES[number];
 
-export const PENDING_SUBTYPES = [
-  'Pending Customer',
-  'Pending Engineering',
-  'Pending Gigs',
-  'Pending HSR',
-  'Pending Permit',
-  'Pending Splicing'
-];
-
-export const resolveGalaxy = (status: string): GalaxyType => {
-  const s = (status || '').trim();
-  if (PENDING_SUBTYPES.some(sub => s.includes(sub))) return 'Pending';
-  const found = GALAXY_CATEGORIES.find(cat => cat.toLowerCase() === s.toLowerCase());
-  return found || 'Scheduled'; // Fallback
-};
 
 

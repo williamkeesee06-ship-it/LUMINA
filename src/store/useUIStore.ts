@@ -5,7 +5,7 @@ import type {
   OrbMode, 
   LuminaLatchTarget 
 } from '../types/store';
-import type { JobOrbit } from '../types/lumina';
+import type { JobOrbit, GalaxyType } from '../types/lumina';
 
 export interface LuminaState {
   // Data
@@ -20,8 +20,8 @@ export interface LuminaState {
   selectedJobId: string | null;
   selectedJobNumber: string | null;
   viewMode: LuminaViewMode;
-  focusedGalaxy: string | null;
-  activeStatus: string | null;
+  focusedGalaxy: GalaxyType | null;
+  activeStatus: GalaxyType | null;
   latchedStatus: LuminaLatchTarget;
   isChatOpen: boolean;
   voiceEnabled: boolean;
@@ -40,8 +40,8 @@ export interface LuminaState {
   selectJob: (jobId: string | null, jobNumber?: string | null) => void;
   clearSelectedJob: () => void;
   setViewMode: (mode: LuminaViewMode) => void;
-  setFocusedGalaxy: (galaxy: string | null) => void;
-  setActiveStatus: (status: string | null) => void;
+  setFocusedGalaxy: (galaxy: GalaxyType | null) => void;
+  setActiveStatus: (status: GalaxyType | null) => void;
   setLatchedStatus: (status: LuminaLatchTarget) => void;
   toggleChat: () => void;
   setVoiceEnabled: (enabled: boolean) => void;
@@ -49,6 +49,7 @@ export interface LuminaState {
   setIsFullVoice: (active: boolean) => void;
   setOrbMode: (mode: OrbMode) => void;
   resetUniverse: () => void;
+  focusGalaxy: (status: LuminaLatchTarget) => void;
   enrichJob: (jobId: string, googleToken: string) => Promise<void>;
 }
 
@@ -124,6 +125,23 @@ export const useUIStore = create<LuminaState>()(
       viewMode: 'universe',
       orbMode: 'idle'
     }),
+    focusGalaxy: (status) => {
+      if (!status || status === 'Total') {
+        set({
+          latchedStatus: null,
+          activeStatus: null,
+          focusedGalaxy: null,
+          viewMode: 'universe'
+        });
+      } else {
+        set({
+          latchedStatus: status,
+          activeStatus: status,
+          focusedGalaxy: status,
+          viewMode: 'galaxy'
+        });
+      }
+    },
     enrichJob: async (jobId, googleToken) => {
       const { jobs } = get();
       const jobIndex = jobs.findIndex(j => j.rowId === jobId);

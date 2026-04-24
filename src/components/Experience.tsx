@@ -4,18 +4,18 @@ import { EffectComposer, Bloom } from '@react-three/postprocessing';
 import * as THREE from 'three';
 
 import type { JobOrbit, GalaxyType } from '../types/lumina';
-import { STATUS_COLORS, GALAXY_CATEGORIES, resolveGalaxy } from '../types/lumina';
+import { STATUS_COLORS, GALAXY_CATEGORIES } from '../types/lumina';
 import { LuminaStardust } from './LuminaStardust';
 import { useLumina } from '../store/LuminaContext';
 
 // Modular Components
-import { GALAXY_CENTERS, normalizeStatusKey } from './experience/ExperienceConstants';
+import { GALAXY_CENTERS } from './experience/ExperienceConstants';
 import { GalaxySwirl } from './experience/GalaxySwirl';
 import { Planet } from './experience/Planet';
 import { CelestialGalaxyLabel } from './experience/CelestialGalaxyLabel';
 import { InterstellarDust } from './experience/InterstellarDust';
 import { MouseTrail } from './experience/MouseTrail';
-import { LuminaAISurface } from './experience/LuminaAISurface';
+import { LuminaAISurface } from './LuminaAISurface';
 import { HardCameraSnap } from './experience/HardCameraSnap';
 import { NavigationStreaks } from './experience/NavigationStreaks';
 
@@ -61,9 +61,9 @@ function UniverseScene() {
 
   // 1. Static Galaxy Metadata (Constant positions/labels)
   const galaxyMetadata = useMemo(() => {
-    return GALAXY_CATEGORIES.map((galaxy, idx) => {
+    return GALAXY_CATEGORIES.map((galaxy) => {
       const [gx, gy, gz] = GALAXY_CENTERS[galaxy];
-      const color = STATUS_COLORS[idx % STATUS_COLORS.length];
+      const color = STATUS_COLORS[galaxy as keyof typeof STATUS_COLORS];
       return {
         name: galaxy,
         label: galaxy.toUpperCase(),
@@ -86,7 +86,7 @@ function UniverseScene() {
     } as any;
 
     jobs.forEach((job: JobOrbit) => {
-      const g = resolveGalaxy(job.status);
+      const g = job.status;
       galaxyGroups[g].push(job);
     });
 
@@ -226,7 +226,7 @@ function UniverseScene() {
         const baseScale = 0.85 + Math.sin(i * 21.0) * 0.25;
         const scale = isSelected ? baseScale * 1.25 : baseScale;
 
-        const canonicalKey = normalizeStatusKey(g.name) as GalaxyType;
+        const canonicalKey = g.name as GalaxyType;
         const center = canonicalKey ? GALAXY_CENTERS[canonicalKey] : null;
 
         const diveIntoGalaxy = () => {
@@ -301,7 +301,7 @@ function UniverseScene() {
             viewMode={viewMode}
             onClick={() => {
               if (viewMode === 'universe') {
-                const canonicalKey = normalizeStatusKey(meta.name) as GalaxyType;
+                const canonicalKey = meta.name as GalaxyType;
                 const center = canonicalKey ? GALAXY_CENTERS[canonicalKey] : null;
                 if (!canonicalKey || !center) return;
 

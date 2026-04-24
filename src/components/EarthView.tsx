@@ -3,7 +3,7 @@ import { useFrame } from '@react-three/fiber';
 import * as THREE from 'three';
 import { OrbitControls, useTexture, Stars, Billboard, Html } from '@react-three/drei';
 import type { JobOrbit } from '../types/lumina';
-import { STATUS_COLORS, GALAXY_CATEGORIES, resolveGalaxy } from '../types/lumina';
+import { STATUS_COLORS, resolveGalaxy } from '../types/lumina';
 import { useLumina } from '../store/LuminaContext';
 
 export function EarthView() {
@@ -47,8 +47,7 @@ export function EarthView() {
       
       const position = latLongToVector3(lat, lng, 15.1);
       const category = resolveGalaxy(job.status);
-      const colorIndex = GALAXY_CATEGORIES.indexOf(category);
-      const color = colorIndex !== -1 ? STATUS_COLORS[colorIndex] : STATUS_COLORS[0];
+      const color = STATUS_COLORS[category as keyof typeof STATUS_COLORS] || STATUS_COLORS['Scheduled'];
       return { job, position, color };
     });
   }, [jobs, latchedStatus]);

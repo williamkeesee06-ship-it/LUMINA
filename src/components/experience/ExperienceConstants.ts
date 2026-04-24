@@ -21,14 +21,5 @@ GALAXY_CATEGORIES.forEach((galaxy, idx) => {
   ];
 });
 
-export function normalizeStatusKey(status: string): GalaxyType | null {
-  const s = status.toLowerCase();
-  if (s.includes('complete')) return 'Complete';
-  if (s.includes('fielded-rts') || s === 'fielding') return 'Fielded-RTS';
-  if (s.includes('needs fielding')) return 'Needs Fielding';
-  if (s.includes('hold')) return 'On Hold';
-  if (s.includes('pending')) return 'Pending';
-  if (s.includes('routed')) return 'Routed to Sub';
-  if (s.includes('scheduled')) return 'Scheduled';
-  return null;
-}
+
+

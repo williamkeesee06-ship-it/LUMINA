@@ -18,7 +18,7 @@ export function LuminaLayout() {
   const selectedJobId = useUIStore(s => s.selectedJobId);
   const googleToken = useUIStore(s => s.googleToken);
   const setOrbMode = useUIStore(s => s.setOrbMode);
-  const resetUniverse = useUIStore(s => s.resetUniverse);
+
 
   // Orb Sync (Coordinate UI state based on data & user interaction)
   useEffect(() => {
@@ -84,30 +84,20 @@ export function LuminaLayout() {
       )}
 
       {/* HUD Layer */}
-      <div className="absolute inset-0 pointer-events-none z-20 flex flex-col justify-between p-6 overflow-hidden">
-        <header className="flex justify-between items-start pointer-events-auto">
-          <div className="flex flex-col">
-            <h1 className="text-4xl font-black tracking-tighter text-transparent bg-clip-text bg-gradient-to-r from-blue-400 via-cyan-300 to-blue-500 mb-1 drop-shadow-[0_0_15px_rgba(34,211,238,0.5)]">
-              LUMINA
-            </h1>
-            <div className="flex items-center gap-2">
-              <div className={`w-2 h-2 rounded-full ${loading ? 'bg-amber-500 animate-pulse' : 'bg-cyan-400 drop-shadow-[0_0_5px_#22d3ee]'}`} />
-              <span className="text-[10px] font-bold tracking-[0.2em] text-cyan-400/70 uppercase">
-                {loading ? 'Synchronizing Universe' : 'Neural Uplink Active'}
+      <div className="absolute inset-0 pointer-events-none z-20 flex flex-col justify-between p-10 overflow-hidden">
+        <header className="flex justify-between items-start">
+          <div className="watermark-container pointer-events-auto">
+            <div className="watermark-wordmark">LUMINA</div>
+            <div className="watermark-subline">North Sky Tactical</div>
+            <div className="flex items-center gap-2 mt-4">
+              <div className={`w-1.5 h-1.5 rounded-full ${loading ? 'bg-amber-500 animate-pulse' : 'bg-cyan-400 drop-shadow-[0_0_5px_#00f2ff]'}`} />
+              <span className="text-[8px] font-black tracking-[0.3em] text-cyan-400/50 uppercase">
+                {loading ? 'Syncing Universe' : 'Neural Uplink Active'}
               </span>
             </div>
           </div>
           
-          <div className="flex items-center gap-6">
-            {selectedJobId && (
-              <button 
-                onClick={resetUniverse} 
-                className="text-[10px] font-bold tracking-widest text-white/40 hover:text-white transition-colors uppercase border-b border-white/10"
-              >
-                Reset Core
-              </button>
-            )}
-          </div>
+          <div className="flex items-center gap-6 pointer-events-auto" />
         </header>
 
         <main className="flex-1 pointer-events-none relative" />
