@@ -26,6 +26,9 @@ export const GALAXIES: readonly Galaxy[] = [
 /** Two HUD modes: expanded (default, full readouts + galaxy widgets) or minimized (slim standby bar). */
 export type HudMode = "minimized" | "expanded";
 
+/** HUD orientation: vertical (default, right-docked column) or horizontal (legacy bottom rail). */
+export type HudOrientation = "vertical" | "horizontal";
+
 /**
  * Map transition state machine. Drives the hyperspace dive into the tactical
  * map (and the reverse warp-out back to the universe).

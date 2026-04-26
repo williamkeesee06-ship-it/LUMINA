@@ -20,6 +20,7 @@ export function JobPanel() {
   const attachMoons = useUI((s) => s.attachMoons);
   const toggleChecklistItem = useUI((s) => s.toggleChecklistItem);
   const setChecklistText = useUI((s) => s.setChecklistText);
+  const hudOrientation = useUI((s) => s.hudOrientation);
 
   const job = useMemo(
     () => (selectedJobId ? jobs.find((j) => j.id === selectedJobId) : undefined),
@@ -43,11 +44,18 @@ export function JobPanel() {
   if (!job) return null;
   const color = GALAXY_COLORS[job.status];
   const accentRgb = hexToRgbTriplet(color);
-  const styleVar = { ["--panel-accent" as string]: accentRgb } as React.CSSProperties;
+  // Avoid colliding with the right-docked vertical HUD (≈280px wide + 24px margin).
+  const rightOffset = hudOrientation === "vertical" ? 328 : 24;
+  const bottomOffset = hudOrientation === "vertical" ? 24 : 210;
+  const styleVar = {
+    ["--panel-accent" as string]: accentRgb,
+    right: rightOffset,
+    bottom: bottomOffset,
+  } as React.CSSProperties;
 
   return (
     <div
-      className="pointer-events-auto fixed top-6 right-6 bottom-[210px] z-30 w-[420px] max-w-[42vw]"
+      className="pointer-events-auto fixed top-6 z-30 w-[420px] max-w-[42vw]"
       style={styleVar}
     >
       <div className="panel-luxe clip-corner h-full flex flex-col relative overflow-hidden">

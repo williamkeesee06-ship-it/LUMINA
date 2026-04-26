@@ -32,6 +32,7 @@ function parseToolCall(text: string): { clean: string; toolCall: ToolCall | null
 export function LuminaPanel() {
   const isChatOpen = useUI((s) => s.isChatOpen);
   const setChatOpen = useUI((s) => s.setChatOpen);
+  const hudOrientation = useUI((s) => s.hudOrientation);
   const setOrbMode = useUI((s) => s.setOrbMode);
   const enterGalaxy = useUI((s) => s.enterGalaxy);
   const selectJob = useUI((s) => s.selectJob);
@@ -157,8 +158,15 @@ export function LuminaPanel() {
 
   if (!isChatOpen) return null;
 
+  // Avoid colliding with right-docked vertical HUD.
+  const rightOffset = hudOrientation === "vertical" ? 328 : 24;
+  const bottomOffset = hudOrientation === "vertical" ? 24 : 128;
+
   return (
-    <div className="pointer-events-auto fixed bottom-32 right-6 z-40 w-[420px] max-w-[44vw]">
+    <div
+      className="pointer-events-auto fixed z-40 w-[420px] max-w-[44vw]"
+      style={{ right: rightOffset, bottom: bottomOffset }}
+    >
       <div className="metallic-plate clip-corner relative overflow-hidden">
         <span className="reticle opacity-30" />
 

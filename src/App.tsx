@@ -106,16 +106,17 @@ export default function App() {
       {/* Hyperspace warp overlay between universe and map */}
       <HyperspaceTransition />
 
-      {/* Neon-tube watermark — top left */}
+      {/* Editorial pillar watermark — bright neon cyan crisp glow */}
       <div className="pointer-events-none fixed top-5 left-6 z-20 select-none">
-        <NeonWordmark />
-        <div className="font-mono text-[10px] uppercase tracking-[0.32em] text-cyan-glow/55 mt-1.5 ml-0.5">
-          {loading
-            ? "syncing channel"
-            : error
-              ? "channel offline"
-              : `${jobs.length} jobs · western wa`}
-        </div>
+        <EditorialWatermark
+          status={
+            loading
+              ? "syncing channel"
+              : error
+                ? "channel offline"
+                : `${jobs.length} jobs · western wa`
+          }
+        />
       </div>
 
       {/* Boot overlay */}
@@ -145,10 +146,124 @@ export default function App() {
 }
 
 /**
- * Neon-tube watermark — "NORTH SKY" double-glow above "LUMINA V3".
- * Renders white tube core with stacked cyan halos. Uses Rajdhani (already
- * loaded) for the bold-condensed neon-sign feel.
+ * Editorial pillar watermark.
+ *
+ * Composition (left → right):
+ *   1. Vertical "NORTHSKY" caps in tracked condensed (rotated 180°, runs bottom-to-top)
+ *   2. A bright neon cyan vertical pillar with crisp high glow (stacked tight
+ *      box-shadow blurs, NOT a soft gaussian halo)
+ *   3. Big white "LUMINA" display sans + small cyan "V3" superscript
+ *   4. Tiny status row beneath: cyan dot + jobs count in faded mono
  */
+function EditorialWatermark({ status }: { status: string }) {
+  // Crisp high-glow stack — tight blur radii so the line stays razor sharp
+  // while still throwing a bright halo. This is the spec the user asked for.
+  const PILLAR_GLOW = [
+    "0 0 1px #FFFFFF",
+    "0 0 2px #5BF3FF",
+    "0 0 4px #5BF3FF",
+    "0 0 8px rgba(91,243,255,0.85)",
+    "0 0 14px rgba(91,243,255,0.55)",
+    "0 0 22px rgba(91,243,255,0.32)",
+  ].join(", ");
+
+  return (
+    <div className="flex flex-col items-start">
+      <div className="flex items-stretch gap-3">
+        {/* Vertical NORTHSKY caps — runs bottom-to-top alongside the pillar */}
+        <div
+          className="flex items-center justify-center font-display text-[10px] uppercase text-white/85"
+          style={{
+            writingMode: "vertical-rl",
+            transform: "rotate(180deg)",
+            letterSpacing: "0.55em",
+            fontWeight: 600,
+            textShadow: "0 0 6px rgba(91,243,255,0.35)",
+            paddingTop: 4,
+            paddingBottom: 4,
+          }}
+        >
+          NORTHSKY
+        </div>
+
+        {/* Bright neon cyan pillar — crisp high glow */}
+        <div
+          aria-hidden
+          style={{
+            width: 2,
+            background: "#FFFFFF",
+            borderRadius: 2,
+            boxShadow: PILLAR_GLOW,
+            alignSelf: "stretch",
+            minHeight: 78,
+            animation: "neon-flicker 7s ease-in-out infinite",
+          }}
+        />
+
+        {/* LUMINA wordmark + V3 superscript */}
+        <div className="flex flex-col justify-center pl-1">
+          <div className="flex items-start">
+            <span
+              className="font-display text-white"
+              style={{
+                fontSize: 44,
+                fontWeight: 600,
+                letterSpacing: "0.04em",
+                lineHeight: 0.9,
+                textShadow:
+                  "0 0 1px rgba(255,255,255,0.9), 0 0 8px rgba(255,255,255,0.25)",
+              }}
+            >
+              LUMINA
+            </span>
+            <span
+              className="font-display"
+              style={{
+                fontSize: 14,
+                fontWeight: 700,
+                letterSpacing: "0.18em",
+                color: "#5BF3FF",
+                marginLeft: 6,
+                marginTop: 2,
+                textShadow:
+                  "0 0 2px #5BF3FF, 0 0 6px rgba(91,243,255,0.7), 0 0 12px rgba(91,243,255,0.4)",
+              }}
+            >
+              V3
+            </span>
+          </div>
+          <div
+            className="font-mono text-[9px] uppercase text-white/50"
+            style={{ letterSpacing: "0.32em", marginTop: 4 }}
+          >
+            COMMAND
+          </div>
+        </div>
+      </div>
+
+      {/* Status row beneath the wordmark — cyan dot + jobs count */}
+      <div className="flex items-center gap-2 mt-2.5 ml-[34px]">
+        <span
+          className="inline-block w-1.5 h-1.5 rounded-full"
+          style={{
+            background: "#5BF3FF",
+            boxShadow:
+              "0 0 3px #5BF3FF, 0 0 7px rgba(91,243,255,0.7)",
+          }}
+        />
+        <span
+          className="font-mono text-[10px] uppercase text-white/55"
+          style={{ letterSpacing: "0.32em" }}
+        >
+          {status}
+        </span>
+      </div>
+    </div>
+  );
+}
+
+// Legacy neon wordmark kept for reference; unused.
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
 function NeonWordmark() {
   const FONT = "'Rajdhani', system-ui, sans-serif";
   return (

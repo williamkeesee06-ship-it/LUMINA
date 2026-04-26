@@ -2,6 +2,7 @@ import { create } from "zustand";
 import type {
   Galaxy,
   HudMode,
+  HudOrientation,
   Job,
   JobChecklist,
   MapTransition,
@@ -51,6 +52,7 @@ export interface UIState {
 
   // V3 HUD (canonical addition)
   hudMode: HudMode;
+  hudOrientation: HudOrientation;
 
   // Map open state (tactical map is a surface, not the home)
   isMapOpen: boolean;
@@ -71,6 +73,8 @@ export interface UIState {
   resetToUniverse: () => void;
   setHudMode: (m: HudMode) => void;
   toggleHud: () => void;
+  setHudOrientation: (o: HudOrientation) => void;
+  toggleHudOrientation: () => void;
   setChatOpen: (open: boolean) => void;
   setOrbMode: (m: OrbMode) => void;
   setShowRouteLayer: (v: boolean) => void;
@@ -112,6 +116,7 @@ export const useUI = create<UIState>((set, get) => ({
   routeJobIds: [],
 
   hudMode: "expanded",
+  hudOrientation: "vertical",
   isMapOpen: false,
   mapTransition: "idle",
 
@@ -178,6 +183,11 @@ export const useUI = create<UIState>((set, get) => ({
   toggleHud: () => {
     const cur = get().hudMode;
     set({ hudMode: cur === "expanded" ? "minimized" : "expanded" });
+  },
+  setHudOrientation: (hudOrientation) => set({ hudOrientation }),
+  toggleHudOrientation: () => {
+    const cur = get().hudOrientation;
+    set({ hudOrientation: cur === "vertical" ? "horizontal" : "vertical" });
   },
 
   setChatOpen: (isChatOpen) => set({ isChatOpen }),
