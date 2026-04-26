@@ -39,7 +39,8 @@ export function TacticalMap() {
       const lng = visible.reduce((a, j) => a + j.coords!.lng, 0) / visible.length;
       return { lat, lng };
     }
-    return { lat: 47.6, lng: -122.3 }; // Western WA default
+    // Seattle metro center — between Seattle, Bellevue, and Lynnwood.
+    return { lat: 47.6515, lng: -122.2735 };
   }, [visible, selectedJobId, jobs]);
 
   if (!isMapOpen) return null;
@@ -60,9 +61,19 @@ export function TacticalMap() {
         style={{ opacity: surfaceOpacity, transition: surfaceTransition }}
       >
         <div className="tactical-label">tactical map</div>
-        <div className="text-sm text-red-alert mt-2 font-mono">
-          Maps key not configured. Map surface unavailable.
+        <div className="text-sm text-cyan-glow mt-2 font-mono">
+          Awaiting maps key. Add VITE_GOOGLE_MAPS_API_KEY in Vercel env to bring this surface online.
         </div>
+        <button
+          type="button"
+          onClick={() => {
+            sfx.select();
+            riseFromMap();
+          }}
+          className="mt-4 text-cyan-glow/70 hover:text-cyan-glow font-mono text-xs uppercase tracking-tactical border border-cyan-glow/30 px-3 py-1.5"
+        >
+          Warp out to universe
+        </button>
       </div>
     );
   }
@@ -102,11 +113,12 @@ export function TacticalMap() {
           <APIProvider apiKey={MAPS_KEY}>
             <Map
               defaultCenter={center}
-              defaultZoom={9}
+              defaultZoom={10}
               gestureHandling="greedy"
               disableDefaultUI={true}
               colorScheme="DARK"
               styles={DARK_TACTICAL_STYLES}
+              clickableIcons={false}
             >
               {visible.map((j) => {
                 const isHistorical = j.status === "Complete";
@@ -192,18 +204,134 @@ function Recenter({ center }: { center: { lat: number; lng: number } }) {
   return null;
 }
 
+// Cyberpunk Seattle tactical map style.
+// Palette: void black land, near-black water, cyan #5BF3FF for highways +
+// admin labels, royal blue #2A5CFF for major arterials, slate #34425C grid.
+// All POI clutter, transit, and business labels hidden — the map should feel
+// like a command-grid, not Google Maps.
+// Typed loosely to avoid pulling in @types/google.maps. The library accepts
+// the standard Maps Style array shape and this matches it exactly.
 const DARK_TACTICAL_STYLES = [
-  { elementType: "geometry", stylers: [{ color: "#0b0f1a" }] },
-  { elementType: "labels.text.stroke", stylers: [{ color: "#0b0f1a" }] },
+  // Base land
+  { elementType: "geometry", stylers: [{ color: "#03060B" }] },
+  { elementType: "labels.text.stroke", stylers: [{ color: "#000104" }] },
   { elementType: "labels.text.fill", stylers: [{ color: "#5BF3FF" }] },
+  { elementType: "labels.icon", stylers: [{ visibility: "off" }] },
+
+  // Administrative borders — cyan stroke, no fill
+  {
+    featureType: "administrative",
+    elementType: "geometry.fill",
+    stylers: [{ color: "#03060B" }],
+  },
   {
     featureType: "administrative",
     elementType: "geometry.stroke",
-    stylers: [{ color: "#1B2436" }],
+    stylers: [{ color: "#1B2436" }, { weight: 0.6 }],
   },
-  { featureType: "road", elementType: "geometry", stylers: [{ color: "#141B2B" }] },
-  { featureType: "road", elementType: "labels.text.fill", stylers: [{ color: "#5A6985" }] },
-  { featureType: "water", elementType: "geometry", stylers: [{ color: "#03060B" }] },
+  {
+    featureType: "administrative.country",
+    elementType: "geometry.stroke",
+    stylers: [{ color: "#34425C" }, { weight: 1 }],
+  },
+  {
+    featureType: "administrative.locality",
+    elementType: "labels.text.fill",
+    stylers: [{ color: "#A8F8FF" }],
+  },
+  {
+    featureType: "administrative.neighborhood",
+    elementType: "labels.text.fill",
+    stylers: [{ color: "#5BF3FF" }, { lightness: -10 }],
+  },
+
+  // Land and parks
+  {
+    featureType: "landscape",
+    elementType: "geometry",
+    stylers: [{ color: "#05080F" }],
+  },
+  {
+    featureType: "landscape.natural",
+    elementType: "geometry",
+    stylers: [{ color: "#06090F" }],
+  },
+  {
+    featureType: "poi.park",
+    elementType: "geometry",
+    stylers: [{ color: "#0B1A14" }],
+  },
+  {
+    featureType: "poi.park",
+    elementType: "labels",
+    stylers: [{ visibility: "off" }],
+  },
+
+  // Roads — the cyberpunk grid
+  {
+    featureType: "road",
+    elementType: "geometry.fill",
+    stylers: [{ color: "#0E1420" }],
+  },
+  {
+    featureType: "road",
+    elementType: "geometry.stroke",
+    stylers: [{ color: "#1B2436" }, { weight: 0.4 }],
+  },
+  {
+    featureType: "road.highway",
+    elementType: "geometry.fill",
+    stylers: [{ color: "#142440" }],
+  },
+  {
+    featureType: "road.highway",
+    elementType: "geometry.stroke",
+    stylers: [{ color: "#2A5CFF" }, { weight: 0.6 }],
+  },
+  {
+    featureType: "road.highway.controlled_access",
+    elementType: "geometry.stroke",
+    stylers: [{ color: "#5BF3FF" }, { weight: 0.7 }],
+  },
+  {
+    featureType: "road.arterial",
+    elementType: "geometry.fill",
+    stylers: [{ color: "#10182A" }],
+  },
+  {
+    featureType: "road",
+    elementType: "labels.text.fill",
+    stylers: [{ color: "#5A6985" }],
+  },
+  {
+    featureType: "road",
+    elementType: "labels.text.stroke",
+    stylers: [{ color: "#000104" }],
+  },
+  {
+    featureType: "road",
+    elementType: "labels.icon",
+    stylers: [{ visibility: "off" }],
+  },
+
+  // Water — deep void with subtle cyan label
+  {
+    featureType: "water",
+    elementType: "geometry",
+    stylers: [{ color: "#01030A" }],
+  },
+  {
+    featureType: "water",
+    elementType: "labels.text.fill",
+    stylers: [{ color: "#3A5070" }],
+  },
+
+  // Hide everything that adds clutter
   { featureType: "poi", stylers: [{ visibility: "off" }] },
+  { featureType: "poi.business", stylers: [{ visibility: "off" }] },
+  { featureType: "poi.medical", stylers: [{ visibility: "off" }] },
+  { featureType: "poi.school", stylers: [{ visibility: "off" }] },
+  { featureType: "poi.attraction", stylers: [{ visibility: "off" }] },
   { featureType: "transit", stylers: [{ visibility: "off" }] },
-];
+  { featureType: "transit.station", stylers: [{ visibility: "off" }] },
+] as const;

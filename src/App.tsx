@@ -114,7 +114,7 @@ export default function App() {
               ? "syncing channel"
               : error
                 ? "channel offline"
-                : `${jobs.length} jobs · western wa`
+                : "north metro"
           }
         />
       </div>
@@ -156,15 +156,16 @@ export default function App() {
  *   4. Tiny status row beneath: cyan dot + jobs count in faded mono
  */
 function EditorialWatermark({ status }: { status: string }) {
-  // Crisp high-glow stack — tight blur radii so the line stays razor sharp
-  // while still throwing a bright halo. This is the spec the user asked for.
+  // Royal blue neon pillar — crisp high glow. Tight blur radii so the line
+  // stays razor sharp while still throwing a bright halo.
+  // Royal blue: #2A5CFF core, #4F7BFF mid, #6E92FF outer.
   const PILLAR_GLOW = [
     "0 0 1px #FFFFFF",
-    "0 0 2px #5BF3FF",
-    "0 0 4px #5BF3FF",
-    "0 0 8px rgba(91,243,255,0.85)",
-    "0 0 14px rgba(91,243,255,0.55)",
-    "0 0 22px rgba(91,243,255,0.32)",
+    "0 0 2px #4F7BFF",
+    "0 0 4px #2A5CFF",
+    "0 0 8px rgba(42,92,255,0.9)",
+    "0 0 14px rgba(42,92,255,0.6)",
+    "0 0 22px rgba(42,92,255,0.35)",
   ].join(", ");
 
   return (
@@ -172,13 +173,13 @@ function EditorialWatermark({ status }: { status: string }) {
       <div className="flex items-stretch gap-3">
         {/* Vertical NORTHSKY caps — runs bottom-to-top alongside the pillar */}
         <div
-          className="flex items-center justify-center font-display text-[10px] uppercase text-white/85"
+          className="flex items-center justify-center font-display text-[12px] uppercase text-white/90"
           style={{
             writingMode: "vertical-rl",
             transform: "rotate(180deg)",
             letterSpacing: "0.55em",
             fontWeight: 600,
-            textShadow: "0 0 6px rgba(91,243,255,0.35)",
+            textShadow: "0 0 6px rgba(78,123,255,0.45)",
             paddingTop: 4,
             paddingBottom: 4,
           }}
@@ -241,14 +242,14 @@ function EditorialWatermark({ status }: { status: string }) {
         </div>
       </div>
 
-      {/* Status row beneath the wordmark — cyan dot + jobs count */}
+      {/* Status row beneath the wordmark — royal blue dot + region label */}
       <div className="flex items-center gap-2 mt-2.5 ml-[34px]">
         <span
           className="inline-block w-1.5 h-1.5 rounded-full"
           style={{
-            background: "#5BF3FF",
+            background: "#4F7BFF",
             boxShadow:
-              "0 0 3px #5BF3FF, 0 0 7px rgba(91,243,255,0.7)",
+              "0 0 3px #4F7BFF, 0 0 7px rgba(78,123,255,0.75)",
           }}
         />
         <span
