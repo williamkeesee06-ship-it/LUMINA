@@ -4,6 +4,7 @@ import type {
   HudMode,
   Job,
   JobChecklist,
+  MapTransition,
   Moon,
   OrbMode,
   Satellite,
@@ -54,6 +55,10 @@ export interface UIState {
   // Map open state (tactical map is a surface, not the home)
   isMapOpen: boolean;
 
+  // Hyperspace dive state machine — drives the warp transition
+  // between the universe and the tactical map.
+  mapTransition: MapTransition;
+
   // Actions
   setJobs: (jobs: Job[]) => void;
   setLoading: (v: boolean) => void;
@@ -71,9 +76,14 @@ export interface UIState {
   setShowRouteLayer: (v: boolean) => void;
   setRouteJobIds: (ids: string[]) => void;
   setMapOpen: (open: boolean) => void;
+  /** Trigger the hyperspace warp into the tactical map. */
+  diveToMap: () => void;
+  /** Trigger the reverse warp back to the universe. */
+  riseFromMap: () => void;
   attachSatellites: (jobId: string, sats: Satellite[]) => void;
   attachMoons: (jobId: string, moons: Moon[], folderId?: string | null) => void;
   toggleChecklistItem: (jobId: string, key: keyof JobChecklist) => void;
+  setChecklistText: (jobId: string, key: keyof JobChecklist, value: string) => void;
 }
 
 export const useUI = create<UIState>((set, get) => ({
@@ -101,8 +111,9 @@ export const useUI = create<UIState>((set, get) => ({
   showRouteLayer: false,
   routeJobIds: [],
 
-  hudMode: "standard",
+  hudMode: "expanded",
   isMapOpen: false,
+  mapTransition: "idle",
 
   setJobs: (jobs) => set({ jobs }),
   setLoading: (loading) => set({ loading }),
@@ -166,16 +177,47 @@ export const useUI = create<UIState>((set, get) => ({
   setHudMode: (hudMode) => set({ hudMode }),
   toggleHud: () => {
     const cur = get().hudMode;
-    const next: HudMode =
-      cur === "minimized" ? "standard" : cur === "standard" ? "expanded" : "minimized";
-    set({ hudMode: next });
+    set({ hudMode: cur === "expanded" ? "minimized" : "expanded" });
   },
 
   setChatOpen: (isChatOpen) => set({ isChatOpen }),
   setOrbMode: (orbMode) => set({ orbMode }),
   setShowRouteLayer: (showRouteLayer) => set({ showRouteLayer }),
   setRouteJobIds: (routeJobIds) => set({ routeJobIds, showRouteLayer: routeJobIds.length > 0 }),
-  setMapOpen: (isMapOpen) => set({ isMapOpen }),
+  setMapOpen: (isMapOpen) => set({ isMapOpen, mapTransition: isMapOpen ? "open" : "idle" }),
+
+  diveToMap: () => {
+    const cur = get().mapTransition;
+    if (cur !== "idle") return; // ignore re-entry while a dive is mid-flight
+    set({ mapTransition: "diving" });
+    // Mid-flight: at peak warp the map mounts behind the white flash.
+    setTimeout(() => {
+      // Guard against the user cancelling/closing during the dive
+      if (get().mapTransition !== "diving") return;
+      set({ isMapOpen: true });
+    }, 850); // peak velocity / flash crest
+    // Land: full warp completes ~1600ms total.
+    setTimeout(() => {
+      if (get().mapTransition !== "diving") return;
+      set({ mapTransition: "open" });
+    }, 1600);
+  },
+
+  riseFromMap: () => {
+    const cur = get().mapTransition;
+    if (cur !== "open") return;
+    set({ mapTransition: "rising" });
+    // Reverse-warp peak: unmount the map under the flash so the universe is
+    // already revealed when the streaks decelerate.
+    setTimeout(() => {
+      if (get().mapTransition !== "rising") return;
+      set({ isMapOpen: false });
+    }, 750);
+    setTimeout(() => {
+      if (get().mapTransition !== "rising") return;
+      set({ mapTransition: "idle" });
+    }, 1400);
+  },
 
   attachSatellites: (jobId, sats) =>
     set((s) => ({
@@ -199,6 +241,7 @@ export const useUI = create<UIState>((set, get) => ({
         if (j.id !== jobId) return j;
         const cur: JobChecklist = j.checklist ?? {
           trafficControl: false,
+          eight11: false,
           preCon: false,
           jobStart: false,
           routedSrpRtasq: false,
@@ -206,6 +249,15 @@ export const useUI = create<UIState>((set, get) => ({
         };
         return { ...j, checklist: { ...cur, [key]: !cur[key] } };
       }),
+    })),
+
+  setChecklistText: (jobId, key, value) =>
+    set((s) => ({
+      jobs: s.jobs.map((j) =>
+        j.id === jobId
+          ? { ...j, checklistText: { ...(j.checklistText ?? {}), [key]: value } }
+          : j,
+      ),
     })),
 }));
 

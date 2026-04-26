@@ -16,7 +16,8 @@ const MAPS_KEY = import.meta.env.VITE_GOOGLE_MAPS_API_KEY as string | undefined;
  */
 export function TacticalMap() {
   const isMapOpen = useUI((s) => s.isMapOpen);
-  const setMapOpen = useUI((s) => s.setMapOpen);
+  const mapTransition = useUI((s) => s.mapTransition);
+  const riseFromMap = useUI((s) => s.riseFromMap);
   const jobs = useUI((s) => s.jobs);
   const focusedGalaxy = useUI((s) => s.focusedGalaxy);
   const selectedJobId = useUI((s) => s.selectedJobId);
@@ -42,9 +43,22 @@ export function TacticalMap() {
   }, [visible, selectedJobId, jobs]);
 
   if (!isMapOpen) return null;
+
+  // Mount-in / mount-out fade so the surface bleeds through the warp flash
+  // instead of popping. "open" = fully visible. "diving"/"rising" = behind
+  // flash, still mounted but at low opacity.
+  const surfaceOpacity = mapTransition === "open" ? 1 : 0.0;
+  const surfaceTransition =
+    mapTransition === "open"
+      ? "opacity 380ms ease-out 80ms"
+      : "opacity 220ms ease-in";
+
   if (!MAPS_KEY) {
     return (
-      <div className="pointer-events-auto fixed top-6 left-6 bottom-32 z-30 w-[520px] max-w-[44vw] metallic-plate clip-corner p-6">
+      <div
+        className="pointer-events-auto fixed inset-0 z-30 metallic-plate p-6"
+        style={{ opacity: surfaceOpacity, transition: surfaceTransition }}
+      >
         <div className="tactical-label">tactical map</div>
         <div className="text-sm text-red-alert mt-2 font-mono">
           Maps key not configured. Map surface unavailable.
@@ -54,8 +68,11 @@ export function TacticalMap() {
   }
 
   return (
-    <div className="pointer-events-auto fixed top-6 left-6 bottom-32 z-30 w-[520px] max-w-[44vw]">
-      <div className="metallic-plate clip-corner h-full overflow-hidden flex flex-col relative">
+    <div
+      className="pointer-events-auto fixed inset-0 z-30"
+      style={{ opacity: surfaceOpacity, transition: surfaceTransition }}
+    >
+      <div className="metallic-plate h-full w-full overflow-hidden flex flex-col relative">
         <span className="reticle opacity-25" />
         <div className="flex items-center justify-between px-4 py-2.5 border-b border-cyan-glow/15">
           <div className="flex items-center gap-2.5">
@@ -73,9 +90,10 @@ export function TacticalMap() {
             type="button"
             onClick={() => {
               sfx.select();
-              setMapOpen(false);
+              riseFromMap();
             }}
-            className="text-cyan-glow/60 hover:text-cyan-glow"
+            className="text-cyan-glow/60 hover:text-cyan-glow text-lg leading-none px-2"
+            title="Warp out to universe"
           >
             ×
           </button>

@@ -23,8 +23,19 @@ export const GALAXIES: readonly Galaxy[] = [
   "Scheduled",
 ] as const;
 
-/** Three HUD modes. Bible: "exactly three modes". */
-export type HudMode = "minimized" | "standard" | "expanded";
+/** Two HUD modes: expanded (default, full readouts + galaxy widgets) or minimized (slim standby bar). */
+export type HudMode = "minimized" | "expanded";
+
+/**
+ * Map transition state machine. Drives the hyperspace dive into the tactical
+ * map (and the reverse warp-out back to the universe).
+ *  - idle: universe is the active surface, map fully closed
+ *  - diving: hyperspace warp is running; universe canvas accelerates forward,
+ *    star streaks rip past, white flash at peak velocity
+ *  - open: tactical map is the fullscreen surface
+ *  - rising: reverse warp; map fades out, universe re-emerges from forward depth
+ */
+export type MapTransition = "idle" | "diving" | "open" | "rising";
 
 /** Spatial view tier. Universe -> Galaxy -> Planet. */
 export type ViewMode = "universe" | "galaxy" | "planet";
@@ -95,15 +106,21 @@ export interface Job {
   moonsLoaded: boolean;
   driveFolderId?: string | null;
   /**
-   * Per-job operational checklist. Five fixed items, persisted client-side
+   * Per-job operational checklist. Six fixed items, persisted client-side
    * for now. Later: persist to Smartsheet.
    */
   checklist?: JobChecklist;
+  /**
+   * Free-text inputs that ride alongside specific checklist items
+   * (e.g. 811 ticket number). Keyed by checklist key.
+   */
+  checklistText?: Partial<Record<keyof JobChecklist, string>>;
 }
 
-/** Five fixed jobsite checklist items. */
+/** Six fixed jobsite checklist items. Order = display order in JobPanel. */
 export interface JobChecklist {
   trafficControl: boolean;
+  eight11: boolean;
   preCon: boolean;
   jobStart: boolean;
   routedSrpRtasq: boolean;
@@ -112,6 +129,7 @@ export interface JobChecklist {
 
 export const CHECKLIST_LABELS: Record<keyof JobChecklist, string> = {
   trafficControl: "Traffic Control Req",
+  eight11: "811",
   preCon: "Pre-Con",
   jobStart: "Job Start",
   routedSrpRtasq: "Routed in SRP/RTASQ",
@@ -120,10 +138,16 @@ export const CHECKLIST_LABELS: Record<keyof JobChecklist, string> = {
 
 export const DEFAULT_CHECKLIST: JobChecklist = {
   trafficControl: false,
+  eight11: false,
   preCon: false,
   jobStart: false,
   routedSrpRtasq: false,
   hsr: false,
+};
+
+/** Which checklist keys carry an inline free-text input. */
+export const CHECKLIST_TEXT_FIELDS: Partial<Record<keyof JobChecklist, { placeholder: string }>> = {
+  eight11: { placeholder: "811 ticket #" },
 };
 
 export interface RouteState {

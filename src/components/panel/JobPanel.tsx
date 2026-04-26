@@ -4,7 +4,7 @@ import { GALAXY_COLORS } from "@/lib/statusMap";
 import { listDrive, searchGmail } from "@/lib/api";
 import { sfx } from "@/lib/audio";
 import { requestGoogleToken } from "@/lib/googleAuth";
-import { CHECKLIST_LABELS, type JobChecklist } from "@/types";
+import { CHECKLIST_LABELS, CHECKLIST_TEXT_FIELDS, type JobChecklist } from "@/types";
 
 /**
  * Job intelligence panel — luxurious dark metal w/ neon data readouts.
@@ -19,6 +19,7 @@ export function JobPanel() {
   const attachSatellites = useUI((s) => s.attachSatellites);
   const attachMoons = useUI((s) => s.attachMoons);
   const toggleChecklistItem = useUI((s) => s.toggleChecklistItem);
+  const setChecklistText = useUI((s) => s.setChecklistText);
 
   const job = useMemo(
     () => (selectedJobId ? jobs.find((j) => j.id === selectedJobId) : undefined),
@@ -244,20 +245,23 @@ export function JobPanel() {
               {(Object.entries(CHECKLIST_LABELS) as [keyof JobChecklist, string][]).map(
                 ([key, label]) => {
                   const checked = job.checklist?.[key] ?? false;
+                  const textField = CHECKLIST_TEXT_FIELDS[key];
+                  const textValue = job.checklistText?.[key] ?? "";
                   return (
                     <li key={key}>
-                      <button
-                        type="button"
-                        onMouseEnter={() => sfx.hover()}
-                        onClick={() => {
-                          sfx.select();
-                          toggleChecklistItem(job.id, key);
-                        }}
-                        className="panel-row w-full flex items-center gap-3 px-3 py-2 text-left"
+                      <div
+                        className="panel-row w-full flex items-center gap-3 px-3 py-2"
                         aria-pressed={checked}
                       >
-                        <span
+                        <button
+                          type="button"
+                          onMouseEnter={() => sfx.hover()}
+                          onClick={() => {
+                            sfx.select();
+                            toggleChecklistItem(job.id, key);
+                          }}
                           className="shrink-0 w-[18px] h-[18px] rounded-[3px] flex items-center justify-center transition-all"
+                          aria-label={`Toggle ${label}`}
                           style={
                             checked
                               ? {
@@ -289,20 +293,56 @@ export function JobPanel() {
                               <path d="M3 8.5 L6.5 12 L13 4.5" />
                             </svg>
                           )}
-                        </span>
-                        <span
-                          className={`text-[13px] font-mono uppercase tracking-[0.14em] flex-1 transition-colors ${
-                            checked ? "text-white/95" : "text-white/70"
-                          }`}
-                          style={
-                            checked
-                              ? { textShadow: "0 0 8px rgba(60, 255, 126, 0.35)" }
-                              : undefined
-                          }
+                        </button>
+                        <button
+                          type="button"
+                          onMouseEnter={() => sfx.hover()}
+                          onClick={() => {
+                            sfx.select();
+                            toggleChecklistItem(job.id, key);
+                          }}
+                          className="text-left"
+                          style={{ minWidth: textField ? "6.5rem" : undefined }}
                         >
-                          {label}
-                        </span>
-                      </button>
+                          <span
+                            className={`text-[13px] font-mono uppercase tracking-[0.14em] transition-colors ${
+                              checked ? "text-white/95" : "text-white/70"
+                            }`}
+                            style={
+                              checked
+                                ? { textShadow: "0 0 8px rgba(60, 255, 126, 0.35)" }
+                                : undefined
+                            }
+                          >
+                            {label}
+                          </span>
+                        </button>
+                        {textField && (
+                          <input
+                            type="text"
+                            value={textValue}
+                            onChange={(e) => setChecklistText(job.id, key, e.target.value)}
+                            placeholder={textField.placeholder}
+                            className="flex-1 min-w-0 bg-transparent outline-none px-2 py-1 rounded-[3px] text-[13px] font-mono tracking-wide transition-all"
+                            style={
+                              checked
+                                ? {
+                                    border: "1px solid rgba(60, 255, 126, 0.55)",
+                                    background: "rgba(60, 255, 126, 0.06)",
+                                    color: "#3CFF7E",
+                                    textShadow: "0 0 6px rgba(60, 255, 126, 0.45)",
+                                    boxShadow:
+                                      "0 0 6px rgba(60, 255, 126, 0.25), inset 0 0 4px rgba(60, 255, 126, 0.12)",
+                                  }
+                                : {
+                                    border: "1px solid rgba(255, 255, 255, 0.14)",
+                                    background: "rgba(255, 255, 255, 0.02)",
+                                    color: "rgba(255, 255, 255, 0.85)",
+                                  }
+                            }
+                          />
+                        )}
+                      </div>
                     </li>
                   );
                 },

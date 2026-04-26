@@ -2,17 +2,19 @@ import { useUI } from "@/store/uiStore";
 import { sfx } from "@/lib/audio";
 
 /**
- * The Dyson core reset button — luxurious gold pulsing rings.
- * Click returns to the universe state, clearing all focus.
+ * Reset-to-Universe button — neon tactical concentric rings.
+ * Multi-color (cyan / magenta / teal) layered HUD-style ring with broken
+ * arc segments, counter-rotating. Click returns the camera to the universe.
  */
 export function DysonCore({ size = 56 }: { size?: number }) {
   const resetToUniverse = useUI((s) => s.resetToUniverse);
   const viewMode = useUI((s) => s.viewMode);
   const isHome = viewMode === "universe";
 
-  const GOLD = "#FFD56B";
-  const GOLD_BRIGHT = "#FFE9A8";
-  const GOLD_DEEP = "#C99518";
+  const CYAN = "#5BF3FF";
+  const MAGENTA = "#FF3D9A";
+  const TEAL = "#3CFFD2";
+  const VIOLET = "#A66BFF";
 
   return (
     <button
@@ -29,126 +31,144 @@ export function DysonCore({ size = 56 }: { size?: number }) {
     >
       <svg width={size} height={size} viewBox="0 0 64 64" className="overflow-visible">
         <defs>
-          <radialGradient id="dyson-core-grad" cx="50%" cy="42%" r="55%">
-            <stop offset="0%" stopColor="#fff7d6" />
-            <stop offset="35%" stopColor={GOLD_BRIGHT} />
-            <stop offset="75%" stopColor={GOLD} />
-            <stop offset="100%" stopColor={GOLD_DEEP} />
+          <radialGradient id="reset-core-grad" cx="50%" cy="50%" r="50%">
+            <stop offset="0%" stopColor="#ffffff" stopOpacity={0.95} />
+            <stop offset="40%" stopColor={CYAN} stopOpacity={0.55} />
+            <stop offset="100%" stopColor="#000" stopOpacity={0} />
           </radialGradient>
-          <linearGradient id="dyson-rim" x1="0" y1="0" x2="0" y2="1">
-            <stop offset="0" stopColor="#fff1be" />
-            <stop offset="0.5" stopColor={GOLD} />
-            <stop offset="1" stopColor="#7a560a" />
+          <linearGradient id="reset-rim" x1="0" y1="0" x2="1" y2="1">
+            <stop offset="0%" stopColor={CYAN} />
+            <stop offset="55%" stopColor={MAGENTA} />
+            <stop offset="100%" stopColor={VIOLET} />
           </linearGradient>
         </defs>
 
-        {/* Outer pulsing gold halo (largest, slowest) */}
-        <g className="origin-center animate-gold-pulse" style={{ transformOrigin: "32px 32px" }}>
-          <circle
-            cx={32}
-            cy={32}
-            r={30}
-            fill="none"
-            stroke={GOLD}
-            strokeOpacity={0.7}
-            strokeWidth={1.4}
-            style={{ filter: `drop-shadow(0 0 10px ${GOLD}) drop-shadow(0 0 18px ${GOLD})` }}
-          />
-        </g>
-
-        {/* Mid pulsing gold ring (offset phase) */}
-        <g className="origin-center animate-gold-pulse-2" style={{ transformOrigin: "32px 32px" }}>
-          <circle
-            cx={32}
-            cy={32}
-            r={26}
-            fill="none"
-            stroke={GOLD_BRIGHT}
-            strokeOpacity={0.85}
-            strokeWidth={1.6}
-            style={{ filter: `drop-shadow(0 0 6px ${GOLD_BRIGHT})` }}
-          />
-        </g>
-
-        {/* Rotating dashed gold orbit */}
+        {/* Outer broken ring — magenta, slow rotate */}
         <g className="origin-center animate-ring-rotate" style={{ transformOrigin: "32px 32px" }}>
           <circle
             cx={32}
             cy={32}
-            r={23}
+            r={29}
             fill="none"
-            stroke={GOLD}
+            stroke={MAGENTA}
             strokeOpacity={0.9}
-            strokeWidth={1.2}
-            strokeDasharray="3 5"
-            style={{ filter: `drop-shadow(0 0 4px ${GOLD})` }}
+            strokeWidth={1.6}
+            strokeDasharray="22 6 4 6 16 8 4 8"
+            style={{ filter: `drop-shadow(0 0 6px ${MAGENTA}) drop-shadow(0 0 12px ${MAGENTA})` }}
           />
         </g>
 
-        {/* Counter-rotating thin orbit */}
+        {/* Mid solid cyan rim — bright */}
+        <circle
+          cx={32}
+          cy={32}
+          r={25}
+          fill="none"
+          stroke="url(#reset-rim)"
+          strokeWidth={1.4}
+          style={{ filter: `drop-shadow(0 0 6px ${CYAN})` }}
+        />
+
+        {/* Inner cyan broken arc — counter-rotate */}
         <g className="origin-center animate-ring-rotate-rev" style={{ transformOrigin: "32px 32px" }}>
           <circle
             cx={32}
             cy={32}
-            r={19}
+            r={22}
             fill="none"
-            stroke={GOLD_BRIGHT}
-            strokeOpacity={0.55}
-            strokeWidth={0.9}
-            strokeDasharray="1 3"
+            stroke={CYAN}
+            strokeOpacity={0.95}
+            strokeWidth={1.4}
+            strokeDasharray="14 4 6 4 12 6"
+            style={{ filter: `drop-shadow(0 0 5px ${CYAN}) drop-shadow(0 0 10px ${CYAN})` }}
           />
         </g>
 
-        {/* Solid gold rim */}
+        {/* Teal thin orbit */}
+        <g className="origin-center animate-ring-rotate" style={{ transformOrigin: "32px 32px" }}>
+          <circle
+            cx={32}
+            cy={32}
+            r={18}
+            fill="none"
+            stroke={TEAL}
+            strokeOpacity={0.7}
+            strokeWidth={0.9}
+            strokeDasharray="3 4"
+            style={{ filter: `drop-shadow(0 0 3px ${TEAL})` }}
+          />
+        </g>
+
+        {/* Magenta inner accent ring (full) */}
         <circle
           cx={32}
           cy={32}
-          r={15}
+          r={14}
           fill="none"
-          stroke="url(#dyson-rim)"
-          strokeWidth={1.6}
-          style={{ filter: `drop-shadow(0 0 4px ${GOLD})` }}
+          stroke={MAGENTA}
+          strokeOpacity={0.55}
+          strokeWidth={0.7}
+          style={{ filter: `drop-shadow(0 0 3px ${MAGENTA})` }}
         />
 
-        {/* 6 gold spokes */}
-        {[0, 60, 120, 180, 240, 300].map((deg) => (
-          <line
-            key={deg}
-            x1={32}
-            y1={9}
-            x2={32}
-            y2={15}
-            stroke={GOLD_BRIGHT}
-            strokeOpacity={0.85}
-            strokeWidth={1.4}
-            transform={`rotate(${deg} 32 32)`}
-            style={{ filter: `drop-shadow(0 0 3px ${GOLD})` }}
-          />
+        {/* Bracket "tick" segments at cardinals — give the tactical-HUD feel */}
+        {[0, 90, 180, 270].map((deg) => (
+          <g key={deg} transform={`rotate(${deg} 32 32)`}>
+            <line
+              x1={32}
+              y1={1.5}
+              x2={32}
+              y2={6.5}
+              stroke={CYAN}
+              strokeWidth={1.6}
+              strokeLinecap="round"
+              style={{ filter: `drop-shadow(0 0 4px ${CYAN})` }}
+            />
+          </g>
+        ))}
+        {/* Diagonal bracket dots — magenta */}
+        {[45, 135, 225, 315].map((deg) => (
+          <g key={deg} transform={`rotate(${deg} 32 32)`}>
+            <circle
+              cx={32}
+              cy={4}
+              r={1}
+              fill={MAGENTA}
+              style={{ filter: `drop-shadow(0 0 3px ${MAGENTA})` }}
+            />
+          </g>
         ))}
 
-        {/* Inner gold core sphere */}
+        {/* Center luminous core (looking-into-the-rings effect) */}
         <circle
           cx={32}
           cy={32}
-          r={isHome ? 6 : 8}
-          fill="url(#dyson-core-grad)"
+          r={10}
+          fill="url(#reset-core-grad)"
           className="transition-all duration-500"
-          style={{ filter: `drop-shadow(0 0 12px ${GOLD}) drop-shadow(0 0 24px ${GOLD})` }}
+          opacity={isHome ? 0.8 : 1}
         />
-        {/* Specular highlight on core */}
-        <ellipse cx={30} cy={29} rx={2.4} ry={1.6} fill="#fffbe6" opacity={0.85} />
+        {/* Inner crisp core dot */}
+        <circle
+          cx={32}
+          cy={32}
+          r={isHome ? 2.2 : 3}
+          fill="#ffffff"
+          style={{ filter: `drop-shadow(0 0 6px ${CYAN}) drop-shadow(0 0 12px ${CYAN})` }}
+        />
 
+        {/* Active-state pulsing outer halo when not home */}
         {!isHome && (
           <circle
             cx={32}
             cy={32}
-            r={11}
+            r={31}
             fill="none"
-            stroke={GOLD_BRIGHT}
-            strokeOpacity={0.6}
+            stroke={CYAN}
+            strokeOpacity={0.5}
             strokeWidth={0.8}
             className="origin-center animate-orb-pulse"
-            style={{ transformOrigin: "32px 32px" }}
+            style={{ transformOrigin: "32px 32px", filter: `drop-shadow(0 0 8px ${CYAN})` }}
           />
         )}
       </svg>

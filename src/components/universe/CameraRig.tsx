@@ -27,6 +27,15 @@ export function CameraRig() {
   const viewMode = useUI((s) => s.viewMode);
   const focusedGalaxy = useUI((s) => s.focusedGalaxy);
   const selectedJobId = useUI((s) => s.selectedJobId);
+  const mapTransition = useUI((s) => s.mapTransition);
+
+  // Hyperspace warp — we snapshot the camera at dive-start, push it forward at
+  // hyper speed and widen FOV through the dive, then on rise-start snap back
+  // to the snapshot so the universe feels like it surges back into view.
+  const warpStart = useRef<number>(0);
+  const warpFromPos = useRef(new THREE.Vector3());
+  const warpFromQuat = useRef(new THREE.Quaternion());
+  const warpFromFov = useRef(52);
 
   // Scripted target (used until the user takes control)
   const targetPos = useRef(new THREE.Vector3(0, 22, 60));
@@ -41,6 +50,25 @@ export function CameraRig() {
   const lastPointer = useRef<{ x: number; y: number } | null>(null);
   const keys = useRef<Record<string, boolean>>({});
   const wheelImpulse = useRef(0);
+
+  // ---- Hyperspace warp triggers ----
+  useEffect(() => {
+    if (mapTransition === "diving") {
+      // Snapshot the rig so we can restore on rise. Disable free-fly and
+      // scripted-shot lerp during the warp — the per-frame block below owns
+      // the camera while diving/rising.
+      warpFromPos.current.copy(camera.position);
+      warpFromQuat.current.copy(camera.quaternion);
+      const persp = camera as THREE.PerspectiveCamera;
+      warpFromFov.current = persp.fov ?? 52;
+      warpStart.current = performance.now();
+      freeFly.current = false;
+    } else if (mapTransition === "rising") {
+      // Snapshot "to" target = the position from before we dove. Mark a fresh
+      // warp start so the per-frame curve resets cleanly.
+      warpStart.current = performance.now();
+    }
+  }, [mapTransition, camera]);
 
   // ---- Scripted shot updates ----
   useEffect(() => {
@@ -105,8 +133,11 @@ export function CameraRig() {
         /* no-op */
       }
       const sens = 0.0035;
-      yaw.current -= dx * sens;
-      pitch.current -= dy * sens;
+      // Inverted (push) drag: drag right -> camera pans LEFT (world appears
+      // to swipe right), drag down -> camera pans UP. Feels like pushing the
+      // scene rather than grabbing it.
+      yaw.current += dx * sens;
+      pitch.current += dy * sens;
       const lim = Math.PI / 2 - 0.05;
       pitch.current = Math.max(-lim, Math.min(lim, pitch.current));
     };
@@ -164,6 +195,47 @@ export function CameraRig() {
 
   // ---- Per-frame update ----
   useFrame((_, delta) => {
+    // Hyperspace warp owns the camera entirely while diving / rising.
+    if (mapTransition === "diving" || mapTransition === "rising") {
+      const persp = camera as THREE.PerspectiveCamera;
+      const elapsed = performance.now() - warpStart.current;
+      const TOTAL = mapTransition === "diving" ? 1600 : 1400;
+      const tRaw = Math.min(1, Math.max(0, elapsed / TOTAL));
+      // Ease: cubic in for dive (slow start, hyper accel), cubic out for rise.
+      const e =
+        mapTransition === "diving"
+          ? tRaw * tRaw * tRaw
+          : 1 - Math.pow(1 - tRaw, 3);
+
+      // Forward direction at the snapshot orientation (we keep looking the
+      // same way — the streaks are the spectacle, not a re-orient).
+      const forward = new THREE.Vector3(0, 0, -1).applyQuaternion(
+        warpFromQuat.current,
+      );
+
+      if (mapTransition === "diving") {
+        // Push forward up to ~140 units along view dir at peak.
+        const offset = forward.clone().multiplyScalar(e * 140);
+        camera.position.copy(warpFromPos.current).add(offset);
+        camera.quaternion.copy(warpFromQuat.current);
+        // FOV widens 52 -> ~110 to sell the warp; bell-curved so it crests at peak.
+        const bell = Math.sin(Math.PI * tRaw); // 0 -> 1 -> 0
+        persp.fov = warpFromFov.current + bell * 58;
+        persp.updateProjectionMatrix();
+      } else {
+        // Rising: start at the dove-forward position and ease back to snapshot.
+        // We cached snapshot in warpFromPos at the original dive (it persisted),
+        // so position lerps from forward-shoved -> warpFromPos.
+        const offset = forward.clone().multiplyScalar((1 - e) * 140);
+        camera.position.copy(warpFromPos.current).add(offset);
+        camera.quaternion.copy(warpFromQuat.current);
+        const bell = Math.sin(Math.PI * tRaw);
+        persp.fov = warpFromFov.current + bell * 58;
+        persp.updateProjectionMatrix();
+      }
+      return;
+    }
+
     if (freeFly.current) {
       // Apply yaw/pitch to the camera quaternion
       const q = new THREE.Quaternion().setFromEuler(

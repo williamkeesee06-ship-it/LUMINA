@@ -441,3 +441,35 @@
     );
   }
 }
+
+/* Subtle neon-sign flicker for the NORTH SKY watermark.
+   Mostly stable, with rare brief dips so it feels like a real neon tube. */
+@keyframes neon-flicker {
+  0%,
+  18%,
+  19%,
+  21%,
+  22%,
+  24%,
+  100% {
+    opacity: 1;
+    filter: brightness(1);
+  }
+  18.5%,
+  21.5% {
+    opacity: 0.78;
+    filter: brightness(0.85);
+  }
+  23% {
+    opacity: 0.62;
+    filter: brightness(0.75);
+  }
+  62%,
+  62.4% {
+    opacity: 0.85;
+    filter: brightness(0.92);
+  }
+}
+.animate-neon-flicker {
+  animation: neon-flicker 9s ease-in-out infinite;
+}
