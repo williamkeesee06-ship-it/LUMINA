@@ -205,7 +205,7 @@ function NeonPin({
     const g = (window as unknown as { google?: { maps?: any } }).google?.maps;
     if (!map || !g) return;
 
-    const scale = selected ? 1.55 : 1.25;
+    const scale = selected ? 1.35 : 1.0;
     const stroke = historical ? "#3A4258" : "#FFFFFF";
     const strokeWeight = selected ? 1.6 : historical ? 0.9 : 1.1;
     const fillOpacity = historical ? 0.85 : 1;
@@ -239,12 +239,12 @@ function NeonPin({
         clickable: false,
         icon: {
           path: g.SymbolPath.CIRCLE,
-          scale: selected ? 4 : 3.2,
+          scale: selected ? 3.4 : 2.6,
           fillColor: "#FFFFFF",
           fillOpacity: 1,
           strokeColor: color,
           strokeOpacity: 0.9,
-          strokeWeight: 1.2,
+          strokeWeight: 1,
           // Anchor the dot up into the bulb center (the bulb sits ~22px above tip).
           anchor: new g.Point(0, 22),
         },
@@ -290,6 +290,16 @@ function FitToBounds({
       const llb = new g.LatLngBounds(sw, ne);
       // Padding leaves room for the right-rail HUD and top header.
       map.fitBounds(llb, { top: 80, right: 380, bottom: 60, left: 60 });
+
+      // After Google computes the zoom for fitBounds, clamp it so we never
+      // zoom out further than zoom 9 (state-level) even if a stray outlier
+      // job widens the bounds. Keeps the cluster readable.
+      const idle = map.addListener("idle", () => {
+        const z = map.getZoom?.();
+        if (typeof z === "number" && z < 9) map.setZoom(9);
+        if (typeof z === "number" && z > 13) map.setZoom(13);
+        idle.remove();
+      });
     }
   }, [map, bounds?.minLat, bounds?.maxLat, bounds?.minLng, bounds?.maxLng, selectedId, center.lat, center.lng]);
   return null;
