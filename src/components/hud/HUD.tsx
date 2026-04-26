@@ -7,6 +7,8 @@ import type { Galaxy } from "@/types";
 import { Gauge } from "./Gauge";
 import { CircleWidget } from "./CircleWidget";
 import { DysonCore } from "./DysonCore";
+import { MiniGauge } from "./MiniGauge";
+import { MiniWidget } from "./MiniWidget";
 import { Orb } from "@/components/lumina/Orb";
 import { sfx } from "@/lib/audio";
 import { requestGoogleToken } from "@/lib/googleAuth";
@@ -127,7 +129,7 @@ function HUDVertical() {
   return (
     <div
       className="pointer-events-none fixed top-6 right-6 bottom-6 z-30 flex flex-col"
-      style={{ width: collapsed ? 88 : 280 }}
+      style={{ width: collapsed ? 88 : 196 }}
     >
       <div
         className={clsx(
@@ -136,18 +138,14 @@ function HUDVertical() {
           "transition-[width] duration-500 ease-[cubic-bezier(0.16,1,0.3,1)]",
         )}
       >
-        {/* Decorative rivets */}
-        <span className="rivet" style={{ left: 8, top: 8 }} />
-        <span className="rivet" style={{ right: 8, top: 8 }} />
-        <span className="rivet" style={{ left: 8, bottom: 8 }} />
-        <span className="rivet" style={{ right: 8, bottom: 8 }} />
-        <span className="rivet" style={{ top: "33%", left: 8 }} />
-        <span className="rivet" style={{ top: "33%", right: 8 }} />
-        <span className="rivet" style={{ top: "66%", left: 8 }} />
-        <span className="rivet" style={{ top: "66%", right: 8 }} />
+        {/* Decorative rivets along the rails */}
+        <span className="rivet" style={{ left: 6, top: 6 }} />
+        <span className="rivet" style={{ right: 6, top: 6 }} />
+        <span className="rivet" style={{ left: 6, bottom: 6 }} />
+        <span className="rivet" style={{ right: 6, bottom: 6 }} />
 
-        {/* TOP CONTROL ROW — orientation toggle + collapse */}
-        <div className="flex items-center justify-between px-3 pt-3 pb-2">
+        {/* BRAND CHIP — NORTHSKY · LUMINA V3 lockup at the very top */}
+        <div className="flex items-center justify-between px-3 pt-2.5 pb-2">
           <button
             type="button"
             onMouseEnter={() => sfx.hover()}
@@ -157,11 +155,50 @@ function HUDVertical() {
             }}
             title="Switch to horizontal HUD"
             aria-label="Switch HUD orientation"
-            className="w-7 h-7 rounded-sm border border-cyan-glow/30 bg-black/40 text-cyan-glow/70 hover:text-cyan-glow hover:border-cyan-glow/70 flex items-center justify-center transition-colors"
-            style={{ boxShadow: "inset 0 0 4px rgba(91,243,255,0.15)" }}
+            className="w-6 h-6 rounded-sm border border-cyan-glow/30 bg-black/40 text-cyan-glow/70 hover:text-cyan-glow hover:border-cyan-glow/70 flex items-center justify-center transition-colors flex-shrink-0"
           >
-            <RotateIcon size={14} />
+            <RotateIcon size={11} />
           </button>
+          {!collapsed && (
+            <div className="flex flex-col items-center leading-none">
+              <div
+                className="font-mono uppercase"
+                style={{
+                  fontSize: 7,
+                  letterSpacing: "0.32em",
+                  color: "rgba(255,255,255,0.55)",
+                }}
+              >
+                NORTHSKY
+              </div>
+              <div className="flex items-baseline gap-1 mt-0.5">
+                <span
+                  className="font-display text-white"
+                  style={{
+                    fontSize: 13,
+                    fontWeight: 700,
+                    letterSpacing: "0.06em",
+                    textShadow: "0 0 4px rgba(255,255,255,0.6)",
+                  }}
+                >
+                  LUMINA
+                </span>
+                <span
+                  className="font-display"
+                  style={{
+                    fontSize: 9,
+                    fontWeight: 700,
+                    letterSpacing: "0.14em",
+                    color: "#5BF3FF",
+                    textShadow:
+                      "0 0 3px #5BF3FF, 0 0 6px rgba(91,243,255,0.6)",
+                  }}
+                >
+                  V3
+                </span>
+              </div>
+            </div>
+          )}
           <button
             type="button"
             onMouseEnter={() => sfx.hover()}
@@ -171,125 +208,143 @@ function HUDVertical() {
             }}
             title={collapsed ? "Expand HUD" : "Collapse HUD"}
             aria-label="Toggle HUD size"
-            className="w-7 h-7 rounded-sm border border-cyan-glow/30 bg-black/40 text-cyan-glow/70 hover:text-cyan-glow hover:border-cyan-glow/70 flex items-center justify-center font-mono text-[11px] transition-colors"
+            className="w-6 h-6 rounded-sm border border-cyan-glow/30 bg-black/40 text-cyan-glow/70 hover:text-cyan-glow hover:border-cyan-glow/70 flex items-center justify-center font-mono text-[10px] transition-colors flex-shrink-0"
           >
             {collapsed ? "+" : "−"}
           </button>
         </div>
 
+        {/* Cyan accent rule under brand */}
+        <div className="px-3">
+          <div
+            style={{
+              height: 1.5,
+              background: "#5BF3FF",
+              boxShadow: "0 0 6px #5BF3FF, 0 0 12px rgba(91,243,255,0.5)",
+            }}
+          />
+        </div>
+
         {/* HERO — LUMINA orb (the star of the show) */}
-        <div className="flex flex-col items-center gap-2 px-3 pb-3">
-          <Orb size={collapsed ? 52 : 76} />
+        <div className="flex flex-col items-center gap-1 px-3 py-3">
+          <Orb size={collapsed ? 48 : 80} />
           {!collapsed && (
-            <div className="flex flex-col items-center -mt-1">
-              <div
-                className="font-display text-[11px] uppercase text-cyan-glow"
-                style={{
-                  letterSpacing: "0.32em",
-                  textShadow:
-                    "0 0 4px rgba(91,243,255,0.85), 0 0 10px rgba(91,243,255,0.45)",
-                }}
-              >
-                LUMINA
-              </div>
-              <div className="font-mono text-[9px] uppercase tracking-[0.32em] text-white/45 mt-0.5">
-                tactical AI · online
-              </div>
+            <div
+              className="font-display uppercase"
+              style={{
+                fontSize: 8,
+                letterSpacing: "0.32em",
+                color: "rgba(255,255,255,0.55)",
+              }}
+            >
+              tactical AI
             </div>
           )}
         </div>
 
         {!collapsed && (
           <>
-            {/* Section divider with "TELEMETRY" label */}
-            <SectionRule label="TELEMETRY" />
-
-            {/* GAUGES — three stacked vertically */}
-            <div className="px-3 py-2 flex flex-col gap-2.5">
-              <Gauge label="Total" value={total} tone="cyan" rainbow />
-              <Gauge
-                label={googleToken ? "Gmail" : "Connect"}
-                value={googleToken ? unreadCount : "→"}
-                tone={
-                  unreadCount > 0
-                    ? "magenta"
-                    : googleToken
-                      ? "cyan"
-                      : "amber"
-                }
-                pulse={!googleToken || unreadCount > 0}
-                onClick={handleConnectGmail}
-              />
-              <Gauge
-                label="Universe"
-                value={`${universeVitality}%`}
-                max={100}
-                tone={
-                  universeVitality > 60
-                    ? "teal"
-                    : universeVitality > 30
-                      ? "amber"
-                      : "magenta"
-                }
-                pulse={universeVitality < 40}
-              />
-            </div>
-
-            <SectionRule label="GALAXIES" />
-
-            {/* GALAXY GRID — 2 columns of circular widgets */}
-            <div className="px-3 py-2 grid grid-cols-2 gap-2 flex-1 overflow-y-auto">
-              {GALAXIES.map((g) => {
-                const c = GALAXY_COLORS[g];
-                const rgb = hexToRgbTriplet(c);
-                const active = focusedGalaxy === g;
-                const cnt = counts[g];
-                return (
-                  <CircleWidget
-                    key={g}
-                    label={GALAXY_SHORT[g]}
-                    value={cnt}
-                    color={c}
-                    rgb={rgb}
-                    active={active}
-                    onMouseEnter={() => sfx.hover()}
-                    onClick={() => {
-                      sfx.select();
-                      enterGalaxy(active ? null : g);
-                    }}
-                  />
-                );
-              })}
-            </div>
-
-            {/* SOLID SEPARATOR — kills mic/globe ghost bleed against widgets */}
-            <div className="px-3 pt-1">
+            {/* Cyan accent rule */}
+            <div className="px-3">
               <div
                 style={{
-                  height: 1,
-                  background:
-                    "linear-gradient(90deg, transparent 0%, rgba(91,243,255,0.5) 20%, rgba(91,243,255,0.5) 80%, transparent 100%)",
-                  boxShadow: "0 0 6px rgba(91,243,255,0.35)",
+                  height: 1.5,
+                  background: "#5BF3FF",
+                  boxShadow: "0 0 6px #5BF3FF, 0 0 12px rgba(91,243,255,0.5)",
+                }}
+              />
+            </div>
+
+            {/* TELEMETRY + GALAXIES — two-column layout per mockup.
+                Left: 3 mini gauges stacked. Right: 7 mini widgets stacked. */}
+            <div className="flex-1 min-h-0 overflow-y-auto px-3 py-3">
+              <div className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-2.5 items-start">
+                {/* Left column: 3 gauges */}
+                <div className="flex flex-col gap-2.5 row-span-7">
+                  <MiniGauge label="TOTAL" value={total} tone="cyan" />
+                  <MiniGauge
+                    label={googleToken ? "GMAIL" : "CONNECT"}
+                    value={googleToken ? unreadCount : "→"}
+                    tone={
+                      unreadCount > 0
+                        ? "magenta"
+                        : googleToken
+                          ? "cyan"
+                          : "amber"
+                    }
+                    pulse={!googleToken || unreadCount > 0}
+                    onClick={handleConnectGmail}
+                  />
+                  <MiniGauge
+                    label="UNIVERSE"
+                    value={`${universeVitality}%`}
+                    tone={
+                      universeVitality > 60
+                        ? "teal"
+                        : universeVitality > 30
+                          ? "amber"
+                          : "magenta"
+                    }
+                    pulse={universeVitality < 40}
+                  />
+                </div>
+
+                {/* Right column: 7 mini widgets stacked */}
+                <div className="flex flex-col gap-1.5 items-center">
+                  {GALAXIES.map((g) => {
+                    const c = GALAXY_COLORS[g];
+                    const rgb = hexToRgbTriplet(c);
+                    const active = focusedGalaxy === g;
+                    const cnt = counts[g];
+                    return (
+                      <MiniWidget
+                        key={g}
+                        label={GALAXY_SHORT[g]}
+                        value={cnt}
+                        color={c}
+                        rgb={rgb}
+                        active={active}
+                        onMouseEnter={() => sfx.hover()}
+                        onClick={() => {
+                          sfx.select();
+                          enterGalaxy(active ? null : g);
+                        }}
+                      />
+                    );
+                  })}
+                </div>
+              </div>
+            </div>
+
+            {/* Cyan accent rule above utility row */}
+            <div className="px-3">
+              <div
+                style={{
+                  height: 1.5,
+                  background: "#5BF3FF",
+                  boxShadow: "0 0 6px #5BF3FF, 0 0 12px rgba(91,243,255,0.5)",
                 }}
               />
             </div>
 
             {/* UTILITY ROW — reset core (demoted), mic, globe */}
-            <div className="px-3 py-3 flex items-center justify-around bg-black/30">
+            <div className="px-3 py-2.5 flex items-center justify-around bg-black/40">
               <UtilityButton
                 title="Return to Universe"
                 onClick={() => {
                   sfx.confirm();
                   useUI.getState().resetToUniverse();
                 }}
+                size={36}
               >
-                <DysonCore size={32} />
+                <DysonCore size={26} />
               </UtilityButton>
               <UtilityButton
                 title="Voice — reserved for V3 phase two"
                 disabled
+                size={36}
               >
-                <NeonMicIcon size={18} dim />
+                <NeonMicIcon size={16} dim />
               </UtilityButton>
               <UtilityButton
                 title={
@@ -311,40 +366,14 @@ function HUDVertical() {
                 wait={
                   mapTransition === "diving" || mapTransition === "rising"
                 }
+                size={36}
               >
-                <NeonGlobeIcon size={20} active={isMapOpen} />
+                <NeonGlobeIcon size={18} active={isMapOpen} />
               </UtilityButton>
             </div>
           </>
         )}
       </div>
-    </div>
-  );
-}
-
-function SectionRule({ label }: { label: string }) {
-  return (
-    <div className="flex items-center gap-2 px-3 mt-1">
-      <span
-        className="flex-1 h-px"
-        style={{
-          background:
-            "linear-gradient(90deg, rgba(91,243,255,0.6) 0%, rgba(91,243,255,0.05) 100%)",
-        }}
-      />
-      <span
-        className="font-mono text-[8.5px] uppercase text-cyan-glow/70"
-        style={{ letterSpacing: "0.32em" }}
-      >
-        {label}
-      </span>
-      <span
-        className="flex-1 h-px"
-        style={{
-          background:
-            "linear-gradient(90deg, rgba(91,243,255,0.05) 0%, rgba(91,243,255,0.6) 100%)",
-        }}
-      />
     </div>
   );
 }
@@ -356,6 +385,7 @@ function UtilityButton({
   disabled,
   active,
   wait,
+  size = 44,
 }: {
   children: React.ReactNode;
   title: string;
@@ -363,6 +393,7 @@ function UtilityButton({
   disabled?: boolean;
   active?: boolean;
   wait?: boolean;
+  size?: number;
 }) {
   return (
     <button
@@ -373,7 +404,7 @@ function UtilityButton({
       title={title}
       aria-label={title}
       className={clsx(
-        "w-11 h-11 rounded-full flex items-center justify-center transition-colors",
+        "rounded-full flex items-center justify-center transition-colors",
         active
           ? "border border-cyan-glow/70 bg-cyan-glow/10 glow-cyan"
           : "border border-cyan-glow/25 bg-cyan-glow/5 hover:border-cyan-glow/60",
@@ -381,6 +412,8 @@ function UtilityButton({
         wait && "opacity-60 cursor-wait",
       )}
       style={{
+        width: size,
+        height: size,
         boxShadow: active
           ? "0 0 10px rgba(91,243,255,0.5), inset 0 0 6px rgba(91,243,255,0.25)"
           : "inset 0 0 6px rgba(91,243,255,0.12)",

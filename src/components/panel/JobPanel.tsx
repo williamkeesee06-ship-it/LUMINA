@@ -45,7 +45,7 @@ export function JobPanel() {
   const color = GALAXY_COLORS[job.status];
   const accentRgb = hexToRgbTriplet(color);
   // Avoid colliding with the right-docked vertical HUD (≈280px wide + 24px margin).
-  const rightOffset = hudOrientation === "vertical" ? 328 : 24;
+  const rightOffset = hudOrientation === "vertical" ? 244 : 24;
   const bottomOffset = hudOrientation === "vertical" ? 24 : 210;
   const styleVar = {
     ["--panel-accent" as string]: accentRgb,

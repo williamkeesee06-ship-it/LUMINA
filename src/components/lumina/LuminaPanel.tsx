@@ -159,7 +159,7 @@ export function LuminaPanel() {
   if (!isChatOpen) return null;
 
   // Avoid colliding with right-docked vertical HUD.
-  const rightOffset = hudOrientation === "vertical" ? 328 : 24;
+  const rightOffset = hudOrientation === "vertical" ? 244 : 24;
   const bottomOffset = hudOrientation === "vertical" ? 24 : 128;
 
   return (
