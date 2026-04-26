@@ -35,12 +35,19 @@ export function TacticalMap() {
   const selectJob = useUI((s) => s.selectJob);
   const showRouteLayer = useUI((s) => s.showRouteLayer);
   const routeJobIds = useUI((s) => s.routeJobIds);
+  const hiddenGalaxies = useUI((s) => s.hiddenGalaxies);
 
   const visible = useMemo(() => {
     let pool = jobs.filter((j) => j.coords);
     if (focusedGalaxy) pool = pool.filter((j) => j.status === focusedGalaxy);
+    // Apply HUD widget filters — jobs in any hidden galaxy are removed.
+    // Note: "Complete" lives in hiddenGalaxies by default so the history
+    // markers stay off until the user explicitly toggles HISTORY on.
+    if (hiddenGalaxies.length > 0) {
+      pool = pool.filter((j) => !hiddenGalaxies.includes(j.status));
+    }
     return pool;
-  }, [jobs, focusedGalaxy]);
+  }, [jobs, focusedGalaxy, hiddenGalaxies]);
 
   const center = useMemo(() => {
     const sel = selectedJobId ? jobs.find((j) => j.id === selectedJobId) : undefined;

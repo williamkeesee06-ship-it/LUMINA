@@ -56,6 +56,10 @@ function useHudData() {
   const mapTransition = useUI((s) => s.mapTransition);
   const diveToMap = useUI((s) => s.diveToMap);
   const riseFromMap = useUI((s) => s.riseFromMap);
+  const hiddenGalaxies = useUI((s) => s.hiddenGalaxies);
+  const showHistoryOnMap = useUI((s) => s.showHistoryOnMap);
+  const toggleMapFilter = useUI((s) => s.toggleMapFilter);
+  const toggleHistoryOnMap = useUI((s) => s.toggleHistoryOnMap);
 
   const universeVitality = useMemo(() => {
     if (loading) return 18;
@@ -101,6 +105,10 @@ function useHudData() {
     mapTransition,
     diveToMap,
     riseFromMap,
+    hiddenGalaxies,
+    showHistoryOnMap,
+    toggleMapFilter,
+    toggleHistoryOnMap,
     handleConnectGmail,
   };
 }
@@ -124,6 +132,10 @@ function HUDVertical() {
     mapTransition,
     diveToMap,
     riseFromMap,
+    hiddenGalaxies,
+    showHistoryOnMap,
+    toggleMapFilter,
+    toggleHistoryOnMap,
     handleConnectGmail,
   } = useHudData();
 
@@ -360,13 +372,16 @@ function HUDVertical() {
               >
                 · galaxies
               </div>
-              {/* 7 galaxy widgets in 2-col grid (4+3) — labels above tiny disc */}
+              {/* 7 galaxy widgets in 2-col grid (4+3) — labels above tiny disc.
+                  When the map is open, click toggles map visibility filter.
+                  When the map is closed, click enters the galaxy as before. */}
               <div className="grid grid-cols-2 gap-x-1.5 gap-y-1.5 justify-items-center pb-1">
-                {GALAXIES.map((g) => {
+                {GALAXIES.filter((g) => g !== "Complete").map((g) => {
                   const c = GALAXY_COLORS[g];
                   const rgb = hexToRgbTriplet(c);
                   const active = focusedGalaxy === g;
                   const cnt = counts[g];
+                  const isFiltered = isMapOpen && hiddenGalaxies.includes(g);
                   return (
                     <MiniWidget
                       key={g}
@@ -374,15 +389,40 @@ function HUDVertical() {
                       value={cnt}
                       color={c}
                       rgb={rgb}
-                      active={active}
+                      active={active && !isMapOpen}
+                      disabled={isFiltered}
                       onMouseEnter={() => sfx.hover()}
                       onClick={() => {
-                        sfx.select();
-                        enterGalaxy(active ? null : g);
+                        if (isMapOpen) {
+                          toggleMapFilter(g);
+                        } else {
+                          sfx.select();
+                          enterGalaxy(active ? null : g);
+                        }
                       }}
                     />
                   );
                 })}
+                {/* HISTORY widget — toggles black-marker Complete jobs on the map.
+                    Always rendered alongside the 6 active galaxies for the 7-cell
+                    layout the HUD was designed around. */}
+                <MiniWidget
+                  label="HISTORY"
+                  value={counts.Complete}
+                  color="#8A93A8"
+                  rgb="138,147,168"
+                  active={false}
+                  disabled={isMapOpen ? !showHistoryOnMap : false}
+                  onMouseEnter={() => sfx.hover()}
+                  onClick={() => {
+                    if (isMapOpen) {
+                      toggleHistoryOnMap();
+                    } else {
+                      sfx.select();
+                      enterGalaxy(focusedGalaxy === "Complete" ? null : "Complete");
+                    }
+                  }}
+                />
               </div>
             </div>
 
@@ -577,6 +617,10 @@ function HUDHorizontal() {
     mapTransition,
     diveToMap,
     riseFromMap,
+    hiddenGalaxies,
+    showHistoryOnMap,
+    toggleMapFilter,
+    toggleHistoryOnMap,
     handleConnectGmail,
   } = useHudData();
 
@@ -747,11 +791,12 @@ function HUDHorizontal() {
                   <>
                     <Divider />
                     <div className="flex-1 flex items-center justify-around gap-2 min-w-0 px-1">
-                      {GALAXIES.map((g) => {
+                      {GALAXIES.filter((g) => g !== "Complete").map((g) => {
                         const c = GALAXY_COLORS[g];
                         const rgb = hexToRgbTriplet(c);
                         const active = focusedGalaxy === g;
                         const cnt = counts[g];
+                        const isFiltered = isMapOpen && hiddenGalaxies.includes(g);
                         return (
                           <CircleWidget
                             key={g}
@@ -759,15 +804,37 @@ function HUDHorizontal() {
                             value={cnt}
                             color={c}
                             rgb={rgb}
-                            active={active}
+                            active={active && !isMapOpen}
+                            disabled={isFiltered}
                             onMouseEnter={() => sfx.hover()}
                             onClick={() => {
-                              sfx.select();
-                              enterGalaxy(active ? null : g);
+                              if (isMapOpen) {
+                                toggleMapFilter(g);
+                              } else {
+                                sfx.select();
+                                enterGalaxy(active ? null : g);
+                              }
                             }}
                           />
                         );
                       })}
+                      <CircleWidget
+                        label="HISTORY"
+                        value={counts.Complete}
+                        color="#8A93A8"
+                        rgb="138,147,168"
+                        active={false}
+                        disabled={isMapOpen ? !showHistoryOnMap : false}
+                        onMouseEnter={() => sfx.hover()}
+                        onClick={() => {
+                          if (isMapOpen) {
+                            toggleHistoryOnMap();
+                          } else {
+                            sfx.select();
+                            enterGalaxy(focusedGalaxy === "Complete" ? null : "Complete");
+                          }
+                        }}
+                      />
                     </div>
                   </>
                 )}

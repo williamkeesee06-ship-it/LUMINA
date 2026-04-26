@@ -7,6 +7,8 @@ interface Props {
   color: string; // hex
   rgb: string; // "r g b"
   active?: boolean;
+  /** Filtered-off state — dims widget and shows a diagonal slash. */
+  disabled?: boolean;
   onClick?: () => void;
   onMouseEnter?: () => void;
 }
@@ -23,6 +25,7 @@ export function CircleWidget({
   color,
   rgb,
   active = false,
+  disabled = false,
   onClick,
   onMouseEnter,
 }: Props) {
@@ -32,8 +35,12 @@ export function CircleWidget({
       onClick={onClick}
       onMouseEnter={onMouseEnter}
       className="group relative flex flex-col items-center select-none cursor-pointer"
-      style={{ ["--w-rgb" as string]: rgb } as CSSProperties}
-      title={label}
+      style={{
+        ["--w-rgb" as string]: rgb,
+        opacity: disabled ? 0.32 : 1,
+        transition: "opacity 220ms ease",
+      } as CSSProperties}
+      title={disabled ? `${label} — filtered off (click to re-enable)` : label}
     >
       {/* The disc */}
       <div
@@ -46,10 +53,12 @@ export function CircleWidget({
           height: 60,
           background:
             "radial-gradient(circle at 50% 35%, #0e1320 0%, #060912 70%, #03050a 100%)",
-          border: `1.6px solid ${color}`,
-          boxShadow: active
-            ? `0 0 0 1px ${color}, 0 0 14px ${color}, 0 0 28px rgba(${rgb}, 0.55), inset 0 0 14px rgba(${rgb}, 0.2)`
-            : `0 0 8px ${color}, 0 0 18px rgba(${rgb}, 0.45), inset 0 0 10px rgba(0,0,0,0.65)`,
+          border: `1.6px solid ${disabled ? "#3a4258" : color}`,
+          boxShadow: disabled
+            ? "inset 0 0 10px rgba(0,0,0,0.85)"
+            : active
+              ? `0 0 0 1px ${color}, 0 0 14px ${color}, 0 0 28px rgba(${rgb}, 0.55), inset 0 0 14px rgba(${rgb}, 0.2)`
+              : `0 0 8px ${color}, 0 0 18px rgba(${rgb}, 0.45), inset 0 0 10px rgba(0,0,0,0.65)`,
         }}
       >
         <div
@@ -63,6 +72,38 @@ export function CircleWidget({
         >
           {value}
         </div>
+        {/* OFF-state diagonal slash. SVG to keep stroke crisp. */}
+        {disabled && (
+          <svg
+            className="absolute inset-0 pointer-events-none"
+            viewBox="0 0 60 60"
+            width="60"
+            height="60"
+            aria-hidden
+          >
+            <line
+              x1="12"
+              y1="48"
+              x2="48"
+              y2="12"
+              stroke="#ffffff"
+              strokeOpacity="0.85"
+              strokeWidth="2"
+              strokeLinecap="round"
+            />
+            <line
+              x1="12"
+              y1="48"
+              x2="48"
+              y2="12"
+              stroke={color}
+              strokeOpacity="0.55"
+              strokeWidth="4"
+              strokeLinecap="round"
+              style={{ filter: `drop-shadow(0 0 4px ${color})`, mixBlendMode: "screen" }}
+            />
+          </svg>
+        )}
       </div>
 
       {/* Label below, OUTSIDE the disc */}

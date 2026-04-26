@@ -1,4 +1,5 @@
 import { create } from "zustand";
+import { sfx } from "@/lib/audio";
 import type {
   Galaxy,
   HudMode,
@@ -57,6 +58,14 @@ export interface UIState {
   // Map open state (tactical map is a surface, not the home)
   isMapOpen: boolean;
 
+  // Map-only filters — toggled via the HUD galaxy widgets while the map is
+  // open. Galaxies in `hiddenGalaxies` are excluded from the map only
+  // (universe view is unaffected). `showHistoryOnMap` controls whether
+  // Complete jobs (the black history markers) appear; OFF by default for
+  // focus.
+  hiddenGalaxies: Galaxy[];
+  showHistoryOnMap: boolean;
+
   // Hyperspace dive state machine — drives the warp transition
   // between the universe and the tactical map.
   mapTransition: MapTransition;
@@ -80,6 +89,9 @@ export interface UIState {
   setShowRouteLayer: (v: boolean) => void;
   setRouteJobIds: (ids: string[]) => void;
   setMapOpen: (open: boolean) => void;
+  toggleMapFilter: (g: Galaxy) => void;
+  toggleHistoryOnMap: () => void;
+  resetMapFilters: () => void;
   /** Trigger the hyperspace warp into the tactical map. */
   diveToMap: () => void;
   /** Trigger the reverse warp back to the universe. */
@@ -119,6 +131,11 @@ export const useUI = create<UIState>((set, get) => ({
   hudOrientation: "vertical",
   isMapOpen: false,
   mapTransition: "idle",
+  // History (Complete) starts hidden so the map opens focused on active work.
+  // Complete is also added to hiddenGalaxies so the toggleMapFilter logic
+  // stays consistent (one source of truth for whether a galaxy renders).
+  hiddenGalaxies: ["Complete"],
+  showHistoryOnMap: false,
 
   setJobs: (jobs) => set({ jobs }),
   setLoading: (loading) => set({ loading }),
@@ -195,6 +212,34 @@ export const useUI = create<UIState>((set, get) => ({
   setShowRouteLayer: (showRouteLayer) => set({ showRouteLayer }),
   setRouteJobIds: (routeJobIds) => set({ routeJobIds, showRouteLayer: routeJobIds.length > 0 }),
   setMapOpen: (isMapOpen) => set({ isMapOpen, mapTransition: isMapOpen ? "open" : "idle" }),
+
+  toggleMapFilter: (g) =>
+    set((s) => {
+      const isHidden = s.hiddenGalaxies.includes(g);
+      sfx.select();
+      return {
+        hiddenGalaxies: isHidden
+          ? s.hiddenGalaxies.filter((x) => x !== g)
+          : [...s.hiddenGalaxies, g],
+      };
+    }),
+
+  toggleHistoryOnMap: () =>
+    set((s) => {
+      sfx.select();
+      const next = !s.showHistoryOnMap;
+      return {
+        showHistoryOnMap: next,
+        hiddenGalaxies: next
+          ? s.hiddenGalaxies.filter((g) => g !== "Complete")
+          : s.hiddenGalaxies.includes("Complete")
+            ? s.hiddenGalaxies
+            : [...s.hiddenGalaxies, "Complete"],
+      };
+    }),
+
+  resetMapFilters: () =>
+    set({ hiddenGalaxies: ["Complete"], showHistoryOnMap: false }),
 
   diveToMap: () => {
     const cur = get().mapTransition;
