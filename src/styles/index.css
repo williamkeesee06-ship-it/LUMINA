@@ -1,0 +1,156 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --void: #03060b;
+    --void-deep: #000104;
+    --steel-900: #0e1420;
+    --steel-700: #1b2436;
+    --steel-500: #34425c;
+    --cyan-glow: #5bf3ff;
+    --cyan-core: #00d9f5;
+    --cyan-deep: #0496b0;
+    --teal-glow: #3cffd2;
+    --magenta-signal: #ff3d9a;
+    --amber-warn: #ffb347;
+    --red-alert: #ff5151;
+  }
+
+  html,
+  body,
+  #root {
+    height: 100%;
+    width: 100%;
+    margin: 0;
+    padding: 0;
+    background: radial-gradient(ellipse at 50% 40%, #050a14 0%, #010205 70%, #000104 100%);
+    color-scheme: dark;
+    overscroll-behavior: none;
+  }
+
+  body {
+    font-family: "Inter", system-ui, sans-serif;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+
+  ::selection {
+    background: rgba(91, 243, 255, 0.28);
+    color: #fff;
+  }
+
+  /* Tactical scrollbar */
+  *::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+  }
+  *::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  *::-webkit-scrollbar-thumb {
+    background: rgba(91, 243, 255, 0.18);
+    border-radius: 3px;
+  }
+  *::-webkit-scrollbar-thumb:hover {
+    background: rgba(91, 243, 255, 0.36);
+  }
+}
+
+@layer components {
+  /* Tactical type treatments */
+  .tactical-label {
+    @apply font-display uppercase tracking-tactical text-[10px] text-cyan-glow/70;
+  }
+  .tactical-value {
+    @apply font-mono text-sm text-white;
+  }
+  .tactical-divider {
+    @apply h-px w-full bg-gradient-to-r from-transparent via-cyan-glow/30 to-transparent;
+  }
+
+  /* Metallic surface for HUD plates */
+  .metallic-plate {
+    background:
+      linear-gradient(180deg, rgba(20, 27, 43, 0.92) 0%, rgba(10, 15, 26, 0.96) 100%),
+      linear-gradient(135deg, rgba(91, 243, 255, 0.04) 0%, rgba(91, 243, 255, 0) 60%);
+    border: 1px solid rgba(91, 243, 255, 0.18);
+    box-shadow:
+      0 0 0 1px rgba(91, 243, 255, 0.04) inset,
+      0 1px 0 0 rgba(255, 255, 255, 0.04) inset,
+      0 24px 60px -32px rgba(0, 217, 245, 0.18),
+      0 0 30px -12px rgba(0, 217, 245, 0.12);
+    backdrop-filter: blur(8px);
+  }
+
+  .metallic-plate-soft {
+    background: linear-gradient(180deg, rgba(20, 27, 43, 0.7) 0%, rgba(10, 15, 26, 0.82) 100%);
+    border: 1px solid rgba(91, 243, 255, 0.1);
+    backdrop-filter: blur(8px);
+  }
+
+  /* Neon focus ring */
+  .neon-focus:focus-visible {
+    outline: none;
+    box-shadow:
+      0 0 0 1px rgba(91, 243, 255, 0.6),
+      0 0 14px 0 rgba(91, 243, 255, 0.35);
+  }
+
+  /* Telemetry scanline (subtle) */
+  .scanlines::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    background: repeating-linear-gradient(
+      to bottom,
+      transparent 0px,
+      transparent 2px,
+      rgba(91, 243, 255, 0.025) 3px,
+      transparent 4px
+    );
+    mix-blend-mode: screen;
+  }
+
+  /* Reticle motif */
+  .reticle {
+    @apply pointer-events-none absolute inset-0;
+    background-image:
+      linear-gradient(to right, rgba(91, 243, 255, 0.18) 0, rgba(91, 243, 255, 0.18) 1px, transparent 1px, transparent 100%),
+      linear-gradient(to bottom, rgba(91, 243, 255, 0.18) 0, rgba(91, 243, 255, 0.18) 1px, transparent 1px, transparent 100%);
+    background-size: 100% 100%;
+    background-position:
+      50% 0,
+      0 50%;
+    background-repeat: no-repeat;
+  }
+}
+
+@layer utilities {
+  .text-shadow-cyan {
+    text-shadow: 0 0 12px rgba(91, 243, 255, 0.45);
+  }
+  .glow-cyan {
+    box-shadow: 0 0 24px -4px rgba(91, 243, 255, 0.55);
+  }
+  .glow-cyan-strong {
+    box-shadow:
+      0 0 32px -2px rgba(91, 243, 255, 0.7),
+      0 0 64px -8px rgba(0, 217, 245, 0.4);
+  }
+  .glow-magenta {
+    box-shadow: 0 0 24px -4px rgba(255, 61, 154, 0.55);
+  }
+  .clip-corner {
+    clip-path: polygon(
+      14px 0,
+      100% 0,
+      100% calc(100% - 14px),
+      calc(100% - 14px) 100%,
+      0 100%,
+      0 14px
+    );
+  }
+}
