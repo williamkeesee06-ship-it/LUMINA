@@ -13,6 +13,7 @@ interface Props {
  */
 export function Stardust({ count = 1400, radius = 90 }: Props) {
   const ref = useRef<THREE.Points>(null);
+  const matRef = useRef<THREE.PointsMaterial>(null);
 
   const { positions, colors } = useMemo(() => {
     const pos = new Float32Array(count * 3);
@@ -48,9 +49,14 @@ export function Stardust({ count = 1400, radius = 90 }: Props) {
     return { positions: pos, colors: col };
   }, [count, radius]);
 
-  useFrame((_, delta) => {
+  useFrame((state, delta) => {
     if (ref.current) {
       ref.current.rotation.y += delta * 0.01;
+    }
+    // Gentle twinkle on the stardust as a whole — opacity oscillates softly
+    // so the field feels alive without becoming distracting.
+    if (matRef.current) {
+      matRef.current.opacity = 0.78 + Math.sin(state.clock.elapsedTime * 1.4) * 0.08;
     }
   });
 
@@ -61,6 +67,7 @@ export function Stardust({ count = 1400, radius = 90 }: Props) {
         <bufferAttribute attach="attributes-color" args={[colors, 3]} />
       </bufferGeometry>
       <pointsMaterial
+        ref={matRef}
         size={0.16}
         sizeAttenuation
         vertexColors

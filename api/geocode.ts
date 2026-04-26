@@ -32,8 +32,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   async function worker() {
     while (idx < queue.length) {
       const addr = queue[idx++];
-      if (cache.has(addr)) {
-        out[addr] = cache.get(addr) ?? null;
+      const cached = cache.get(addr);
+      if (cached) {
+        // Only short-circuit on a positive hit. Null/undefined falls through.
+        out[addr] = cached;
         continue;
       }
       try {
@@ -48,8 +50,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           out[addr] = { lat, lng };
           cache.set(addr, { lat, lng });
         } else {
+          // Do NOT cache null — a transient empty result (or an address that
+          // briefly fails to resolve) shouldn't poison future lookups.
           out[addr] = null;
-          cache.set(addr, null);
         }
       } catch {
         out[addr] = null;

@@ -58,6 +58,12 @@ export default {
         "scan-sweep": "scan-sweep 6s linear infinite",
         "telemetry-flicker": "telemetry-flicker 4s ease-in-out infinite",
         "ring-rotate": "ring-rotate 22s linear infinite",
+        "ring-rotate-rev": "ring-rotate-rev 32s linear infinite",
+        "ring-rotate-fast": "ring-rotate 14s linear infinite",
+        "gold-pulse": "gold-pulse 2.4s ease-in-out infinite",
+        "gold-pulse-2": "gold-pulse 2.4s ease-in-out -1.2s infinite",
+        "white-pulse": "white-pulse 2.8s ease-in-out infinite",
+        "neon-breath": "neon-breath 3.2s ease-in-out infinite",
       },
       keyframes: {
         "orb-pulse": {
@@ -75,6 +81,22 @@ export default {
         "ring-rotate": {
           "0%": { transform: "rotate(0deg)" },
           "100%": { transform: "rotate(360deg)" },
+        },
+        "ring-rotate-rev": {
+          "0%": { transform: "rotate(360deg)" },
+          "100%": { transform: "rotate(0deg)" },
+        },
+        "gold-pulse": {
+          "0%,100%": { transform: "scale(1)", opacity: "0.55" },
+          "50%": { transform: "scale(1.18)", opacity: "1" },
+        },
+        "white-pulse": {
+          "0%,100%": { opacity: "0.7" },
+          "50%": { opacity: "1" },
+        },
+        "neon-breath": {
+          "0%,100%": { opacity: "0.85", filter: "drop-shadow(0 0 6px currentColor)" },
+          "50%": { opacity: "1", filter: "drop-shadow(0 0 14px currentColor)" },
         },
       },
     },

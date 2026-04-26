@@ -1,13 +1,36 @@
-import { Canvas } from "@react-three/fiber";
+import { Suspense } from "react";
+import { Canvas, useLoader } from "@react-three/fiber";
 import { EffectComposer, Bloom, Vignette } from "@react-three/postprocessing";
+import * as THREE from "three";
 import { useUI, selectGalaxyCounts } from "@/store/uiStore";
 import { GALAXIES } from "@/types";
 import { CameraRig } from "./CameraRig";
 import { Stardust } from "./Stardust";
+import { CosmicDust } from "./CosmicDust";
 import { GalaxyCluster } from "./GalaxyCluster";
 import { PlanetField } from "./PlanetField";
 import { GALAXY_POSITIONS } from "./galaxyLayout";
 import { sfx } from "@/lib/audio";
+
+/**
+ * Deep-space skybox: starfield panorama wrapped on inside of a giant sphere.
+ * Adds depth and luxe atmosphere behind everything.
+ */
+function Skybox() {
+  const tex = useLoader(THREE.TextureLoader, "/textures/starfield.png");
+  return (
+    <mesh>
+      <sphereGeometry args={[400, 64, 32]} />
+      <meshBasicMaterial
+        map={tex}
+        side={THREE.BackSide}
+        depthWrite={false}
+        toneMapped={false}
+        color="#445566"
+      />
+    </mesh>
+  );
+}
 
 export function UniverseScene() {
   const viewMode = useUI((s) => s.viewMode);
@@ -28,32 +51,47 @@ export function UniverseScene() {
       dpr={[1, 1.75]}
     >
       <color attach="background" args={["#02050a"]} />
-      <fog attach="fog" args={["#02050a", 80, 220]} />
-      <ambientLight intensity={0.3} />
-      <pointLight position={[0, 30, 30]} intensity={0.6} color="#5BF3FF" />
+      <fog attach="fog" args={["#02050a", 90, 240]} />
+      <ambientLight intensity={0.25} />
+      {/* Cool key + warm rim — luxurious dual lighting */}
+      <pointLight position={[0, 30, 30]} intensity={0.7} color="#5BF3FF" />
+      <pointLight position={[-40, -10, -20]} intensity={0.35} color="#FF3D9A" />
+
+      <Suspense fallback={null}>
+        <Skybox />
+      </Suspense>
 
       <CameraRig />
-      <Stardust />
+      {/* Far star field — dense pinpoint stars filling the sky */}
+      <Stardust count={1100} radius={95} />
+      {/* Near twinkle layer — closer, brighter motes that drift past camera */}
+      <Stardust count={350} radius={45} />
+      {/* Cosmic dust / swirl — blends galaxies into surrounding space */}
+      <CosmicDust perGalaxy={260} ambient={900} />
 
       {/* Universe layer — always render, fade out when entering galaxy */}
-      {GALAXIES.map((g) => {
-        const isFocused = focusedGalaxy === g;
-        const isDimmed = focusedGalaxy !== null && !isFocused;
-        return (
-          <GalaxyCluster
-            key={g}
-            galaxy={g}
-            position={GALAXY_POSITIONS[g]}
-            count={counts[g]}
-            highlighted={isFocused}
-            dimmed={isDimmed}
-            onSelect={() => {
-              sfx.select();
-              enterGalaxy(g);
-            }}
-          />
-        );
-      })}
+      <Suspense fallback={null}>
+        {GALAXIES.map((g) => {
+          const isFocused = focusedGalaxy === g;
+          const isDimmed = focusedGalaxy !== null && !isFocused;
+          const insideThis = isFocused && viewMode !== "universe";
+          return (
+            <GalaxyCluster
+              key={g}
+              galaxy={g}
+              position={GALAXY_POSITIONS[g]}
+              count={counts[g]}
+              highlighted={isFocused && viewMode === "universe"}
+              dimmed={isDimmed}
+              insideThis={insideThis}
+              onSelect={() => {
+                sfx.select();
+                enterGalaxy(g);
+              }}
+            />
+          );
+        })}
+      </Suspense>
 
       {/* Planet field — only when inside a galaxy */}
       {viewMode !== "universe" && focusedGalaxy && (
@@ -70,8 +108,13 @@ export function UniverseScene() {
       )}
 
       <EffectComposer multisampling={0}>
-        <Bloom intensity={0.85} luminanceThreshold={0.18} luminanceSmoothing={0.4} mipmapBlur />
-        <Vignette eskil={false} offset={0.2} darkness={0.85} />
+        <Bloom
+          intensity={1.6}
+          luminanceThreshold={0.15}
+          luminanceSmoothing={0.55}
+          mipmapBlur
+        />
+        <Vignette eskil={false} offset={0.25} darkness={0.92} />
       </EffectComposer>
     </Canvas>
     </div>

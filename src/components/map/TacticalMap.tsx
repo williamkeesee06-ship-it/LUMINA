@@ -1,11 +1,20 @@
-import { useMemo } from "react";
-import { APIProvider, Map, AdvancedMarker, useMap } from "@vis.gl/react-google-maps";
+import { useEffect, useMemo } from "react";
+import { APIProvider, Map, useMap } from "@vis.gl/react-google-maps";
 import { useUI } from "@/store/uiStore";
 import { GALAXY_COLORS } from "@/lib/statusMap";
 import { sfx } from "@/lib/audio";
 
-const DARK_STYLE_ID = "tactical_v3"; // visual approximation; we also pass styles
+// We rely on inline `styles` for the dark tactical look. A custom mapId would
+// require Cloud-console map style and is unnecessary here.
 const MAPS_KEY = import.meta.env.VITE_GOOGLE_MAPS_API_KEY as string | undefined;
+
+// Minimal global declaration so we can call the legacy google.maps.Marker API
+// directly. The full @types/google.maps would be heavy; we only need a subset.
+declare global {
+  interface Window {
+    google?: any;
+  }
+}
 
 /**
  * Tactical map. Surface, not the home. Bible:
@@ -82,7 +91,6 @@ export function TacticalMap() {
         <div className="flex-1 relative">
           <APIProvider apiKey={MAPS_KEY}>
             <Map
-              mapId={DARK_STYLE_ID}
               defaultCenter={center}
               defaultZoom={9}
               gestureHandling="greedy"
@@ -99,17 +107,20 @@ export function TacticalMap() {
                     ? "#000000"
                     : GALAXY_COLORS[j.status];
                 const isSelected = selectedJobId === j.id;
+                // AdvancedMarker requires a mapId; without one, fall back
+                // to a styled <Marker>-style div via plain marker color.
                 return (
-                  <AdvancedMarker
+                  <PlainMarker
                     key={j.id}
                     position={j.coords!}
+                    color={color}
+                    selected={isSelected}
+                    historical={isHistorical}
                     onClick={() => {
                       sfx.select();
                       selectJob(j.id);
                     }}
-                  >
-                    <Pin color={color} selected={isSelected} historical={isHistorical} />
-                  </AdvancedMarker>
+                  />
                 );
               })}
               <Recenter center={center} />
@@ -121,31 +132,44 @@ export function TacticalMap() {
   );
 }
 
-function Pin({
+/**
+ * Marker that draws itself directly onto the Google map using the legacy
+ * `google.maps.Marker` API. This avoids the AdvancedMarker requirement of a
+ * mapId and works with our inline-styled tactical map.
+ */
+function PlainMarker({
+  position,
   color,
   selected,
   historical,
+  onClick,
 }: {
+  position: { lat: number; lng: number };
   color: string;
   selected: boolean;
   historical: boolean;
+  onClick: () => void;
 }) {
-  return (
-    <div className="relative" style={{ width: 18, height: 18 }}>
-      <div
-        className="rounded-full border"
-        style={{
-          width: 18,
-          height: 18,
-          background: color,
-          borderColor: historical ? "#444" : "rgba(255,255,255,0.45)",
-          boxShadow: selected
-            ? `0 0 0 2px #fff, 0 0 14px ${color}`
-            : `0 0 8px ${historical ? "rgba(0,0,0,0.6)" : color}`,
-        }}
-      />
-    </div>
-  );
+  const map = useMap();
+  useEffect(() => {
+    if (!map || !window.google?.maps) return;
+    const marker = new window.google.maps.Marker({
+      position,
+      map,
+      icon: {
+        path: window.google.maps.SymbolPath.CIRCLE,
+        scale: selected ? 9 : 7,
+        fillColor: color,
+        fillOpacity: 1,
+        strokeColor: selected ? "#FFFFFF" : historical ? "#444444" : "rgba(255,255,255,0.55)",
+        strokeWeight: selected ? 2 : 1,
+      },
+      zIndex: selected ? 1000 : historical ? 1 : 50,
+    });
+    marker.addListener("click", onClick);
+    return () => marker.setMap(null);
+  }, [map, position.lat, position.lng, color, selected, historical, onClick]);
+  return null;
 }
 
 function Recenter({ center }: { center: { lat: number; lng: number } }) {

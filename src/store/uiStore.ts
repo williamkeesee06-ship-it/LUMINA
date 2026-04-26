@@ -192,6 +192,11 @@ export const useUI = create<UIState>((set, get) => ({
     })),
 }));
 
+if (import.meta.env.DEV) {
+  // expose for dev/testing
+  (window as unknown as { __uiStore: typeof useUI }).__uiStore = useUI;
+}
+
 // Convenience selectors. Memoized at the module level so consecutive
 // reads with the same `jobs` reference return the same object — this is
 // what stops Zustand v5 from treating every render as a state change.

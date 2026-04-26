@@ -2,19 +2,28 @@ import { clsx } from "clsx";
 import { useMemo } from "react";
 import { useUI, selectGalaxyCounts } from "@/store/uiStore";
 import { GALAXIES } from "@/types";
-import { GALAXY_COLORS, GALAXY_GLYPH } from "@/lib/statusMap";
+import { GALAXY_COLORS } from "@/lib/statusMap";
+import type { Galaxy } from "@/types";
+
+const GALAXY_SHORT: Record<Galaxy, string> = {
+  Complete: "Complete",
+  "Fielded-RTS": "Fielded",
+  "Needs Fielding": "Needs Fld",
+  "On Hold": "On Hold",
+  Pending: "Pending",
+  "Routed to Sub": "Sub",
+  Scheduled: "Sched",
+};
 import { Gauge } from "./Gauge";
+import { CircleWidget } from "./CircleWidget";
 import { DysonCore } from "./DysonCore";
 import { Orb } from "@/components/lumina/Orb";
 import { sfx } from "@/lib/audio";
-import { requestGoogleToken, revokeGoogleToken } from "@/lib/googleAuth";
+import { requestGoogleToken } from "@/lib/googleAuth";
 
 /**
- * The three-mode tactical HUD.
- *
- * - Minimized: dormant. Dyson + LUMINA orb only.
- * - Standard:  Dyson + Orb + mic-disabled + Map + 3 core gauges (Total, Gmail, Universe).
- * - Expanded:  All of standard, plus the seven galaxy widgets as direct command targets.
+ * The three-mode tactical HUD — industrial command bezel with multi-band
+ * gauges and stat tiles. Inspired by deep-space command-deck dashboards.
  */
 export function HUD() {
   const hudMode = useUI((s) => s.hudMode);
@@ -32,8 +41,6 @@ export function HUD() {
   const setMapOpen = useUI((s) => s.setMapOpen);
   const isMapOpen = useUI((s) => s.isMapOpen);
 
-  // Universe vitality is a hybrid metric — real signal, cinematic presentation.
-  // Ingredients: load state, count stability, integration health.
   const universeVitality = useMemo(() => {
     if (loading) return 18;
     if (error) return 0;
@@ -46,61 +53,57 @@ export function HUD() {
   const total = jobs.length;
 
   return (
-    <div className="pointer-events-none fixed bottom-6 left-1/2 -translate-x-1/2 z-30 w-[min(96vw,1480px)]">
-      {/* Top rails row — sits above the plate but inside wrapper bounding box for hit-testing */}
-      <div className="pointer-events-auto flex items-center justify-between px-6 mb-2 font-mono text-[10px] uppercase tracking-tactical">
-        {/* Mode rail */}
-        <div className="flex items-center gap-1">
-          {(["minimized", "standard", "expanded"] as const).map((m) => (
-            <button
-              key={m}
-              type="button"
-              onMouseEnter={() => sfx.hover()}
-              onClick={() => {
-                sfx.select();
-                setHudMode(m);
-              }}
-              className={clsx(
-                "px-2 py-1 border border-cyan-glow/20 rounded-sm transition-colors",
-                hudMode === m
-                  ? "bg-cyan-glow/15 text-cyan-glow border-cyan-glow/60"
-                  : "text-cyan-glow/60 hover:text-cyan-glow",
-              )}
-            >
-              {m}
-            </button>
-          ))}
-          <button
-            type="button"
-            onMouseEnter={() => sfx.hover()}
-            onClick={() => {
-              sfx.select();
-              toggleHud();
-            }}
-            className="ml-2 px-2 py-1 text-cyan-glow/40 hover:text-cyan-glow transition-colors"
-            title="Cycle HUD"
-          >
-            ↻
-          </button>
+    <div className="pointer-events-none fixed bottom-3 left-1/2 -translate-x-1/2 z-30 w-[min(96vw,1480px)]">
+      {/* Top rails row — sits above the plate */}
+      <div className="pointer-events-auto flex items-center justify-between px-6 mb-1.5 font-mono text-[10px] uppercase tracking-tactical relative">
+        <div className="flex items-center gap-2 text-cyan-glow/70">
+          {/* placeholder so center chevrons stay truly centered */}
+          <span className="opacity-0 select-none">.</span>
         </div>
 
-        {/* Status badge — tactical posture indicator */}
+        {/* Centered glowing-orange chevron mode switcher */}
+        <div className="absolute left-1/2 -translate-x-1/2 -top-1 flex items-center gap-3 pointer-events-auto">
+          <ChevronModeButton
+            direction="up"
+            disabled={hudMode === "expanded"}
+            onClick={() => {
+              sfx.select();
+              setHudMode(hudMode === "minimized" ? "standard" : "expanded");
+            }}
+            label="Expand HUD"
+          />
+          <ChevronModeButton
+            direction="down"
+            disabled={hudMode === "minimized"}
+            onClick={() => {
+              sfx.select();
+              setHudMode(hudMode === "expanded" ? "standard" : "minimized");
+            }}
+            label="Minimize HUD"
+          />
+        </div>
+
         <div className="flex items-center gap-2 text-cyan-glow/70">
           <span className="inline-block w-1.5 h-1.5 rounded-full bg-teal-glow shadow-[0_0_10px_#3CFFD2]" />
           <span>posture</span>
-          <span className="text-white">
-            {focusedGalaxy ? focusedGalaxy : "universe"}
-          </span>
+          <span className="text-white">{focusedGalaxy ? focusedGalaxy : "universe"}</span>
         </div>
       </div>
 
+      {/* Bezel wrapper — holds bezel and an unclipped caption strip */}
+      <div className="relative">
+        {/* Brand caption — floats above clipped bezel */}
+        <div className="pointer-events-none absolute left-1/2 -translate-x-1/2 -top-2.5 z-30">
+          <div className="caption-strip">NORTH SKY · COMMAND</div>
+        </div>
+
+      {/* Command bezel */}
       <div
         className={clsx(
-          "pointer-events-auto metallic-plate clip-corner relative",
+          "pointer-events-auto command-bezel clip-corner-md relative",
           "transition-[height,padding,opacity] duration-500 ease-[cubic-bezier(0.16,1,0.3,1)]",
         )}
       >
-        <span className="reticle opacity-40" />
 
         {/* Body */}
         {hudMode === "minimized" && (
@@ -115,10 +118,26 @@ export function HUD() {
           </div>
         )}
 
+        {/* Decorative rivets along bezel edges */}
         {hudMode !== "minimized" && (
-          <div className="flex items-center px-6 py-5 gap-6">
-            {/* Left rail: Dyson + identity */}
-            <div className="flex items-center gap-4">
+          <>
+            <span className="rivet" style={{ left: 8, top: 8 }} />
+            <span className="rivet" style={{ right: 8, top: 8 }} />
+            <span className="rivet" style={{ left: 8, bottom: 8 }} />
+            <span className="rivet" style={{ right: 8, bottom: 8 }} />
+            <span className="rivet" style={{ left: "25%", top: 8 }} />
+            <span className="rivet" style={{ left: "50%", top: 8 }} />
+            <span className="rivet" style={{ left: "75%", top: 8 }} />
+            <span className="rivet" style={{ left: "25%", bottom: 8 }} />
+            <span className="rivet" style={{ left: "50%", bottom: 8 }} />
+            <span className="rivet" style={{ left: "75%", bottom: 8 }} />
+          </>
+        )}
+
+        {hudMode !== "minimized" && (
+          <div className="flex items-stretch px-6 py-3 gap-4">
+            {/* Left bay: Dyson + identity */}
+            <div className="flex items-center gap-4 pr-2">
               <DysonCore size={56} />
               <div className="hidden lg:block">
                 <div className="font-display text-[11px] uppercase tracking-tactical text-cyan-glow/70">
@@ -127,14 +146,20 @@ export function HUD() {
                 <div className="font-mono text-[10px] text-white/50">
                   Operator · Billy Keesee
                 </div>
+                <div className="mt-1 inline-flex items-center gap-1 px-1.5 py-0.5 border border-cyan-glow/20 bg-black/40 rounded-sm">
+                  <span className="w-1 h-1 rounded-full bg-teal-glow shadow-[0_0_6px_#3CFFD2]" />
+                  <span className="font-mono text-[8px] uppercase tracking-[0.24em] text-teal-glow">
+                    online
+                  </span>
+                </div>
               </div>
             </div>
 
-            <span className="h-14 w-px bg-cyan-glow/15" />
+            <Divider />
 
-            {/* Core gauges */}
-            <div className="flex items-center gap-6">
-              <Gauge label="Total" value={total} tone="cyan" />
+            {/* Gauge bay — three core telemetry gauges */}
+            <div className="gauge-bay px-4 py-2 rounded-[2px] flex items-center gap-3">
+              <Gauge label="Total" value={total} tone="cyan" rainbow />
               <Gauge
                 label="Gmail"
                 value={googleToken ? unreadCount : "—"}
@@ -161,54 +186,39 @@ export function HUD() {
               />
             </div>
 
-            {/* Galaxy widgets — only in expanded mode */}
+            {/* Galaxy circular widgets — only in expanded */}
             {hudMode === "expanded" && (
               <>
-                <span className="h-14 w-px bg-cyan-glow/15" />
-                <div className="flex-1 grid grid-cols-7 gap-2 min-w-0">
-                  {GALAXIES.map((g) => (
-                    <button
-                      key={g}
-                      type="button"
-                      onMouseEnter={() => sfx.hover()}
-                      onClick={() => {
-                        sfx.select();
-                        enterGalaxy(focusedGalaxy === g ? null : g);
-                      }}
-                      className={clsx(
-                        "relative group flex flex-col items-center justify-center gap-1.5 py-2.5 px-2 rounded-sm",
-                        "border border-white/5 bg-black/30 backdrop-blur-sm",
-                        "transition-all duration-300",
-                        focusedGalaxy === g
-                          ? "border-cyan-glow/70 bg-cyan-glow/10 glow-cyan"
-                          : "hover:border-cyan-glow/30 hover:bg-white/5",
-                      )}
-                    >
-                      <div
-                        className="w-2.5 h-2.5 rounded-full"
-                        style={{
-                          background: GALAXY_COLORS[g],
-                          boxShadow: `0 0 10px ${GALAXY_COLORS[g]}`,
+                <Divider />
+                <div className="flex-1 flex items-center justify-around gap-2 min-w-0 px-1">
+                  {GALAXIES.map((g) => {
+                    const c = GALAXY_COLORS[g];
+                    const rgb = hexToRgbTriplet(c);
+                    const active = focusedGalaxy === g;
+                    const cnt = counts[g];
+                    return (
+                      <CircleWidget
+                        key={g}
+                        label={GALAXY_SHORT[g]}
+                        value={cnt}
+                        color={c}
+                        rgb={rgb}
+                        active={active}
+                        onMouseEnter={() => sfx.hover()}
+                        onClick={() => {
+                          sfx.select();
+                          enterGalaxy(active ? null : g);
                         }}
                       />
-                      <div className="font-display text-[10px] uppercase tracking-tactical text-white/80 leading-tight text-center">
-                        {g}
-                      </div>
-                      <div className="font-mono text-sm text-white">{counts[g]}</div>
-                      <div className="absolute top-1 right-1 font-mono text-[10px] text-white/30">
-                        {GALAXY_GLYPH[g]}
-                      </div>
-                    </button>
-                  ))}
+                    );
+                  })}
                 </div>
               </>
             )}
 
-            {/* Right rail: utilities + LUMINA orb */}
-            <span className="h-14 w-px bg-cyan-glow/15" />
+            {/* Right bay: utilities + Orb */}
+            <Divider />
             <div className="flex items-center gap-3">
-              {/* Mic placeholder — bible: "one-shot mic affordance placeholder
-                  or disabled state for future voice" */}
               <button
                 type="button"
                 disabled
@@ -220,7 +230,6 @@ export function HUD() {
                   <path d="M3 8a5 5 0 0010 0M8 13v2" stroke="currentColor" strokeLinecap="round" />
                 </svg>
               </button>
-              {/* Map */}
               <button
                 type="button"
                 onMouseEnter={() => sfx.hover()}
@@ -246,12 +255,123 @@ export function HUD() {
                   <path d="M6 2.5v9.5M10 4v9.5" stroke="currentColor" strokeWidth={1.2} />
                 </svg>
               </button>
-
               <Orb size={44} />
             </div>
           </div>
         )}
       </div>
+      </div>
     </div>
+  );
+}
+
+function Divider() {
+  return (
+    <span
+      className="w-px self-stretch"
+      style={{
+        background:
+          "linear-gradient(180deg, transparent 0%, rgba(91,243,255,0.25) 30%, rgba(91,243,255,0.25) 70%, transparent 100%)",
+      }}
+    />
+  );
+}
+
+function hexToRgbTriplet(hex: string): string {
+  const h = hex.replace("#", "");
+  const n = h.length === 3 ? h.split("").map((c) => c + c).join("") : h;
+  const r = parseInt(n.slice(0, 2), 16);
+  const g = parseInt(n.slice(2, 4), 16);
+  const b = parseInt(n.slice(4, 6), 16);
+  return `${r} ${g} ${b}`;
+}
+
+/**
+ * Glowing neon-orange chevron button — beveled arrow with inner highlight
+ * and outer halo. Used for the HUD expand/minimize control at the top center.
+ */
+function ChevronModeButton({
+  direction,
+  disabled,
+  onClick,
+  label,
+}: {
+  direction: "up" | "down";
+  disabled?: boolean;
+  onClick: () => void;
+  label: string;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={disabled ? undefined : onClick}
+      onMouseEnter={() => sfx.hover()}
+      aria-label={label}
+      title={label}
+      className={clsx(
+        "group relative inline-flex items-center justify-center w-14 h-10",
+        "transition-all duration-200",
+        disabled
+          ? "opacity-25 cursor-default"
+          : "opacity-100 hover:scale-110 cursor-pointer",
+      )}
+    >
+      <svg
+        viewBox="0 0 40 28"
+        width="56"
+        height="40"
+        className={clsx(
+          "overflow-visible",
+          direction === "down" && "rotate-180",
+        )}
+        aria-hidden
+      >
+        <defs>
+          <linearGradient id={`chev-fill-${direction}`} x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stopColor="#FFD27A" />
+            <stop offset="45%" stopColor="#FFA73A" />
+            <stop offset="100%" stopColor="#E06A00" />
+          </linearGradient>
+          <linearGradient id={`chev-edge-${direction}`} x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stopColor="#FFE5B4" />
+            <stop offset="100%" stopColor="#FF8A1F" />
+          </linearGradient>
+          <filter id={`chev-glow-${direction}`} x="-60%" y="-60%" width="220%" height="220%">
+            <feGaussianBlur stdDeviation="2.4" result="b1" />
+            <feGaussianBlur in="SourceGraphic" stdDeviation="5" result="b2" />
+            <feMerge>
+              <feMergeNode in="b2" />
+              <feMergeNode in="b1" />
+              <feMergeNode in="SourceGraphic" />
+            </feMerge>
+          </filter>
+        </defs>
+        {/* Outer soft halo */}
+        <path
+          d="M4 22 L20 6 L36 22 L30 22 L20 12 L10 22 Z"
+          fill="#FF7A14"
+          opacity="0.55"
+          filter={`url(#chev-glow-${direction})`}
+        />
+        {/* Body */}
+        <path
+          d="M5 21 L20 7 L35 21 L29 21 L20 12.5 L11 21 Z"
+          fill={`url(#chev-fill-${direction})`}
+          stroke={`url(#chev-edge-${direction})`}
+          strokeWidth="0.8"
+          strokeLinejoin="round"
+        />
+        {/* Inner highlight stripe */}
+        <path
+          d="M9 19.5 L20 9 L31 19.5"
+          fill="none"
+          stroke="#FFF1CC"
+          strokeWidth="0.9"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          opacity="0.85"
+        />
+      </svg>
+    </button>
   );
 }

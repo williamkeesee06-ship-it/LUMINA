@@ -73,7 +73,7 @@
   /* Metallic surface for HUD plates */
   .metallic-plate {
     background:
-      linear-gradient(180deg, rgba(20, 27, 43, 0.92) 0%, rgba(10, 15, 26, 0.96) 100%),
+      linear-gradient(180deg, rgba(14, 19, 30, 0.96) 0%, rgba(5, 8, 14, 0.98) 100%),
       linear-gradient(135deg, rgba(91, 243, 255, 0.04) 0%, rgba(91, 243, 255, 0) 60%);
     border: 1px solid rgba(91, 243, 255, 0.18);
     box-shadow:
@@ -88,6 +88,293 @@
     background: linear-gradient(180deg, rgba(20, 27, 43, 0.7) 0%, rgba(10, 15, 26, 0.82) 100%);
     border: 1px solid rgba(91, 243, 255, 0.1);
     backdrop-filter: blur(8px);
+  }
+
+  /* Luxury dark-metal panel — driven by --panel-accent CSS var */
+  .panel-luxe {
+    --panel-accent: 91 243 255;
+    background:
+      radial-gradient(120% 60% at 0% 0%, rgba(var(--panel-accent), 0.06), transparent 60%),
+      radial-gradient(80% 40% at 100% 100%, rgba(var(--panel-accent), 0.04), transparent 70%),
+      linear-gradient(180deg, #0a0d14 0%, #04060a 100%);
+    border: 1px solid rgba(var(--panel-accent), 0.22);
+    box-shadow:
+      0 0 0 1px rgba(255, 255, 255, 0.02) inset,
+      0 1px 0 rgba(255, 255, 255, 0.05) inset,
+      0 30px 80px -40px rgba(var(--panel-accent), 0.35),
+      0 0 60px -20px rgba(var(--panel-accent), 0.18);
+    backdrop-filter: blur(10px) saturate(120%);
+  }
+  .panel-luxe::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    background:
+      linear-gradient(180deg, rgba(var(--panel-accent), 0.55) 0%, rgba(var(--panel-accent), 0) 1px) top/100% 1px no-repeat,
+      linear-gradient(0deg, rgba(var(--panel-accent), 0.25) 0%, rgba(var(--panel-accent), 0) 1px) bottom/100% 1px no-repeat;
+    box-shadow: inset 0 0 60px -28px rgba(var(--panel-accent), 0.25);
+  }
+
+  .panel-tile {
+    background:
+      linear-gradient(180deg, rgba(20, 27, 43, 0.55) 0%, rgba(8, 12, 20, 0.78) 100%);
+    border: 1px solid rgba(var(--panel-accent), 0.14);
+    border-top: 1px solid rgba(var(--panel-accent), 0.42);
+    transition: border-color 160ms ease, box-shadow 160ms ease, transform 160ms ease;
+  }
+  .panel-tile:hover {
+    border-color: rgba(var(--panel-accent), 0.32);
+    border-top-color: rgba(var(--panel-accent), 0.7);
+    box-shadow: 0 8px 24px -16px rgba(var(--panel-accent), 0.55);
+  }
+
+  .panel-row {
+    position: relative;
+    border-left: 1px solid transparent;
+    transition: background 140ms ease, border-color 140ms ease;
+  }
+  .panel-row:hover {
+    background: linear-gradient(90deg, rgba(var(--panel-accent), 0.08), transparent 70%);
+    border-left-color: rgba(var(--panel-accent), 0.7);
+  }
+
+  /* Section bracket label */
+  .section-bracket {
+    @apply font-display uppercase tracking-tactical text-[10px];
+    color: rgb(var(--panel-accent));
+    text-shadow: 0 0 10px rgba(var(--panel-accent), 0.45);
+  }
+
+  /* Tactical micro-bar (left rail under section title) */
+  .section-rail {
+    height: 1px;
+    background: linear-gradient(
+      90deg,
+      rgba(var(--panel-accent), 0.7) 0%,
+      rgba(var(--panel-accent), 0.18) 30%,
+      rgba(var(--panel-accent), 0) 100%
+    );
+  }
+
+  /* Hero work order numeric display */
+  .work-order-hero {
+    font-family: "JetBrains Mono", ui-monospace, monospace;
+    color: #ffffff;
+    letter-spacing: 0.08em;
+    text-shadow:
+      0 0 12px rgba(var(--panel-accent), 0.6),
+      0 0 28px rgba(var(--panel-accent), 0.35);
+  }
+
+  .neon-dot {
+    background: rgb(var(--panel-accent));
+    box-shadow:
+      0 0 8px rgba(var(--panel-accent), 0.9),
+      0 0 16px rgba(var(--panel-accent), 0.5);
+  }
+
+  /* Industrial command bezel — dark stainless steel + carbon fiber. */
+  .command-bezel {
+    position: relative;
+    background:
+      /* carbon-fiber weave: tiny diagonal cross-hatch */
+      repeating-linear-gradient(45deg,
+        rgba(255,255,255,0.018) 0px,
+        rgba(255,255,255,0.018) 1px,
+        transparent 1px,
+        transparent 3px),
+      repeating-linear-gradient(-45deg,
+        rgba(0,0,0,0.35) 0px,
+        rgba(0,0,0,0.35) 1px,
+        transparent 1px,
+        transparent 3px),
+      /* stainless-steel vertical brushed sheen */
+      repeating-linear-gradient(180deg,
+        rgba(255,255,255,0.022) 0px,
+        rgba(255,255,255,0.022) 1px,
+        transparent 1px,
+        transparent 2px),
+      /* base steel gradient */
+      linear-gradient(180deg, #1d2230 0%, #131826 35%, #0b0f1a 65%, #0e1320 100%);
+    border: 1px solid rgba(91, 243, 255, 0.22);
+    border-top: 1px solid rgba(255, 255, 255, 0.12);
+    box-shadow:
+      0 1px 0 rgba(255, 255, 255, 0.08) inset,
+      0 -1px 0 rgba(0, 0, 0, 0.7) inset,
+      0 0 0 1px rgba(0, 0, 0, 0.5),
+      0 30px 80px -36px rgba(0, 217, 245, 0.32),
+      0 0 60px -18px rgba(91, 243, 255, 0.2);
+  }
+  .command-bezel::before {
+    /* horizontal brushed-metal highlight band on top */
+    content: "";
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    background:
+      linear-gradient(180deg,
+        rgba(255,255,255,0.06) 0%,
+        rgba(255,255,255,0) 18%,
+        rgba(0,0,0,0) 60%,
+        rgba(0,0,0,0.35) 100%);
+  }
+  .command-bezel::after {
+    /* top luminous edge */
+    content: "";
+    position: absolute;
+    left: 0; right: 0; top: 0; height: 1px;
+    background: linear-gradient(90deg,
+      transparent 0%,
+      rgba(91, 243, 255, 0.7) 25%,
+      rgba(91, 243, 255, 0.7) 75%,
+      transparent 100%);
+    box-shadow: 0 0 14px rgba(91, 243, 255, 0.55);
+  }
+
+  /* Sparkle flicker — for Lumina inner particles */
+  @keyframes sparkle-flicker {
+    0%, 100% { opacity: 0.95; transform: scale(1); }
+    25% { opacity: 0.4; transform: scale(0.7); }
+    50% { opacity: 1; transform: scale(1.25); }
+    75% { opacity: 0.55; transform: scale(0.85); }
+  }
+
+  /* Rainbow spin — for the TOTAL gauge ring */
+  .rainbow-spin {
+    animation: rainbow-spin 8s linear infinite;
+  }
+  .rainbow-spin-2 {
+    animation: rainbow-spin 12s linear infinite reverse;
+  }
+  @keyframes rainbow-spin {
+    0% { transform: rotate(0deg); }
+    100% { transform: rotate(360deg); }
+  }
+
+  /* Rivets — decorative metal heads along bezel edges */
+  .rivet {
+    position: absolute;
+    width: 7px;
+    height: 7px;
+    border-radius: 999px;
+    background:
+      radial-gradient(circle at 32% 30%, #e8edf5 0%, #8b94a3 30%, #2a3140 70%, #0a0d14 100%);
+    box-shadow:
+      inset 0 1px 0 rgba(255,255,255,0.4),
+      inset 0 -1px 0 rgba(0,0,0,0.7),
+      0 0 2px rgba(0,0,0,0.8);
+    pointer-events: none;
+  }
+
+  /* Circular galaxy widget gauge — bright neon ring + dark metal core */
+  .circle-widget {
+    --widget-accent: 91 243 255;
+    position: relative;
+    width: 78px;
+    height: 78px;
+    border-radius: 999px;
+    background:
+      radial-gradient(circle at 50% 35%, #1a2030 0%, #0a0e18 55%, #03050a 100%);
+    box-shadow:
+      /* outer bright neon halo */
+      0 0 0 2px rgba(var(--widget-accent), 0.95),
+      0 0 12px 2px rgba(var(--widget-accent), 0.85),
+      0 0 26px 4px rgba(var(--widget-accent), 0.55),
+      0 0 48px 6px rgba(var(--widget-accent), 0.3),
+      /* inset bezel */
+      inset 0 1px 0 rgba(255,255,255,0.12),
+      inset 0 -1px 0 rgba(0,0,0,0.7),
+      inset 0 0 14px rgba(0,0,0,0.6);
+    transition: transform 180ms ease, box-shadow 180ms ease;
+    cursor: pointer;
+  }
+  .circle-widget:hover {
+    transform: translateY(-1px) scale(1.03);
+    box-shadow:
+      0 0 0 2px rgba(var(--widget-accent), 1),
+      0 0 18px 3px rgba(var(--widget-accent), 1),
+      0 0 38px 6px rgba(var(--widget-accent), 0.7),
+      0 0 64px 10px rgba(var(--widget-accent), 0.4),
+      inset 0 1px 0 rgba(255,255,255,0.16),
+      inset 0 -1px 0 rgba(0,0,0,0.7),
+      inset 0 0 14px rgba(0,0,0,0.6);
+  }
+  .circle-widget.is-active {
+    box-shadow:
+      0 0 0 2.5px rgba(var(--widget-accent), 1),
+      0 0 24px 4px rgba(var(--widget-accent), 1),
+      0 0 56px 10px rgba(var(--widget-accent), 0.6),
+      inset 0 0 26px rgba(var(--widget-accent), 0.3),
+      inset 0 1px 0 rgba(255,255,255,0.16);
+  }
+
+  /* Recessed gauge bay — dark inset region housing a cluster of gauges */
+  .gauge-bay {
+    background:
+      radial-gradient(120% 120% at 50% 0%, rgba(0,0,0,0.45), transparent 70%),
+      linear-gradient(180deg, #04060c 0%, #0a0e18 100%);
+    border: 1px solid rgba(91, 243, 255, 0.1);
+    box-shadow:
+      inset 0 2px 6px rgba(0, 0, 0, 0.6),
+      inset 0 -1px 0 rgba(255, 255, 255, 0.04);
+  }
+
+  /* Brand caption strip — small NORTH SKY style label */
+  .caption-strip {
+    @apply font-display uppercase tracking-[0.32em] text-[9px] text-cyan-glow/80;
+    text-shadow: 0 0 8px rgba(91, 243, 255, 0.55);
+    background: linear-gradient(180deg, rgba(0,0,0,0.6), rgba(0,0,0,0.3));
+    border: 1px solid rgba(91, 243, 255, 0.22);
+    padding: 2px 8px;
+    border-radius: 1px;
+  }
+
+  /* Stat tile — tactical readout card with chunky frame */
+  .stat-tile {
+    --tile-accent: 91 243 255;
+    position: relative;
+    background:
+      radial-gradient(80% 60% at 50% 0%, rgba(var(--tile-accent), 0.06), transparent 70%),
+      linear-gradient(180deg, #0c111c 0%, #050810 100%);
+    border: 1px solid rgba(var(--tile-accent), 0.22);
+    box-shadow:
+      inset 0 1px 0 rgba(255, 255, 255, 0.05),
+      inset 0 -1px 0 rgba(0, 0, 0, 0.6),
+      0 6px 20px -10px rgba(var(--tile-accent), 0.4);
+    transition: border-color 160ms ease, box-shadow 160ms ease, transform 160ms ease;
+  }
+  .stat-tile:hover {
+    border-color: rgba(var(--tile-accent), 0.55);
+    box-shadow:
+      inset 0 1px 0 rgba(255, 255, 255, 0.08),
+      0 8px 28px -10px rgba(var(--tile-accent), 0.55);
+    transform: translateY(-1px);
+  }
+  .stat-tile.is-active {
+    border-color: rgba(var(--tile-accent), 0.85);
+    box-shadow:
+      inset 0 0 22px -6px rgba(var(--tile-accent), 0.55),
+      0 0 28px -4px rgba(var(--tile-accent), 0.7);
+  }
+  .stat-tile::before {
+    /* top glow strip on each tile */
+    content: "";
+    position: absolute;
+    left: 6px; right: 6px; top: 0; height: 1px;
+    background: rgba(var(--tile-accent), 0.55);
+    box-shadow: 0 0 8px rgba(var(--tile-accent), 0.7);
+  }
+
+  .clip-corner-md {
+    clip-path: polygon(
+      10px 0,
+      100% 0,
+      100% calc(100% - 10px),
+      calc(100% - 10px) 100%,
+      0 100%,
+      0 10px
+    );
   }
 
   /* Neon focus ring */
