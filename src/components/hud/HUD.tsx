@@ -638,8 +638,8 @@ function HUDHorizontal() {
         >
           {hudMode === "minimized" && (
             <div className="flex items-center justify-between px-6 py-4">
-              <div className="flex items-center gap-4">
-                <Orb size={36} />
+              <div className="flex items-center gap-3">
+                <DysonSphereHero size={48} />
                 <div className="font-display text-xs uppercase tracking-tactical text-cyan-glow/70">
                   LUMINA · standby
                 </div>
@@ -662,15 +662,45 @@ function HUDHorizontal() {
               <span className="rivet" style={{ left: "75%", bottom: 8 }} />
 
               <div className="flex items-stretch px-6 py-3 gap-4">
-                {/* Left bay: LUMINA orb is hero, reset core demoted next to it */}
-                <div className="flex items-center gap-3 pr-2">
-                  <Orb size={56} />
-                  <div className="hidden lg:block">
-                    <div className="font-display text-[11px] uppercase tracking-tactical text-cyan-glow">
-                      LUMINA V3
+                {/* Left bay: LUMINA Dyson sphere hero matches vertical mode */}
+                <button
+                  type="button"
+                  onMouseEnter={() => sfx.hover()}
+                  onClick={() => {
+                    sfx.wake();
+                    useUI.getState().setChatOpen(
+                      !useUI.getState().isChatOpen,
+                    );
+                  }}
+                  title="Wake LUMINA"
+                  aria-label="Wake LUMINA"
+                  className="flex items-center gap-3 pr-2 transition-transform hover:scale-[1.02] active:scale-[0.98]"
+                >
+                  <DysonSphereHero size={68} />
+                  <div className="hidden lg:block text-left">
+                    <div
+                      className="font-display"
+                      style={{
+                        fontSize: 14,
+                        fontWeight: 700,
+                        letterSpacing: "0.18em",
+                        color: "#ffffff",
+                        textShadow:
+                          "0 0 4px #5BF3FF, 0 0 9px rgba(91,243,255,0.7)",
+                      }}
+                    >
+                      LUMINA
                     </div>
-                    <div className="font-mono text-[10px] text-white/50">
-                      Operator · Billy Keesee
+                    <div
+                      className="font-mono uppercase"
+                      style={{
+                        fontSize: 7.5,
+                        letterSpacing: "0.32em",
+                        color: "rgba(91,243,255,0.75)",
+                        textShadow: "0 0 3px rgba(91,243,255,0.55)",
+                      }}
+                    >
+                      tactical AI core
                     </div>
                     <div className="mt-1 inline-flex items-center gap-1 px-1.5 py-0.5 border border-cyan-glow/20 bg-black/40 rounded-sm">
                       <span className="w-1 h-1 rounded-full bg-teal-glow shadow-[0_0_6px_#3CFFD2]" />
@@ -679,7 +709,7 @@ function HUDHorizontal() {
                       </span>
                     </div>
                   </div>
-                </div>
+                </button>
 
                 <Divider />
 
@@ -745,22 +775,24 @@ function HUDHorizontal() {
                 {/* Solid divider to kill ghost-icon bleed */}
                 <Divider strong />
                 <div className="flex items-center gap-3">
-                  <UtilityButton
+                  <LabeledUtility
+                    label="RESET"
                     title="Return to Universe"
                     onClick={() => {
                       sfx.confirm();
                       useUI.getState().resetToUniverse();
                     }}
                   >
-                    <DysonCore size={32} />
-                  </UtilityButton>
-                  <UtilityButton
+                    <DysonCore size={28} />
+                  </LabeledUtility>
+                  <LabeledUtility
+                    label="VOICE"
                     title="Voice — reserved for V3 phase two"
-                    disabled
                   >
-                    <NeonMicIcon size={18} dim />
-                  </UtilityButton>
-                  <UtilityButton
+                    <ActiveMicIcon size={20} />
+                  </LabeledUtility>
+                  <LabeledUtility
+                    label={isMapOpen ? "WARP" : "MAP"}
                     title={
                       isMapOpen
                         ? "Warp out to universe"
@@ -781,8 +813,8 @@ function HUDHorizontal() {
                       mapTransition === "diving" || mapTransition === "rising"
                     }
                   >
-                    <NeonGlobeIcon size={20} active={isMapOpen} />
-                  </UtilityButton>
+                    <NeonGlobeV2 size={22} active={isMapOpen} />
+                  </LabeledUtility>
                 </div>
               </div>
             </>
