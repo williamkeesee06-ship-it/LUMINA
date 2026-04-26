@@ -43,6 +43,10 @@ export function UniverseScene() {
 
   const focusedJobs = focusedGalaxy ? jobs.filter((j) => j.status === focusedGalaxy) : [];
 
+  // When inspecting a planet (job card open), dim everything that isn't
+  // the selected planet so the user's focus snaps to it + the intel panel.
+  const isPlanetView = viewMode === "planet";
+
   return (
     <div className="absolute inset-0" style={{ zIndex: 0 }}>
     <Canvas
@@ -63,17 +67,17 @@ export function UniverseScene() {
 
       <CameraRig />
       {/* Far star field — dense pinpoint stars filling the sky */}
-      <Stardust count={1100} radius={95} />
+      <Stardust count={1100} radius={95} dim={isPlanetView} />
       {/* Near twinkle layer — closer, brighter motes that drift past camera */}
-      <Stardust count={350} radius={45} />
+      <Stardust count={350} radius={45} dim={isPlanetView} />
       {/* Cosmic dust / swirl — blends galaxies into surrounding space */}
-      <CosmicDust perGalaxy={260} ambient={900} />
+      <CosmicDust perGalaxy={260} ambient={900} dim={isPlanetView} />
 
       {/* Universe layer — always render, fade out when entering galaxy */}
       <Suspense fallback={null}>
         {GALAXIES.map((g) => {
           const isFocused = focusedGalaxy === g;
-          const isDimmed = focusedGalaxy !== null && !isFocused;
+          const isDimmed = (focusedGalaxy !== null && !isFocused) || (isPlanetView && !isFocused);
           const insideThis = isFocused && viewMode !== "universe";
           return (
             <GalaxyCluster
@@ -99,6 +103,7 @@ export function UniverseScene() {
           <PlanetField
             jobs={focusedJobs}
             selectedJobId={selectedJobId}
+            focusMode={isPlanetView}
             onSelect={(id) => {
               sfx.select();
               selectJob(id);

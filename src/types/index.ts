@@ -94,7 +94,37 @@ export interface Job {
   satellitesLoaded: boolean;
   moonsLoaded: boolean;
   driveFolderId?: string | null;
+  /**
+   * Per-job operational checklist. Five fixed items, persisted client-side
+   * for now. Later: persist to Smartsheet.
+   */
+  checklist?: JobChecklist;
 }
+
+/** Five fixed jobsite checklist items. */
+export interface JobChecklist {
+  trafficControl: boolean;
+  preCon: boolean;
+  jobStart: boolean;
+  routedSrpRtasq: boolean;
+  hsr: boolean;
+}
+
+export const CHECKLIST_LABELS: Record<keyof JobChecklist, string> = {
+  trafficControl: "Traffic Control Req",
+  preCon: "Pre-Con",
+  jobStart: "Job Start",
+  routedSrpRtasq: "Routed in SRP/RTASQ",
+  hsr: "HSR",
+};
+
+export const DEFAULT_CHECKLIST: JobChecklist = {
+  trafficControl: false,
+  preCon: false,
+  jobStart: false,
+  routedSrpRtasq: false,
+  hsr: false,
+};
 
 export interface RouteState {
   visible: boolean;

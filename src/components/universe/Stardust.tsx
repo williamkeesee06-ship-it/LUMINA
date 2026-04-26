@@ -5,13 +5,15 @@ import * as THREE from "three";
 interface Props {
   count?: number;
   radius?: number;
+  /** When true, reduce opacity for the cinematic planet-focus mode. */
+  dim?: boolean;
 }
 
 /**
  * Subtle stardust field. Far from cluttered — sparse, calm, atmospheric.
  * Bible-approved ingredient: "Subtle stardust fields."
  */
-export function Stardust({ count = 1400, radius = 90 }: Props) {
+export function Stardust({ count = 1400, radius = 90, dim = false }: Props) {
   const ref = useRef<THREE.Points>(null);
   const matRef = useRef<THREE.PointsMaterial>(null);
 
@@ -56,7 +58,10 @@ export function Stardust({ count = 1400, radius = 90 }: Props) {
     // Gentle twinkle on the stardust as a whole — opacity oscillates softly
     // so the field feels alive without becoming distracting.
     if (matRef.current) {
-      matRef.current.opacity = 0.78 + Math.sin(state.clock.elapsedTime * 1.4) * 0.08;
+      const base = 0.78 + Math.sin(state.clock.elapsedTime * 1.4) * 0.08;
+      const target = dim ? base * 0.18 : base;
+      // Smoothly lerp toward target so transitions feel cinematic.
+      matRef.current.opacity += (target - matRef.current.opacity) * Math.min(1, delta * 4);
     }
   });
 

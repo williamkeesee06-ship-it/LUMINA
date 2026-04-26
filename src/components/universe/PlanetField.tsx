@@ -9,6 +9,8 @@ interface Props {
   jobs: Job[];
   selectedJobId: string | null;
   onSelect: (id: string) => void;
+  /** When true, planets that aren't selected fade hard so the focus is the selected planet. */
+  focusMode?: boolean;
 }
 
 /**
@@ -19,7 +21,7 @@ interface Props {
  * metal sphere wrapped by a glowing status-tinted halo, like a Saturn ring
  * lit from within.
  */
-export function PlanetField({ jobs, selectedJobId, onSelect }: Props) {
+export function PlanetField({ jobs, selectedJobId, onSelect, focusMode = false }: Props) {
   const layout = useMemo(() => {
     const n = jobs.length || 1;
     // Wider radius for crowded clusters — keeps rings from overlapping at high job counts.
@@ -71,6 +73,7 @@ export function PlanetField({ jobs, selectedJobId, onSelect }: Props) {
           tiltDeg={p.tilt}
           label={p.label}
           selected={selectedJobId === p.id}
+          dim={focusMode && selectedJobId !== p.id}
           phase={i * 0.13}
           onSelect={() => onSelect(p.id)}
         />
@@ -85,6 +88,7 @@ function Planet({
   tiltDeg,
   label,
   selected,
+  dim = false,
   phase,
   onSelect,
 }: {
@@ -93,6 +97,7 @@ function Planet({
   tiltDeg: number;
   label: string;
   selected: boolean;
+  dim?: boolean;
   phase: number;
   onSelect: () => void;
 }) {
@@ -117,11 +122,13 @@ function Planet({
     }
     if (ringRef.current) {
       const m = ringRef.current.material as THREE.MeshBasicMaterial;
-      m.opacity = (selected ? 1.0 : 0.95) + Math.sin(t * 1.5) * 0.04;
+      const tgt = (dim ? 0.18 : selected ? 1.0 : 0.95) + Math.sin(t * 1.5) * 0.04;
+      m.opacity += (tgt - m.opacity) * Math.min(1, delta * 5);
     }
     if (ringGlowRef.current) {
       const m = ringGlowRef.current.material as THREE.MeshBasicMaterial;
-      m.opacity = (selected ? 0.7 : 0.55) + Math.sin(t * 1.2) * 0.08;
+      const tgt = (dim ? 0.08 : selected ? 0.7 : 0.55) + Math.sin(t * 1.2) * 0.08;
+      m.opacity += (tgt - m.opacity) * Math.min(1, delta * 5);
     }
     if (lockRef.current) {
       lockRef.current.rotation.z += delta * 0.6;
@@ -235,7 +242,7 @@ function Planet({
       </group>
 
       {/* Neon ID tag — dark pill with luminous border + matching neon text */}
-      <group ref={labelRef} position={[0, 0.95, 0]}>
+      <group ref={labelRef} position={[0, 0.95, 0]} visible={!dim}>
         <Billboard>
           <NeonTag label={label} color={color} selected={selected} />
         </Billboard>

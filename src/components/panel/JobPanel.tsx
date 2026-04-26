@@ -4,6 +4,7 @@ import { GALAXY_COLORS } from "@/lib/statusMap";
 import { listDrive, searchGmail } from "@/lib/api";
 import { sfx } from "@/lib/audio";
 import { requestGoogleToken } from "@/lib/googleAuth";
+import { CHECKLIST_LABELS, type JobChecklist } from "@/types";
 
 /**
  * Job intelligence panel — luxurious dark metal w/ neon data readouts.
@@ -17,6 +18,7 @@ export function JobPanel() {
   const setGoogleToken = useUI((s) => s.setGoogleToken);
   const attachSatellites = useUI((s) => s.attachSatellites);
   const attachMoons = useUI((s) => s.attachMoons);
+  const toggleChecklistItem = useUI((s) => s.toggleChecklistItem);
 
   const job = useMemo(
     () => (selectedJobId ? jobs.find((j) => j.id === selectedJobId) : undefined),
@@ -56,11 +58,7 @@ export function JobPanel() {
 
         {/* Header */}
         <header className="relative px-6 pt-5 pb-4">
-          <div className="flex items-center justify-between mb-3">
-            <div className="flex items-center gap-2">
-              <span className="neon-dot w-1.5 h-1.5 rounded-full" />
-              <span className="section-bracket">// job intelligence</span>
-            </div>
+          <div className="flex items-center justify-end mb-3">
             <button
               type="button"
               onMouseEnter={() => sfx.hover()}
@@ -114,19 +112,10 @@ export function JobPanel() {
           <Section label="coordinates">
             {job.fullAddress ? (
               <div className="space-y-1">
-                <div className="text-[15px] text-white/95 font-medium">{job.address}</div>
-                <div className="text-white/55 text-xs font-mono uppercase tracking-wide">
+                <div className="text-[17px] text-white/95 font-medium leading-snug">{job.address}</div>
+                <div className="text-white/65 text-sm font-mono uppercase tracking-wide">
                   {[job.city, job.zip].filter(Boolean).join(" · ")}
                 </div>
-                {job.coords && (
-                  <div className="font-mono text-[10px] text-white/45 mt-1.5 flex items-center gap-2">
-                    <span className="opacity-60">LAT</span>
-                    <span style={{ color }}>{job.coords.lat.toFixed(4)}</span>
-                    <span className="opacity-30">|</span>
-                    <span className="opacity-60">LNG</span>
-                    <span style={{ color }}>{job.coords.lng.toFixed(4)}</span>
-                  </div>
-                )}
               </div>
             ) : (
               <Empty>No address recorded.</Empty>
@@ -147,9 +136,9 @@ export function JobPanel() {
             </div>
           </Section>
 
-          {/* Satellites — Gmail */}
+          {/* Moons — Gmail (email = moon) */}
           <Section
-            label="satellites · gmail"
+            label="moons · gmail"
             count={job.satellites.length || undefined}
             action={
               !googleToken ? (
@@ -207,8 +196,8 @@ export function JobPanel() {
             )}
           </Section>
 
-          {/* Moons — Drive */}
-          <Section label="moons · drive" count={job.moons.length || undefined}>
+          {/* Satellites — Drive (drive docs = satellites) */}
+          <Section label="satellites · drive" count={job.moons.length || undefined}>
             {!googleToken ? (
               <Empty>Connect Google to surface job artifacts.</Empty>
             ) : !job.moonsLoaded ? (
@@ -247,6 +236,78 @@ export function JobPanel() {
                 ))}
               </ul>
             )}
+          </Section>
+
+          {/* Operational checklist — neon red empty / neon green checked */}
+          <Section label="operational checklist">
+            <ul className="space-y-1.5">
+              {(Object.entries(CHECKLIST_LABELS) as [keyof JobChecklist, string][]).map(
+                ([key, label]) => {
+                  const checked = job.checklist?.[key] ?? false;
+                  return (
+                    <li key={key}>
+                      <button
+                        type="button"
+                        onMouseEnter={() => sfx.hover()}
+                        onClick={() => {
+                          sfx.select();
+                          toggleChecklistItem(job.id, key);
+                        }}
+                        className="panel-row w-full flex items-center gap-3 px-3 py-2 text-left"
+                        aria-pressed={checked}
+                      >
+                        <span
+                          className="shrink-0 w-[18px] h-[18px] rounded-[3px] flex items-center justify-center transition-all"
+                          style={
+                            checked
+                              ? {
+                                  border: "2px solid #3CFF7E",
+                                  background: "rgba(60, 255, 126, 0.08)",
+                                  boxShadow:
+                                    "0 0 8px rgba(60, 255, 126, 0.55), inset 0 0 6px rgba(60, 255, 126, 0.25)",
+                                }
+                              : {
+                                  border: "2px solid #FF3D5C",
+                                  background: "rgba(255, 61, 92, 0.04)",
+                                  boxShadow:
+                                    "0 0 8px rgba(255, 61, 92, 0.45), inset 0 0 4px rgba(255, 61, 92, 0.18)",
+                                }
+                          }
+                        >
+                          {checked && (
+                            <svg
+                              viewBox="0 0 16 16"
+                              width="12"
+                              height="12"
+                              fill="none"
+                              stroke="#3CFF7E"
+                              strokeWidth="2.6"
+                              strokeLinecap="round"
+                              strokeLinejoin="round"
+                              style={{ filter: "drop-shadow(0 0 4px #3CFF7E)" }}
+                            >
+                              <path d="M3 8.5 L6.5 12 L13 4.5" />
+                            </svg>
+                          )}
+                        </span>
+                        <span
+                          className={`text-[13px] font-mono uppercase tracking-[0.14em] flex-1 transition-colors ${
+                            checked ? "text-white/95" : "text-white/70"
+                          }`}
+                          style={
+                            checked
+                              ? { textShadow: "0 0 8px rgba(60, 255, 126, 0.35)" }
+                              : undefined
+                          }
+                        >
+                          {label}
+                        </span>
+                      </button>
+                    </li>
+                  );
+                },
+              )}
+            </ul>
           </Section>
 
           {/* Notes */}

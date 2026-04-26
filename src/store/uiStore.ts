@@ -3,6 +3,7 @@ import type {
   Galaxy,
   HudMode,
   Job,
+  JobChecklist,
   Moon,
   OrbMode,
   Satellite,
@@ -72,6 +73,7 @@ export interface UIState {
   setMapOpen: (open: boolean) => void;
   attachSatellites: (jobId: string, sats: Satellite[]) => void;
   attachMoons: (jobId: string, moons: Moon[], folderId?: string | null) => void;
+  toggleChecklistItem: (jobId: string, key: keyof JobChecklist) => void;
 }
 
 export const useUI = create<UIState>((set, get) => ({
@@ -189,6 +191,21 @@ export const useUI = create<UIState>((set, get) => ({
           ? { ...j, moons, moonsLoaded: true, driveFolderId: folderId }
           : j,
       ),
+    })),
+
+  toggleChecklistItem: (jobId, key) =>
+    set((s) => ({
+      jobs: s.jobs.map((j) => {
+        if (j.id !== jobId) return j;
+        const cur: JobChecklist = j.checklist ?? {
+          trafficControl: false,
+          preCon: false,
+          jobStart: false,
+          routedSrpRtasq: false,
+          hsr: false,
+        };
+        return { ...j, checklist: { ...cur, [key]: !cur[key] } };
+      }),
     })),
 }));
 

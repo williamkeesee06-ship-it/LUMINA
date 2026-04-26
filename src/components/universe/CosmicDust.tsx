@@ -10,6 +10,8 @@ interface Props {
   perGalaxy?: number;
   /** Ambient swirl particles spread across the universe. */
   ambient?: number;
+  /** When true, fade dust out for cinematic planet-focus mode. */
+  dim?: boolean;
 }
 
 /**
@@ -23,8 +25,9 @@ interface Props {
  *
  * Uses a circular sprite + additive blending so points never look square.
  */
-export function CosmicDust({ perGalaxy = 380, ambient = 900 }: Props) {
+export function CosmicDust({ perGalaxy = 380, ambient = 900, dim = false }: Props) {
   const ref = useRef<THREE.Points>(null);
+  const matRef = useRef<THREE.PointsMaterial>(null);
 
   // Build a small circular soft-falloff sprite once.
   const sprite = useMemo(() => {
@@ -115,6 +118,10 @@ export function CosmicDust({ perGalaxy = 380, ambient = 900 }: Props) {
       ref.current.rotation.y += delta * 0.012;
       ref.current.rotation.x = Math.sin(state.clock.elapsedTime * 0.04) * 0.03;
     }
+    if (matRef.current) {
+      const target = dim ? 0.08 : 0.42;
+      matRef.current.opacity += (target - matRef.current.opacity) * Math.min(1, delta * 4);
+    }
   });
 
   return (
@@ -125,6 +132,7 @@ export function CosmicDust({ perGalaxy = 380, ambient = 900 }: Props) {
         <bufferAttribute attach="attributes-size" args={[sizes, 1]} />
       </bufferGeometry>
       <pointsMaterial
+        ref={matRef}
         map={sprite}
         size={1.0}
         sizeAttenuation
