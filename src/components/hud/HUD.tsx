@@ -143,7 +143,7 @@ function HUDVertical() {
 
   return (
     <div
-      className="pointer-events-none fixed top-6 right-6 bottom-6 z-30 flex flex-col"
+      className="pointer-events-none fixed top-6 right-6 bottom-6 z-40 flex flex-col"
       style={{ width: collapsed ? 96 : 220 }}
     >
       <div
@@ -625,7 +625,7 @@ function HUDHorizontal() {
   } = useHudData();
 
   return (
-    <div className="pointer-events-none fixed bottom-3 left-1/2 -translate-x-1/2 z-30 w-[min(96vw,1480px)]">
+    <div className="pointer-events-none fixed bottom-3 left-1/2 -translate-x-1/2 z-40 w-[min(96vw,1480px)]">
       {/* Top rails */}
       <div className="pointer-events-auto flex items-center justify-between px-6 mb-1.5 font-mono text-[10px] uppercase tracking-tactical relative">
         <button
