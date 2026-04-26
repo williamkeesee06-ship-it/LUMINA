@@ -39,11 +39,11 @@ export function MiniWidget({
       <div
         className="font-display uppercase leading-none"
         style={{
-          fontSize: 7.5,
+          fontSize: 7,
           letterSpacing: "0.22em",
           color,
           textShadow: `0 0 4px ${color}cc`,
-          marginBottom: 3,
+          marginBottom: 2,
         }}
       >
         {label}
@@ -54,8 +54,8 @@ export function MiniWidget({
           "group-hover:scale-[1.06]",
         )}
         style={{
-          width: 36,
-          height: 36,
+          width: 32,
+          height: 32,
           background:
             "radial-gradient(circle at 50% 35%, #0e1320 0%, #060912 70%, #03050a 100%)",
           border: `1.4px solid ${color}`,
@@ -67,7 +67,7 @@ export function MiniWidget({
         <div
           className="font-mono font-semibold tabular-nums leading-none"
           style={{
-            fontSize: 14,
+            fontSize: 12.5,
             color: "#ffffff",
             textShadow:
               "0 0 5px rgba(255,255,255,0.9), 0 0 10px rgba(255,255,255,0.5)",

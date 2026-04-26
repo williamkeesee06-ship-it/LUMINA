@@ -238,25 +238,25 @@ function HUDVertical() {
           }}
           title="Wake LUMINA"
           aria-label="Wake LUMINA"
-          className="flex flex-col items-center gap-1 px-3 py-3 transition-transform hover:scale-[1.03] active:scale-[0.97]"
+          className="flex flex-col items-center gap-0.5 px-3 pt-2 pb-2 transition-transform hover:scale-[1.03] active:scale-[0.97]"
         >
           {collapsed ? (
             <Orb size={48} />
           ) : (
-            <DysonSphereHero size={104} />
+            <DysonSphereHero size={92} />
           )}
           {!collapsed && (
             <>
               <div
                 className="font-display"
                 style={{
-                  fontSize: 16,
+                  fontSize: 14,
                   fontWeight: 700,
                   letterSpacing: "0.18em",
                   color: "#ffffff",
                   textShadow:
                     "0 0 4px #5BF3FF, 0 0 9px rgba(91,243,255,0.7)",
-                  marginTop: -2,
+                  marginTop: -4,
                 }}
               >
                 LUMINA
@@ -264,7 +264,7 @@ function HUDVertical() {
               <div
                 className="font-mono uppercase"
                 style={{
-                  fontSize: 7.5,
+                  fontSize: 7,
                   letterSpacing: "0.32em",
                   color: "rgba(91,243,255,0.75)",
                   textShadow: "0 0 3px rgba(91,243,255,0.55)",
@@ -290,24 +290,24 @@ function HUDVertical() {
             </div>
 
             {/* TELEMETRY STACK — three hero gauges fill the column width */}
-            <div className="flex-1 min-h-0 overflow-y-auto px-3 py-3">
+            <div className="flex-1 min-h-0 overflow-y-auto px-3 py-2.5">
               {/* Section caption */}
               <div
-                className="font-mono uppercase mb-2 px-1"
+                className="font-mono uppercase mb-1.5 px-1"
                 style={{
-                  fontSize: 7.5,
+                  fontSize: 7,
                   letterSpacing: "0.32em",
                   color: "rgba(91,243,255,0.7)",
                 }}
               >
                 · telemetry
               </div>
-              <div className="flex flex-col items-center gap-3 mb-4">
+              <div className="flex flex-col items-center gap-2.5 mb-3">
                 <MiniGauge
                   label="TOTAL"
                   value={total}
                   tone="cyan"
-                  size={92}
+                  size={86}
                 />
                 <MiniGauge
                   label={googleToken ? "GMAIL" : "CONNECT"}
@@ -321,7 +321,7 @@ function HUDVertical() {
                   }
                   pulse={!googleToken || unreadCount > 0}
                   onClick={handleConnectGmail}
-                  size={92}
+                  size={86}
                 />
                 <MiniGauge
                   label="UNIVERSE"
@@ -334,7 +334,7 @@ function HUDVertical() {
                         : "magenta"
                   }
                   pulse={universeVitality < 40}
-                  size={92}
+                  size={86}
                 />
               </div>
 
@@ -345,15 +345,15 @@ function HUDVertical() {
                   background:
                     "linear-gradient(90deg, transparent, #5BF3FF, transparent)",
                   boxShadow: "0 0 4px rgba(91,243,255,0.6)",
-                  marginBottom: 10,
+                  marginBottom: 8,
                 }}
               />
 
               {/* Galaxies caption */}
               <div
-                className="font-mono uppercase mb-2 px-1"
+                className="font-mono uppercase mb-1.5 px-1"
                 style={{
-                  fontSize: 7.5,
+                  fontSize: 7,
                   letterSpacing: "0.32em",
                   color: "rgba(91,243,255,0.7)",
                 }}
@@ -361,7 +361,7 @@ function HUDVertical() {
                 · galaxies
               </div>
               {/* 7 galaxy widgets in 2-col grid (4+3) — labels above tiny disc */}
-              <div className="grid grid-cols-2 gap-x-2 gap-y-2 justify-items-center">
+              <div className="grid grid-cols-2 gap-x-1.5 gap-y-1.5 justify-items-center pb-1">
                 {GALAXIES.map((g) => {
                   const c = GALAXY_COLORS[g];
                   const rgb = hexToRgbTriplet(c);
@@ -398,7 +398,7 @@ function HUDVertical() {
             </div>
 
             {/* UTILITY ROW — labeled tactical controls */}
-            <div className="px-3 py-3 flex items-start justify-around bg-black/40">
+            <div className="px-3 py-2.5 flex items-start justify-around bg-black/40">
               <LabeledUtility
                 label="RESET"
                 title="Return to Universe"
