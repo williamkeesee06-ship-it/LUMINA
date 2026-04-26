@@ -4,6 +4,17 @@ import { useUI } from "@/store/uiStore";
 import { GALAXY_COLORS } from "@/lib/statusMap";
 import { sfx } from "@/lib/audio";
 
+/**
+ * Build a teardrop pin SVG (Google Maps Symbol path) at the given color.
+ * Path is centered such that the tip sits exactly at the marker's position.
+ * The inner dot is drawn as a separate marker to get the bright "glowing
+ * core" look from the reference.
+ */
+function pinPath() {
+  // Classic teardrop: tip at (0,0), bulb above. Coordinates in SVG units.
+  return "M 0 0 C -8 -10 -10 -16 -10 -22 A 10 10 0 1 1 10 -22 C 10 -16 8 -10 0 0 Z";
+}
+
 // We rely on inline `styles` for the dark tactical look. A custom mapId would
 // require Cloud-console map style and is unnecessary here.
 const MAPS_KEY = import.meta.env.VITE_GOOGLE_MAPS_API_KEY as string | undefined;
@@ -42,6 +53,20 @@ export function TacticalMap() {
     // Seattle metro center — between Seattle, Bellevue, and Lynnwood.
     return { lat: 47.6515, lng: -122.2735 };
   }, [visible, selectedJobId, jobs]);
+
+  // Compute lat/lng bounds across all visible jobs so we can auto-fit.
+  const bounds = useMemo(() => {
+    if (visible.length === 0) return null;
+    let minLat = 90, maxLat = -90, minLng = 180, maxLng = -180;
+    for (const j of visible) {
+      const { lat, lng } = j.coords!;
+      if (lat < minLat) minLat = lat;
+      if (lat > maxLat) maxLat = lat;
+      if (lng < minLng) minLng = lng;
+      if (lng > maxLng) maxLng = lng;
+    }
+    return { minLat, maxLat, minLng, maxLng };
+  }, [visible]);
 
   if (!isMapOpen) return null;
 
@@ -119,6 +144,7 @@ export function TacticalMap() {
               colorScheme="DARK"
               styles={DARK_TACTICAL_STYLES}
               clickableIcons={false}
+              backgroundColor="#02040A"
             >
               {visible.map((j) => {
                 const isHistorical = j.status === "Complete";
@@ -126,13 +152,11 @@ export function TacticalMap() {
                 const color = inRoute
                   ? "#FF3D9A"
                   : isHistorical
-                    ? "#000000"
+                    ? "#1A1F2E"
                     : GALAXY_COLORS[j.status];
                 const isSelected = selectedJobId === j.id;
-                // AdvancedMarker requires a mapId; without one, fall back
-                // to a styled <Marker>-style div via plain marker color.
                 return (
-                  <PlainMarker
+                  <NeonPin
                     key={j.id}
                     position={j.coords!}
                     color={color}
@@ -145,7 +169,7 @@ export function TacticalMap() {
                   />
                 );
               })}
-              <Recenter center={center} />
+              <FitToBounds bounds={bounds} selectedId={selectedJobId} center={center} />
             </Map>
           </APIProvider>
         </div>
@@ -155,11 +179,15 @@ export function TacticalMap() {
 }
 
 /**
- * Marker that draws itself directly onto the Google map using the legacy
- * `google.maps.Marker` API. This avoids the AdvancedMarker requirement of a
- * mapId and works with our inline-styled tactical map.
+ * NeonPin — a teardrop pin with a bright glowing dot at its bulb,
+ * matching the reference vibe. Built from two stacked legacy Markers:
+ *   1. The teardrop body (SVG path, color = category color, dropping a glow)
+ *   2. A bright white inner dot anchored to the bulb center
+ *
+ * Historical jobs use a near-black body with a faint white outline so
+ * they read as "ghost" markers without disappearing into the map.
  */
-function PlainMarker({
+function NeonPin({
   position,
   color,
   selected,
@@ -174,159 +202,190 @@ function PlainMarker({
 }) {
   const map = useMap();
   useEffect(() => {
-    // Access google.maps via the global without leaning on @types/google.maps.
-    // The OAuth-flavored Window.google declaration in googleAuth.ts intentionally
-    // does not include `maps`, so we narrow through any here.
     const g = (window as unknown as { google?: { maps?: any } }).google?.maps;
     if (!map || !g) return;
-    const marker = new g.Marker({
+
+    const scale = selected ? 1.55 : 1.25;
+    const stroke = historical ? "#3A4258" : "#FFFFFF";
+    const strokeWeight = selected ? 1.6 : historical ? 0.9 : 1.1;
+    const fillOpacity = historical ? 0.85 : 1;
+
+    // Outer teardrop body
+    const body = new g.Marker({
       position,
       map,
       icon: {
-        path: g.SymbolPath.CIRCLE,
-        scale: selected ? 9 : 7,
+        path: pinPath(),
         fillColor: color,
-        fillOpacity: 1,
-        strokeColor: selected ? "#FFFFFF" : historical ? "#444444" : "rgba(255,255,255,0.55)",
-        strokeWeight: selected ? 2 : 1,
+        fillOpacity,
+        strokeColor: stroke,
+        strokeOpacity: historical ? 0.6 : 0.85,
+        strokeWeight,
+        scale,
+        anchor: new g.Point(0, 0), // tip of teardrop sits on the coord
       },
-      zIndex: selected ? 1000 : historical ? 1 : 50,
+      zIndex: selected ? 1000 : historical ? 5 : 50,
+      cursor: "pointer",
     });
-    marker.addListener("click", onClick);
-    return () => marker.setMap(null);
+    body.addListener("click", onClick);
+
+    // Inner glowing dot — sits inside the bulb. Skipped for historical pins
+    // so they read as "empty/inactive".
+    let dot: any = null;
+    if (!historical) {
+      dot = new g.Marker({
+        position,
+        map,
+        clickable: false,
+        icon: {
+          path: g.SymbolPath.CIRCLE,
+          scale: selected ? 4 : 3.2,
+          fillColor: "#FFFFFF",
+          fillOpacity: 1,
+          strokeColor: color,
+          strokeOpacity: 0.9,
+          strokeWeight: 1.2,
+          // Anchor the dot up into the bulb center (the bulb sits ~22px above tip).
+          anchor: new g.Point(0, 22),
+        },
+        zIndex: (selected ? 1000 : 50) + 1,
+      });
+    }
+
+    return () => {
+      body.setMap(null);
+      if (dot) dot.setMap(null);
+    };
   }, [map, position.lat, position.lng, color, selected, historical, onClick]);
   return null;
 }
 
-function Recenter({ center }: { center: { lat: number; lng: number } }) {
+/**
+ * Auto-fit the map to all visible markers on first open. When a specific
+ * job is selected, smoothly recenter on that single job instead.
+ */
+function FitToBounds({
+  bounds,
+  selectedId,
+  center,
+}: {
+  bounds: { minLat: number; maxLat: number; minLng: number; maxLng: number } | null;
+  selectedId: string | null;
+  center: { lat: number; lng: number };
+}) {
   const map = useMap();
-  if (map) map.panTo(center);
+  useEffect(() => {
+    if (!map) return;
+    const g = (window as unknown as { google?: { maps?: any } }).google?.maps;
+    if (!g) return;
+
+    if (selectedId) {
+      map.panTo(center);
+      return;
+    }
+
+    if (bounds) {
+      const sw = new g.LatLng(bounds.minLat, bounds.minLng);
+      const ne = new g.LatLng(bounds.maxLat, bounds.maxLng);
+      const llb = new g.LatLngBounds(sw, ne);
+      // Padding leaves room for the right-rail HUD and top header.
+      map.fitBounds(llb, { top: 80, right: 380, bottom: 60, left: 60 });
+    }
+  }, [map, bounds?.minLat, bounds?.maxLat, bounds?.minLng, bounds?.maxLng, selectedId, center.lat, center.lng]);
   return null;
 }
 
-// Cyberpunk Seattle tactical map style.
-// Palette: void black land, near-black water, cyan #5BF3FF for highways +
-// admin labels, royal blue #2A5CFF for major arterials, slate #34425C grid.
-// All POI clutter, transit, and business labels hidden — the map should feel
-// like a command-grid, not Google Maps.
-// Typed loosely to avoid pulling in @types/google.maps. The library accepts
-// the standard Maps Style array shape and this matches it exactly.
+// Quiet, dramatic dark map style — the reference vibe.
+// Land is near-black, water is even deeper void, only faint white admin
+// borders show. Every road, label, and POI is silenced so the only thing
+// the eye locks onto is the glowing pins.
 const DARK_TACTICAL_STYLES = [
-  // Base land
-  { elementType: "geometry", stylers: [{ color: "#03060B" }] },
-  { elementType: "labels.text.stroke", stylers: [{ color: "#000104" }] },
-  { elementType: "labels.text.fill", stylers: [{ color: "#5BF3FF" }] },
+  // Base land — deep charcoal-black
+  { elementType: "geometry", stylers: [{ color: "#0A0E16" }] },
+  { elementType: "labels", stylers: [{ visibility: "off" }] },
   { elementType: "labels.icon", stylers: [{ visibility: "off" }] },
 
-  // Administrative borders — cyan stroke, no fill
+  // Admin outlines — the only visible structure: faint white state/county
+  // borders, exactly like the reference.
   {
     featureType: "administrative",
     elementType: "geometry.fill",
-    stylers: [{ color: "#03060B" }],
+    stylers: [{ color: "#0A0E16" }],
   },
   {
     featureType: "administrative",
     elementType: "geometry.stroke",
-    stylers: [{ color: "#1B2436" }, { weight: 0.6 }],
+    stylers: [{ color: "#FFFFFF" }, { weight: 0.4 }, { lightness: -50 }],
   },
   {
     featureType: "administrative.country",
     elementType: "geometry.stroke",
-    stylers: [{ color: "#34425C" }, { weight: 1 }],
+    stylers: [{ color: "#FFFFFF" }, { weight: 0.7 }, { lightness: -30 }],
   },
   {
-    featureType: "administrative.locality",
-    elementType: "labels.text.fill",
-    stylers: [{ color: "#A8F8FF" }],
+    featureType: "administrative.province",
+    elementType: "geometry.stroke",
+    stylers: [{ color: "#FFFFFF" }, { weight: 0.5 }, { lightness: -40 }],
   },
-  {
-    featureType: "administrative.neighborhood",
-    elementType: "labels.text.fill",
-    stylers: [{ color: "#5BF3FF" }, { lightness: -10 }],
-  },
+  { featureType: "administrative", elementType: "labels", stylers: [{ visibility: "off" }] },
 
-  // Land and parks
+  // Landscape — slightly lighter than water for subtle continental shape
   {
     featureType: "landscape",
     elementType: "geometry",
-    stylers: [{ color: "#05080F" }],
+    stylers: [{ color: "#0C111B" }],
   },
   {
     featureType: "landscape.natural",
     elementType: "geometry",
-    stylers: [{ color: "#06090F" }],
+    stylers: [{ color: "#0B0F18" }],
   },
+  {
+    featureType: "landscape.man_made",
+    elementType: "geometry",
+    stylers: [{ color: "#0E1320" }],
+  },
+
+  // Parks — barely-there green tint, no labels
   {
     featureType: "poi.park",
     elementType: "geometry",
-    stylers: [{ color: "#0B1A14" }],
-  },
-  {
-    featureType: "poi.park",
-    elementType: "labels",
-    stylers: [{ visibility: "off" }],
+    stylers: [{ color: "#0B1318" }],
   },
 
-  // Roads — the cyberpunk grid
+  // Roads — silent. Filled to match land so they vanish; only barely-visible
+  // strokes remain at the highest zoom levels.
   {
     featureType: "road",
     elementType: "geometry.fill",
-    stylers: [{ color: "#0E1420" }],
+    stylers: [{ color: "#0A0E16" }],
   },
   {
     featureType: "road",
     elementType: "geometry.stroke",
-    stylers: [{ color: "#1B2436" }, { weight: 0.4 }],
+    stylers: [{ visibility: "off" }],
   },
+  { featureType: "road", elementType: "labels", stylers: [{ visibility: "off" }] },
   {
     featureType: "road.highway",
     elementType: "geometry.fill",
-    stylers: [{ color: "#142440" }],
+    stylers: [{ color: "#0E1422" }],
   },
   {
     featureType: "road.highway",
     elementType: "geometry.stroke",
-    stylers: [{ color: "#2A5CFF" }, { weight: 0.6 }],
-  },
-  {
-    featureType: "road.highway.controlled_access",
-    elementType: "geometry.stroke",
-    stylers: [{ color: "#5BF3FF" }, { weight: 0.7 }],
-  },
-  {
-    featureType: "road.arterial",
-    elementType: "geometry.fill",
-    stylers: [{ color: "#10182A" }],
-  },
-  {
-    featureType: "road",
-    elementType: "labels.text.fill",
-    stylers: [{ color: "#5A6985" }],
-  },
-  {
-    featureType: "road",
-    elementType: "labels.text.stroke",
-    stylers: [{ color: "#000104" }],
-  },
-  {
-    featureType: "road",
-    elementType: "labels.icon",
     stylers: [{ visibility: "off" }],
   },
 
-  // Water — deep void with subtle cyan label
+  // Water — deepest void, slightly inkier than the land
   {
     featureType: "water",
     elementType: "geometry",
-    stylers: [{ color: "#01030A" }],
+    stylers: [{ color: "#04070C" }],
   },
-  {
-    featureType: "water",
-    elementType: "labels.text.fill",
-    stylers: [{ color: "#3A5070" }],
-  },
+  { featureType: "water", elementType: "labels", stylers: [{ visibility: "off" }] },
 
-  // Hide everything that adds clutter
+  // Kill all POI / transit / business clutter
   { featureType: "poi", stylers: [{ visibility: "off" }] },
   { featureType: "poi.business", stylers: [{ visibility: "off" }] },
   { featureType: "poi.medical", stylers: [{ visibility: "off" }] },
@@ -334,4 +393,5 @@ const DARK_TACTICAL_STYLES = [
   { featureType: "poi.attraction", stylers: [{ visibility: "off" }] },
   { featureType: "transit", stylers: [{ visibility: "off" }] },
   { featureType: "transit.station", stylers: [{ visibility: "off" }] },
+  { featureType: "transit.line", stylers: [{ visibility: "off" }] },
 ] as const;
