@@ -8,14 +8,6 @@ import { sfx } from "@/lib/audio";
 // require Cloud-console map style and is unnecessary here.
 const MAPS_KEY = import.meta.env.VITE_GOOGLE_MAPS_API_KEY as string | undefined;
 
-// Minimal global declaration so we can call the legacy google.maps.Marker API
-// directly. The full @types/google.maps would be heavy; we only need a subset.
-declare global {
-  interface Window {
-    google?: any;
-  }
-}
-
 /**
  * Tactical map. Surface, not the home. Bible:
  * - View job markers, center on selected, filter by focused galaxy, route overlays.
@@ -152,12 +144,16 @@ function PlainMarker({
 }) {
   const map = useMap();
   useEffect(() => {
-    if (!map || !window.google?.maps) return;
-    const marker = new window.google.maps.Marker({
+    // Access google.maps via the global without leaning on @types/google.maps.
+    // The OAuth-flavored Window.google declaration in googleAuth.ts intentionally
+    // does not include `maps`, so we narrow through any here.
+    const g = (window as unknown as { google?: { maps?: any } }).google?.maps;
+    if (!map || !g) return;
+    const marker = new g.Marker({
       position,
       map,
       icon: {
-        path: window.google.maps.SymbolPath.CIRCLE,
+        path: g.SymbolPath.CIRCLE,
         scale: selected ? 9 : 7,
         fillColor: color,
         fillOpacity: 1,
