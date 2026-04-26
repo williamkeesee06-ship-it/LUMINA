@@ -161,10 +161,10 @@ export function HUD() {
             <div className="gauge-bay px-4 py-2 rounded-[2px] flex items-center gap-3">
               <Gauge label="Total" value={total} tone="cyan" rainbow />
               <Gauge
-                label="Gmail"
-                value={googleToken ? unreadCount : "—"}
-                tone={unreadCount > 0 ? "magenta" : "cyan"}
-                pulse={unreadCount > 0}
+                label={googleToken ? "Gmail" : "Connect"}
+                value={googleToken ? unreadCount : "→"}
+                tone={unreadCount > 0 ? "magenta" : googleToken ? "cyan" : "amber"}
+                pulse={!googleToken || unreadCount > 0}
                 onClick={async () => {
                   if (googleToken) return;
                   try {
@@ -172,8 +172,19 @@ export function HUD() {
                     const tk = await requestGoogleToken();
                     setGoogleToken(tk);
                     sfx.confirm();
-                  } catch {
+                  } catch (err) {
                     sfx.error();
+                    const msg = err instanceof Error ? err.message : String(err);
+                    // Visible error so the user knows what happened
+                    // (popup_blocked / popup_closed / unauthorized_client / etc.)
+                    console.warn("[Lumina] Google sign-in failed:", msg);
+                    if (msg === "popup_failed_to_open") {
+                      alert(
+                        "Google sign-in popup was blocked. Allow popups for this site, then click Connect again.",
+                      );
+                    } else if (msg !== "popup_closed") {
+                      alert(`Google sign-in error: ${msg}`);
+                    }
                   }
                 }}
               />

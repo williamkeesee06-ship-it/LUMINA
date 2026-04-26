@@ -48,10 +48,16 @@ function loadGisScript(): Promise<void> {
   return scriptLoading;
 }
 
-export async function requestGoogleToken(): Promise<string> {
+export async function requestGoogleToken(
+  opts: { interactive?: boolean } = {},
+): Promise<string> {
   const clientId = import.meta.env.VITE_GOOGLE_CLIENT_ID as string | undefined;
   if (!clientId) throw new Error("Google Client ID not configured.");
   await loadGisScript();
+  // Default to interactive consent — the first time a user connects, GIS will
+  // not show a popup with prompt:"" and silently fails. Forcing "consent"
+  // (or "select_account") makes it always show the picker.
+  const promptMode = opts.interactive === false ? "" : "consent";
   return new Promise((res, rej) => {
     const client = window.google!.accounts.oauth2.initTokenClient({
       client_id: clientId,
@@ -61,9 +67,18 @@ export async function requestGoogleToken(): Promise<string> {
         else if (resp.access_token) res(resp.access_token);
         else rej(new Error("No access token returned."));
       },
-      error_callback: (e) => rej(e instanceof Error ? e : new Error(String(e))),
+      error_callback: (e) => {
+        // GIS sometimes hands back { type: "popup_closed" } or popup_failed_to_open
+        const msg =
+          e && typeof e === "object" && "type" in e
+            ? String((e as { type: string }).type)
+            : e instanceof Error
+              ? e.message
+              : String(e);
+        rej(new Error(msg));
+      },
     });
-    client.requestAccessToken({ prompt: "" });
+    client.requestAccessToken({ prompt: promptMode });
   });
 }
 
