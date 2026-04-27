@@ -373,11 +373,14 @@ const DARK_TACTICAL_STYLES = [
   },
 
   // —— Sparse, atmospheric labels ——
-  // City names (locality) — faint warm-grey text with a near-black halo
+  // City names (locality) — muted slate so larger cities read but small
+  // towns recede into the background. Google's renderer hides smaller
+  // localities at lower zooms, but at zoom 9-10 over the Seattle metro the
+  // density is still high — the muted color keeps the pins as the focus.
   {
     featureType: "administrative.locality",
     elementType: "labels.text.fill",
-    stylers: [{ color: "#9aa3b5" }],
+    stylers: [{ color: "#5a6478" }],
   },
   {
     featureType: "administrative.locality",
