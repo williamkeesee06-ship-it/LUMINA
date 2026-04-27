@@ -37,7 +37,7 @@ export function CircleWidget({
       className="group relative flex flex-col items-center select-none cursor-pointer"
       style={{
         ["--w-rgb" as string]: rgb,
-        opacity: disabled ? 0.32 : 1,
+        opacity: disabled ? 0.55 : 1,
         transition: "opacity 220ms ease",
       } as CSSProperties}
       title={disabled ? `${label} — filtered off (click to re-enable)` : label}

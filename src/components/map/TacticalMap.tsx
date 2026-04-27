@@ -1,4 +1,4 @@
-import { useEffect, useMemo } from "react";
+import { useEffect, useMemo, useRef } from "react";
 import { APIProvider, Map, useMap } from "@vis.gl/react-google-maps";
 import { useUI } from "@/store/uiStore";
 import { GALAXY_COLORS } from "@/lib/statusMap";
@@ -10,9 +10,24 @@ import { sfx } from "@/lib/audio";
  * The inner dot is drawn as a separate marker to get the bright "glowing
  * core" look from the reference.
  */
+/**
+ * Classic Google-style teardrop pin. Tip at (0,0), bulb sits above.
+ * Wider rounded balloon with a narrow tail, matching the user's reference.
+ */
 function pinPath() {
-  // Classic teardrop: tip at (0,0), bulb above. Coordinates in SVG units.
-  return "M 0 0 C -8 -10 -10 -16 -10 -22 A 10 10 0 1 1 10 -22 C 10 -16 8 -10 0 0 Z";
+  // Tip at (0,0); rounded balloon centered at (0,-22), radius ~12.
+  return "M 0 0 C -7 -8 -12 -14 -12 -22 A 12 12 0 1 1 12 -22 C 12 -14 7 -8 0 0 Z";
+}
+
+/**
+ * Hollow-circle inset that sits inside the bulb, like a punched-out negative
+ * space. This mirrors the reference image where each pin shows a dark hole
+ * in the middle of the colored balloon.
+ */
+function innerHolePath() {
+  // Small circle, centered at (0,-22), radius 4.5, drawn as a closed sub-path
+  // using two arcs.
+  return "M -4.5 -22 A 4.5 4.5 0 1 1 4.5 -22 A 4.5 4.5 0 1 1 -4.5 -22 Z";
 }
 
 // We rely on inline `styles` for the dark tactical look. A custom mapId would
@@ -208,16 +223,25 @@ function NeonPin({
   onClick: () => void;
 }) {
   const map = useMap();
+  // Hold the latest onClick in a ref so the marker effect doesn't recreate
+  // markers every render (which was leaving stale markers on the map and
+  // causing the "filtered category doesn't visually return" bug).
+  const clickRef = useRef(onClick);
+  useEffect(() => {
+    clickRef.current = onClick;
+  }, [onClick]);
+
   useEffect(() => {
     const g = (window as unknown as { google?: { maps?: any } }).google?.maps;
     if (!map || !g) return;
 
-    const scale = selected ? 1.35 : 1.0;
-    const stroke = historical ? "#3A4258" : "#FFFFFF";
-    const strokeWeight = selected ? 1.6 : historical ? 0.9 : 1.1;
-    const fillOpacity = historical ? 0.85 : 1;
+    const scale = selected ? 1.35 : 1.05;
+    const stroke = historical ? "#3A4258" : "#0A0E16";
+    const strokeWeight = selected ? 1.4 : historical ? 0.8 : 1.0;
+    const fillOpacity = historical ? 0.75 : 1;
 
-    // Outer teardrop body
+    // Outer teardrop body — colored balloon with a thin dark outline so it
+    // reads cleanly against the dark map.
     const body = new g.Marker({
       position,
       map,
@@ -226,7 +250,7 @@ function NeonPin({
         fillColor: color,
         fillOpacity,
         strokeColor: stroke,
-        strokeOpacity: historical ? 0.6 : 0.85,
+        strokeOpacity: historical ? 0.55 : 0.9,
         strokeWeight,
         scale,
         anchor: new g.Point(0, 0), // tip of teardrop sits on the coord
@@ -234,36 +258,39 @@ function NeonPin({
       zIndex: selected ? 1000 : historical ? 5 : 50,
       cursor: "pointer",
     });
-    body.addListener("click", onClick);
+    const listener = body.addListener("click", () => clickRef.current());
 
-    // Inner glowing dot — sits inside the bulb. Skipped for historical pins
-    // so they read as "empty/inactive".
-    let dot: any = null;
+    // Hollow inner circle — dark punched-out negative space inside the bulb,
+    // matching the reference image. Skipped for historical (black) pins so
+    // they stay flat.
+    let hole: any = null;
     if (!historical) {
-      dot = new g.Marker({
+      hole = new g.Marker({
         position,
         map,
         clickable: false,
         icon: {
-          path: g.SymbolPath.CIRCLE,
-          scale: selected ? 3.4 : 2.6,
-          fillColor: "#FFFFFF",
+          path: innerHolePath(),
+          fillColor: "#0A0E16",
           fillOpacity: 1,
           strokeColor: color,
-          strokeOpacity: 0.9,
-          strokeWeight: 1,
-          // Anchor the dot up into the bulb center (the bulb sits ~22px above tip).
-          anchor: new g.Point(0, 22),
+          strokeOpacity: 0.6,
+          strokeWeight: 0.6,
+          scale,
+          anchor: new g.Point(0, 0),
         },
         zIndex: (selected ? 1000 : 50) + 1,
       });
     }
 
     return () => {
+      if (listener?.remove) listener.remove();
       body.setMap(null);
-      if (dot) dot.setMap(null);
+      if (hole) hole.setMap(null);
     };
-  }, [map, position.lat, position.lng, color, selected, historical, onClick]);
+    // Intentionally omit `onClick` from deps — we read it via ref.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [map, position.lat, position.lng, color, selected, historical]);
   return null;
 }
 
@@ -313,17 +340,17 @@ function FitToBounds({
 }
 
 // Quiet, dramatic dark map style — the reference vibe.
-// Land is near-black, water is even deeper void, only faint white admin
-// borders show. Every road, label, and POI is silenced so the only thing
-// the eye locks onto is the glowing pins.
+// Land is near-black, water is even deeper void. Faint white admin borders
+// + sparse city/state labels give just enough context to orient the eye
+// without drowning the pins.
 const DARK_TACTICAL_STYLES = [
   // Base land — deep charcoal-black
   { elementType: "geometry", stylers: [{ color: "#0A0E16" }] },
+  // Default everything labels off; we re-enable specific ones below.
   { elementType: "labels", stylers: [{ visibility: "off" }] },
   { elementType: "labels.icon", stylers: [{ visibility: "off" }] },
 
-  // Admin outlines — the only visible structure: faint white state/county
-  // borders, exactly like the reference.
+  // Admin outlines — faint white state/county borders, exactly like the ref.
   {
     featureType: "administrative",
     elementType: "geometry.fill",
@@ -344,7 +371,81 @@ const DARK_TACTICAL_STYLES = [
     elementType: "geometry.stroke",
     stylers: [{ color: "#FFFFFF" }, { weight: 0.5 }, { lightness: -40 }],
   },
-  { featureType: "administrative", elementType: "labels", stylers: [{ visibility: "off" }] },
+
+  // —— Sparse, atmospheric labels ——
+  // City names (locality) — faint warm-grey text with a near-black halo
+  {
+    featureType: "administrative.locality",
+    elementType: "labels.text.fill",
+    stylers: [{ color: "#9aa3b5" }],
+  },
+  {
+    featureType: "administrative.locality",
+    elementType: "labels.text.stroke",
+    stylers: [{ color: "#04070C" }, { weight: 2 }],
+  },
+  {
+    featureType: "administrative.locality",
+    elementType: "labels",
+    stylers: [{ visibility: "on" }],
+  },
+  // State names — a touch lighter, larger feel via stroke weight
+  {
+    featureType: "administrative.province",
+    elementType: "labels.text.fill",
+    stylers: [{ color: "#7a8294" }],
+  },
+  {
+    featureType: "administrative.province",
+    elementType: "labels.text.stroke",
+    stylers: [{ color: "#04070C" }, { weight: 2 }],
+  },
+  {
+    featureType: "administrative.province",
+    elementType: "labels",
+    stylers: [{ visibility: "on" }],
+  },
+  // Country names
+  {
+    featureType: "administrative.country",
+    elementType: "labels.text.fill",
+    stylers: [{ color: "#8a93a8" }],
+  },
+  {
+    featureType: "administrative.country",
+    elementType: "labels.text.stroke",
+    stylers: [{ color: "#04070C" }, { weight: 2 }],
+  },
+  {
+    featureType: "administrative.country",
+    elementType: "labels",
+    stylers: [{ visibility: "on" }],
+  },
+  // Neighborhoods — stay off, too dense in Seattle metro
+  {
+    featureType: "administrative.neighborhood",
+    stylers: [{ visibility: "off" }],
+  },
+  {
+    featureType: "administrative.land_parcel",
+    stylers: [{ visibility: "off" }],
+  },
+  // Water labels — ocean / Puget Sound names (very faint)
+  {
+    featureType: "water",
+    elementType: "labels.text.fill",
+    stylers: [{ color: "#3a4258" }],
+  },
+  {
+    featureType: "water",
+    elementType: "labels.text.stroke",
+    stylers: [{ color: "#04070C" }, { weight: 2 }],
+  },
+  {
+    featureType: "water",
+    elementType: "labels",
+    stylers: [{ visibility: "on" }],
+  },
 
   // Landscape — slightly lighter than water for subtle continental shape
   {
@@ -400,7 +501,6 @@ const DARK_TACTICAL_STYLES = [
     elementType: "geometry",
     stylers: [{ color: "#04070C" }],
   },
-  { featureType: "water", elementType: "labels", stylers: [{ visibility: "off" }] },
 
   // Kill all POI / transit / business clutter
   { featureType: "poi", stylers: [{ visibility: "off" }] },
