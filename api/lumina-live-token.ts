@@ -3,13 +3,15 @@ import type { VercelRequest, VercelResponse } from "@vercel/node";
 /**
  * LUMINA LIVE — ephemeral auth token issuer for Gemini Live API.
  *
- * The browser cannot hold the master GEMINI_API_KEY, and Vercel serverless
- * cannot proxy a long-lived WebSocket. So we mint a short-lived ephemeral
- * token here and the browser uses it directly to open WSS to Gemini Live
- * (BidiGenerateContentConstrained, v1alpha).
+ * REST: POST https://generativelanguage.googleapis.com/v1alpha/auth_tokens?key=<API_KEY>
+ * Body conforms to the AuthToken resource (see discovery doc):
+ *   - uses, expireTime, newSessionExpireTime
+ *   - bidiGenerateContentSetup: { model, generationConfig{speechConfig,...},
+ *       systemInstruction, inputAudioTranscription, outputAudioTranscription,
+ *       realtimeInputConfig }
  *
- * Endpoint: POST /api/lumina-live-token
- * Returns:  { name: string, expireTime: string }
+ * Browser uses `name` as access_token query param against the v1alpha
+ * BidiGenerateContentConstrained WSS endpoint.
  */
 
 const LUMINA_SYSTEM_INSTRUCTION = `You are LUMINA. Your name is Lumina — never any other name. You are the personal AI intelligence of Billy Keesee, Construction Supervisor at North Sky Communications.
@@ -44,44 +46,42 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
   // Token lifetime
   const now = Date.now();
-  const newSessionExpire = new Date(now + 2 * 60 * 1000).toISOString(); // must start session within 2 min
-  const expireTime = new Date(now + 30 * 60 * 1000).toISOString();      // session usable up to 30 min
+  const newSessionExpire = new Date(now + 2 * 60 * 1000).toISOString();
+  const expireTime = new Date(now + 30 * 60 * 1000).toISOString();
 
-  // Voice / model preferences
   const MODEL = "gemini-2.5-flash-native-audio-preview-12-2025";
-  const VOICE = "Aoede"; // composed, warm — matches Lumina persona
+  const VOICE = "Aoede"; // composed, warm — fits Lumina
 
+  // AuthToken resource body — matches discovery schema
   const body = {
-    config: {
-      uses: 1,
-      expireTime,
-      newSessionExpireTime: newSessionExpire,
-      liveConnectConstraints: {
-        model: `models/${MODEL}`,
-        config: {
-          responseModalities: ["AUDIO"],
-          temperature: 0.7,
-          speechConfig: {
-            voiceConfig: {
-              prebuiltVoiceConfig: { voiceName: VOICE },
-            },
-            languageCode: "en-US",
+    uses: 1,
+    expireTime,
+    newSessionExpireTime: newSessionExpire,
+    bidiGenerateContentSetup: {
+      model: `models/${MODEL}`,
+      generationConfig: {
+        responseModalities: ["AUDIO"],
+        temperature: 0.7,
+        speechConfig: {
+          voiceConfig: {
+            prebuiltVoiceConfig: { voiceName: VOICE },
           },
-          systemInstruction: {
-            parts: [{ text: LUMINA_SYSTEM_INSTRUCTION }],
-          },
-          inputAudioTranscription: {},
-          outputAudioTranscription: {},
-          realtimeInputConfig: {
-            activityHandling: "START_OF_ACTIVITY_INTERRUPTS",
-          },
+          languageCode: "en-US",
         },
+      },
+      systemInstruction: {
+        parts: [{ text: LUMINA_SYSTEM_INSTRUCTION }],
+      },
+      inputAudioTranscription: {},
+      outputAudioTranscription: {},
+      realtimeInputConfig: {
+        activityHandling: "START_OF_ACTIVITY_INTERRUPTS",
       },
     },
   };
 
   try {
-    const url = `https://generativelanguage.googleapis.com/v1alpha/authTokens?key=${apiKey}`;
+    const url = `https://generativelanguage.googleapis.com/v1alpha/auth_tokens?key=${apiKey}`;
     const response = await fetch(url, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -91,11 +91,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     if (!response.ok) {
       const errText = await response.text();
       // eslint-disable-next-line no-console
-      console.error("[lumina-live-token] Gemini auth_tokens.create failed", response.status, errText);
+      console.error("[lumina-live-token] auth_tokens.create failed", response.status, errText);
       res.status(502).json({
         error: "token_provisioning_failed",
         status: response.status,
-        message: errText.slice(0, 500),
+        message: errText.slice(0, 800),
       });
       return;
     }
