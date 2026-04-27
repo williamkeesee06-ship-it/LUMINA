@@ -156,19 +156,25 @@ export interface LuminaMessage {
   text: string;
 }
 
+export interface LuminaMemory {
+  facts?: string[];
+  summary?: string;
+}
+
 export async function sendToLumina(
   messages: LuminaMessage[],
   context: Record<string, unknown>,
+  memory?: LuminaMemory,
 ): Promise<{ ok: true; text: string } | { ok: false; message: string }> {
   try {
     const r = await fetch("/api/lumina", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ messages, context }),
+      body: JSON.stringify({ messages, context, memory }),
     });
     const data = await r.json();
     if (!r.ok) {
-      return { ok: false, message: data?.message ?? "Tactical intelligence layer offline." };
+      return { ok: false, message: data?.message ?? "Lumina is offline." };
     }
     return { ok: true, text: data.text as string };
   } catch (err) {
@@ -177,4 +183,51 @@ export async function sendToLumina(
       message: err instanceof Error ? err.message : "Channel disrupted.",
     };
   }
+}
+
+// ----- Calendar -----
+
+export interface CalEvent {
+  id: string;
+  summary: string;
+  description: string;
+  location: string;
+  start: string;
+  end: string;
+  link: string;
+}
+
+export async function listCalendarEvents(
+  token: string,
+  days = 14,
+): Promise<CalEvent[]> {
+  const r = await fetch("/api/calendar", {
+    method: "POST",
+    headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+    body: JSON.stringify({ action: "list", days, maxResults: 30 }),
+  });
+  if (!r.ok) return [];
+  const { events } = (await r.json()) as { events: CalEvent[] };
+  return events;
+}
+
+export async function createCalendarEvent(
+  token: string,
+  ev: {
+    summary: string;
+    startISO: string;
+    endISO: string;
+    description?: string;
+    location?: string;
+    timeZone?: string;
+  },
+): Promise<{ ok: boolean; link?: string; id?: string; message?: string }> {
+  const r = await fetch("/api/calendar", {
+    method: "POST",
+    headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+    body: JSON.stringify({ action: "create", ...ev }),
+  });
+  const data = await r.json();
+  if (!r.ok) return { ok: false, message: data?.message ?? "Could not create event." };
+  return { ok: true, link: data.link, id: data.id };
 }

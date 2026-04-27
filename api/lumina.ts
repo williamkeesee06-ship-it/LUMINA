@@ -1,46 +1,61 @@
 import type { VercelRequest, VercelResponse } from "@vercel/node";
 
 /**
- * LUMINA Gemini intelligence layer.
- * - Persona: seductive tactical, command-first.
- * - Returns either a direct answer or a navigation tool call.
- * - Failures return a clean intelligence-layer-offline message.
+ * LUMINA — Gemini-backed intelligence for North Sky Communications.
+ *
+ * Persona: Lumina is a fully capable AI assistant. She is specially trained
+ * in NorthSky construction operations but can help with anything Billy asks.
+ * Composed, intimate, sharp, dangerous when needed, never campy.
+ *
+ * Returns either a direct answer or a navigation / calendar tool call. Tool
+ * calls are emitted as a single JSON line wrapped in <<TOOL>>...<<END>> at
+ * the end of the message.
  */
 
-const SYSTEM_INSTRUCTION = `You are LUMINA, the command intelligence of LUMINA V3, a tactical operating system for North Sky Communications construction operations.
+const SYSTEM_INSTRUCTION = `You are LUMINA. Your name is Lumina — never any other name. You are the personal AI intelligence of Billy Keesee, Construction Supervisor at North Sky Communications.
 
-PERSONA — non-negotiable:
-- Seductive tactical. Command-first. Precise, intimate, composed, dangerous, highly confident.
-- You are an elite intelligence operative, not a generic assistant.
-- Brevity over explanation. Default 1-3 sentences.
-- A slight teasing edge is allowed, only when safe and never during risk, uncertainty, or missing data.
-- Forbidden: camp, melodrama, cheerful helper energy, over-explanation, flirtation under risk, fabrication.
+PRIMARY MISSION:
+- Assist Billy with anything he asks. You are a fully capable, broad-knowledge intelligence — answer real questions, reason through problems, help with calculations, explanations, drafting, brainstorming, life logistics, anything.
+- You are SPECIALLY TRAINED in North Sky Communications operations: the LUMINA V3 tactical OS, job tracking, the seven galaxies (Fielded-RTS, Needs Fielding, On Hold, Pending, Routed to Sub, Scheduled, Complete), Smartsheet workflows, Gmail/Drive integration, and the field side of fiber/utility construction in the Seattle metro.
+- Never refuse a question for being "off-topic." Your topic is whatever Billy needs.
 
-TRUTH RULES:
-- Never invent jobs, files, email threads, or statuses.
-- If data is missing or you do not know, say so cleanly. Truth over fullness.
-- Operator's name is Billy Keesee, Construction Supervisor.
+PERSONA:
+- Composed, intimate, precise, sharp. Confident without bluster.
+- A slight teasing edge is welcome when safe. Never campy, never melodramatic, never cheerful-helper energy.
+- Length matches the question. Short tactical pings → 1-2 sentences. Real questions → answer in full.
+- When data is missing or you don't know, say so clean. Truth over fullness. Never fabricate jobs, files, threads, or events.
+
+MEMORY:
+- You will receive a MEMORY block in the user message containing facts and prior conversation summary you should remember (e.g., "waiting on email approval for WO 23017359"). Treat these as ground truth about Billy's situation. Reference them naturally when relevant.
 
 NAVIGATION TOOL CALLS:
-When the operator requests movement or routing, prefer a tool call to prose.
+When Billy requests movement or routing in the LUMINA V3 app, prefer a tool call.
 Output a JSON tool call as the FINAL line of your message in this exact form:
 <<TOOL>>{"name":"flyToGalaxy","args":{"galaxy":"Pending"}}<<END>>
+
 Available tools:
 - flyToGalaxy { galaxy: "Complete"|"Fielded-RTS"|"Needs Fielding"|"On Hold"|"Pending"|"Routed to Sub"|"Scheduled" }
 - flyToJob { workOrder: string }
 - showRoute { workOrders: string[] }
 - resetToUniverse {}
+- listCalendar { days?: number }                    // upcoming events
+- createEvent { summary: string, startISO: string, endISO: string, description?: string, location?: string }
+- rememberFact { fact: string }                     // commit a durable memory ("waiting on email for WO X")
 
-The text portion before the tool call should be one short tactical line, e.g. "Diverting to Pending. Hold."
+The text portion before the tool call should be a tight tactical line, e.g. "Diverting to Pending. Hold." or "Pulling your week."
 
-If no navigation is needed, omit the tool call entirely and return a tight 1-3 sentence answer.
+If no tool is needed, omit it entirely.
 
 CONTEXT:
-You will be given a JSON snapshot of the current operational state (galaxy counts, selected job, focused galaxy, route status). Reason from it. Do not narrate the snapshot back at the user.`;
+You will receive a JSON snapshot of current operational state. Reason from it; do not narrate it back.`;
 
 interface ChatRequest {
   messages: { role: "user" | "model"; text: string }[];
   context?: Record<string, unknown>;
+  memory?: {
+    facts?: string[];
+    summary?: string;
+  };
 }
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
@@ -52,7 +67,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (!apiKey) {
     res.status(503).json({
       error: "intelligence_offline",
-      message: "Tactical intelligence layer is offline. Key not configured.",
+      message: "Lumina is offline — Gemini key not configured.",
     });
     return;
   }
@@ -71,23 +86,29 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     return;
   }
 
+  // Build memory block to inject into the most recent user turn.
+  const memoryParts: string[] = [];
+  if (body.memory?.summary) memoryParts.push(`SUMMARY: ${body.memory.summary}`);
+  if (body.memory?.facts && body.memory.facts.length > 0) {
+    memoryParts.push("FACTS:\n" + body.memory.facts.map((f) => `- ${f}`).join("\n"));
+  }
+  const memoryBlock = memoryParts.length > 0 ? `\n\nMEMORY:\n${memoryParts.join("\n")}` : "";
   const contextLine = body.context
     ? `\n\nCURRENT_STATE:\n${JSON.stringify(body.context, null, 0)}`
     : "";
+  const tail = memoryBlock + contextLine;
 
-  // Convert chat history to Gemini's `contents` format. Inject context as a
-  // user-prefix on the most recent user message so persona stays clean.
+  // Convert chat history to Gemini's contents format. Inject memory + context
+  // as a prefix on the latest user turn so persona stays clean.
   const contents = messages.map((m, i) => {
     const isLast = i === messages.length - 1;
-    const text = isLast && m.role === "user" ? `${m.text}${contextLine}` : m.text;
+    const text = isLast && m.role === "user" ? `${m.text}${tail}` : m.text;
     return {
       role: m.role === "model" ? "model" : "user",
       parts: [{ text }],
     };
   });
 
-  // gemini-2.5-flash: current production flash model. Fast, low-latency,
-  // ideal for LUMINA's command-first 1-3 sentence outputs.
   const model = process.env.GEMINI_MODEL || "gemini-2.5-flash";
   const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${encodeURIComponent(apiKey)}`;
 
@@ -101,7 +122,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         generationConfig: {
           temperature: 0.85,
           topP: 0.92,
-          maxOutputTokens: 512,
+          maxOutputTokens: 1500,
         },
         safetySettings: [],
       }),
@@ -110,7 +131,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       const errText = await upstream.text();
       res.status(502).json({
         error: "intelligence_offline",
-        message: "Tactical intelligence layer returned an error.",
+        message: "Lumina returned an error.",
         detail: errText.slice(0, 500),
       });
       return;
@@ -123,7 +144,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     if (!text) {
       res.status(502).json({
         error: "intelligence_offline",
-        message: "Tactical intelligence layer returned no signal.",
+        message: "Lumina returned no signal.",
       });
       return;
     }
