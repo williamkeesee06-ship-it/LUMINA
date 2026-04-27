@@ -191,10 +191,14 @@ export function GalaxyCluster({
         onSelect();
       }}
     >
-      {/* Nebula billboard — always faces camera, radial alpha mask hides edges */}
+      {/* Nebula billboard — always faces camera, radial alpha mask hides edges.
+          Larger plane (10×10) lets the existing alpha-masked texture feather
+          farther out into the void, so each cluster's outer edge dissolves into
+          space instead of stopping abruptly. No new geometry/particles — just
+          stretching the same nebula sprite over a larger area. */}
       <Billboard>
         <mesh material={nebulaMaterial}>
-          <planeGeometry args={[8, 8]} />
+          <planeGeometry args={[10, 10]} />
         </mesh>
       </Billboard>
 

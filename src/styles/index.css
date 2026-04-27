@@ -487,3 +487,117 @@
 .animate-neon-flicker {
   animation: neon-flicker 9s ease-in-out infinite;
 }
+
+/* ──────────────────────────────────────────────────────────────────────
+   Watermark divider pillar — super-bright neon line that fades in/out
+   while cycling through neon color stops. Body stays pure white so the
+   line itself is razor crisp at all times; only the box-shadow halo
+   pulses and shifts hue.
+   ────────────────────────────────────────────────────────────────────── */
+.watermark-pillar {
+  background: #FFFFFF;
+  animation: watermark-pillar-pulse 6.5s ease-in-out infinite;
+}
+
+@keyframes watermark-pillar-pulse {
+  /* Royal blue burst */
+  0% {
+    box-shadow:
+      0 0 1px #FFFFFF,
+      0 0 3px #6E92FF,
+      0 0 6px #2A5CFF,
+      0 0 14px rgba(42, 92, 255, 0.95),
+      0 0 28px rgba(42, 92, 255, 0.6),
+      0 0 48px rgba(42, 92, 255, 0.35);
+    opacity: 1;
+  }
+  /* Soft dim between hues */
+  12% {
+    box-shadow:
+      0 0 1px #FFFFFF,
+      0 0 2px rgba(110, 146, 255, 0.4),
+      0 0 4px rgba(42, 92, 255, 0.3);
+    opacity: 0.55;
+  }
+  /* Cyan burst */
+  25% {
+    box-shadow:
+      0 0 1px #FFFFFF,
+      0 0 3px #9DF7FF,
+      0 0 6px #5BF3FF,
+      0 0 14px rgba(91, 243, 255, 0.95),
+      0 0 28px rgba(91, 243, 255, 0.6),
+      0 0 48px rgba(91, 243, 255, 0.35);
+    opacity: 1;
+  }
+  37% {
+    box-shadow:
+      0 0 1px #FFFFFF,
+      0 0 2px rgba(91, 243, 255, 0.4),
+      0 0 4px rgba(91, 243, 255, 0.3);
+    opacity: 0.55;
+  }
+  /* Magenta burst */
+  50% {
+    box-shadow:
+      0 0 1px #FFFFFF,
+      0 0 3px #FF8FCB,
+      0 0 6px #FF3D9A,
+      0 0 14px rgba(255, 61, 154, 0.95),
+      0 0 28px rgba(255, 61, 154, 0.6),
+      0 0 48px rgba(255, 61, 154, 0.35);
+    opacity: 1;
+  }
+  62% {
+    box-shadow:
+      0 0 1px #FFFFFF,
+      0 0 2px rgba(255, 61, 154, 0.4),
+      0 0 4px rgba(255, 61, 154, 0.3);
+    opacity: 0.55;
+  }
+  /* Neon green burst */
+  75% {
+    box-shadow:
+      0 0 1px #FFFFFF,
+      0 0 3px #7CFFA8,
+      0 0 6px #39FF7A,
+      0 0 14px rgba(57, 255, 122, 0.95),
+      0 0 28px rgba(57, 255, 122, 0.6),
+      0 0 48px rgba(57, 255, 122, 0.35);
+    opacity: 1;
+  }
+  87% {
+    box-shadow:
+      0 0 1px #FFFFFF,
+      0 0 2px rgba(57, 255, 122, 0.4),
+      0 0 4px rgba(57, 255, 122, 0.3);
+    opacity: 0.55;
+  }
+  /* Loop back to royal blue */
+  100% {
+    box-shadow:
+      0 0 1px #FFFFFF,
+      0 0 3px #6E92FF,
+      0 0 6px #2A5CFF,
+      0 0 14px rgba(42, 92, 255, 0.95),
+      0 0 28px rgba(42, 92, 255, 0.6),
+      0 0 48px rgba(42, 92, 255, 0.35);
+    opacity: 1;
+  }
+}
+
+/* ──────────────────────────────────────────────────────────────────────
+   Tactical map — work-order labels above pins. Google Maps applies the
+   `className` we pass on Marker.label, so this targets the rendered
+   text. Tactical, mono, with a subtle dark text-shadow for legibility
+   over the dark map surface. The color itself is set inline by the
+   marker (matches the pin's galaxy hue).
+   ────────────────────────────────────────────────────────────────────── */
+.map-pin-label {
+  text-shadow:
+    0 0 2px rgba(0, 0, 0, 0.95),
+    0 0 4px rgba(0, 0, 0, 0.85),
+    0 0 8px rgba(0, 0, 0, 0.6);
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}

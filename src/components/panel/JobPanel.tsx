@@ -58,7 +58,10 @@ export function JobPanel() {
 
   return (
     <div
-      className="pointer-events-auto fixed top-6 z-30 w-[420px] max-w-[42vw]"
+      // z-40 so the panel paints OVER the tactical map (which is z-30 inset-0).
+      // Without this, clicking a map pin set selectedJobId but the panel was
+      // hidden behind the map surface.
+      className="pointer-events-auto fixed top-6 z-40 w-[420px] max-w-[42vw]"
       style={styleVar}
     >
       <div className="panel-luxe clip-corner h-full flex flex-col relative overflow-hidden">

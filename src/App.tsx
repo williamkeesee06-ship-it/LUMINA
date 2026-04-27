@@ -156,48 +156,43 @@ export default function App() {
  *   4. Tiny status row beneath: cyan dot + jobs count in faded mono
  */
 function EditorialWatermark({ status }: { status: string }) {
-  // Royal blue neon pillar — crisp high glow. Tight blur radii so the line
-  // stays razor sharp while still throwing a bright halo.
-  // Royal blue: #2A5CFF core, #4F7BFF mid, #6E92FF outer.
-  const PILLAR_GLOW = [
-    "0 0 1px #FFFFFF",
-    "0 0 2px #4F7BFF",
-    "0 0 4px #2A5CFF",
-    "0 0 8px rgba(42,92,255,0.9)",
-    "0 0 14px rgba(42,92,255,0.6)",
-    "0 0 22px rgba(42,92,255,0.35)",
-  ].join(", ");
-
   return (
     <div className="flex flex-col items-start">
       <div className="flex items-stretch gap-3">
-        {/* Vertical NORTHSKY caps — runs bottom-to-top alongside the pillar */}
+        {/* Vertical NORTHSKY caps — runs bottom-to-top alongside the pillar.
+            Bumped from 12px to 15px so the wordmark holds equal weight with
+            the LUMINA display text and reads from across the room. */}
         <div
-          className="flex items-center justify-center font-display text-[12px] uppercase text-white/90"
+          className="flex items-center justify-center font-display uppercase text-white/95"
           style={{
+            fontSize: 15,
             writingMode: "vertical-rl",
             transform: "rotate(180deg)",
-            letterSpacing: "0.55em",
+            letterSpacing: "0.58em",
             fontWeight: 600,
-            textShadow: "0 0 6px rgba(78,123,255,0.45)",
+            textShadow: "0 0 6px rgba(78,123,255,0.5)",
             paddingTop: 4,
             paddingBottom: 4,
           }}
         >
-          NORTHSKY
+          NORTH SKY
         </div>
 
-        {/* Bright neon cyan pillar — crisp high glow */}
+        {/* Pulsing neon divider pillar.
+            - Body stays pure white so the line is razor crisp.
+            - The glow comes from a CSS animation that cycles through neon
+              hues (royal blue → cyan → magenta → green → royal blue) and
+              fades intensity in and out, so the divider feels alive without
+              ever changing the line itself. See `.watermark-pillar` in
+              styles/index.css for the keyframes. */}
         <div
           aria-hidden
+          className="watermark-pillar"
           style={{
             width: 2,
-            background: "#FFFFFF",
             borderRadius: 2,
-            boxShadow: PILLAR_GLOW,
             alignSelf: "stretch",
-            minHeight: 78,
-            animation: "neon-flicker 7s ease-in-out infinite",
+            minHeight: 84,
           }}
         />
 

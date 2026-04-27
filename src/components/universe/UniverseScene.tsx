@@ -8,6 +8,7 @@ import { CameraRig } from "./CameraRig";
 import { Stardust } from "./Stardust";
 import { CosmicDust } from "./CosmicDust";
 import { GalaxyCluster } from "./GalaxyCluster";
+import { GalaxyLabels } from "./GalaxyLabels";
 import { PlanetField } from "./PlanetField";
 import { NebulaClouds } from "./NebulaClouds";
 import { Meteors } from "./Meteors";
@@ -133,6 +134,9 @@ export function UniverseScene() {
           );
         })}
       </Suspense>
+
+      {/* Subtle galaxy name labels — sit inside each cluster, color-matched. */}
+      <GalaxyLabels />
 
       {/* Planet field — only when inside a galaxy */}
       {viewMode !== "universe" && focusedGalaxy && (

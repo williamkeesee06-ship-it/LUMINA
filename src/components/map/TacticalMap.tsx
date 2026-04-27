@@ -177,6 +177,11 @@ export function TacticalMap() {
                     ? "#1A1F2E"
                     : GALAXY_COLORS[j.status];
                 const isSelected = selectedJobId === j.id;
+                // Show a work-order label above each pin only when the
+                // operator is filtered into a single galaxy (or when the pin
+                // is in the route layer). At the unfiltered all-galaxies view
+                // we'd flood the screen with overlapping labels.
+                const showLabel = (focusedGalaxy !== null || inRoute) && !isHistorical;
                 return (
                   <NeonPin
                     key={j.id}
@@ -184,6 +189,8 @@ export function TacticalMap() {
                     color={color}
                     selected={isSelected}
                     historical={isHistorical}
+                    workOrder={j.workOrder}
+                    showLabel={showLabel}
                     onClick={() => {
                       sfx.select();
                       selectJob(j.id);
@@ -214,12 +221,16 @@ function NeonPin({
   color,
   selected,
   historical,
+  workOrder,
+  showLabel,
   onClick,
 }: {
   position: { lat: number; lng: number };
   color: string;
   selected: boolean;
   historical: boolean;
+  workOrder: string;
+  showLabel: boolean;
   onClick: () => void;
 }) {
   const map = useMap();
@@ -283,14 +294,48 @@ function NeonPin({
       });
     }
 
+    // Work-order label — only when filtered to a single galaxy. Implemented
+    // as a third (non-clickable) Marker with a tiny transparent icon and a
+    // visible Google Maps text label anchored above the pin. The label
+    // inherits the pin's status color so the eye reads category at a glance.
+    let labelMarker: any = null;
+    if (showLabel) {
+      labelMarker = new g.Marker({
+        position,
+        map,
+        clickable: false,
+        // 1px transparent square — the marker has no visible icon, just text.
+        icon: {
+          path: "M 0 0",
+          fillOpacity: 0,
+          strokeOpacity: 0,
+          scale: 0,
+          anchor: new g.Point(0, 0),
+          // The label draws relative to the icon's anchor; offset upward via
+          // labelOrigin so the text sits above the teardrop bulb.
+          labelOrigin: new g.Point(0, -34),
+        },
+        label: {
+          text: workOrder,
+          color,
+          fontFamily: "'JetBrains Mono', ui-monospace, monospace",
+          fontSize: "10px",
+          fontWeight: "600",
+          className: "map-pin-label",
+        },
+        zIndex: (selected ? 1000 : 50) + 2,
+      });
+    }
+
     return () => {
       if (listener?.remove) listener.remove();
       body.setMap(null);
       if (hole) hole.setMap(null);
+      if (labelMarker) labelMarker.setMap(null);
     };
     // Intentionally omit `onClick` from deps — we read it via ref.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [map, position.lat, position.lng, color, selected, historical]);
+  }, [map, position.lat, position.lng, color, selected, historical, showLabel, workOrder]);
   return null;
 }
 
