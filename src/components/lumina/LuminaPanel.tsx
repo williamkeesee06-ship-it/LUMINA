@@ -30,6 +30,7 @@ interface ToolCall {
     | "flyToJob"
     | "showRoute"
     | "resetToUniverse"
+    | "lookupJob"
     | "listCalendar"
     | "createEvent"
     | "rememberFact";
@@ -123,6 +124,57 @@ export function LuminaPanel() {
   const executeTool = async (call: ToolCall) => {
     if (call.name === "resetToUniverse") {
       resetToUniverse();
+      sfx.confirm();
+      return;
+    }
+    if (call.name === "lookupJob") {
+      // Look up the full record for any work order Billy mentioned and surface
+      // it directly in the chat as a Lumina-formatted detail block. This
+      // ensures she NEVER fabricates — she pulls real data on demand.
+      const wo = String(call.args.workOrder ?? "");
+      const norm = (s: string) => s.replace(/[\s\-_.]/g, "").toUpperCase();
+      const target = norm(wo);
+      const j = jobs.find((x) => {
+        const w = norm(x.workOrder ?? "");
+        if (w === target) return true;
+        if (target.startsWith("P") && w === target.slice(1)) return true;
+        if (w.startsWith("P") && w.slice(1) === target) return true;
+        if (target.length >= 5 && w.endsWith(target)) return true;
+        return false;
+      });
+      if (!j) {
+        const msg = `No work order matching \`${wo}\` exists in the universe. Confirm the number with me.`;
+        setMessages((m) => [...m, { role: "model", text: msg }]);
+        memAddTurn("model", msg);
+        if (lastSpokenInputRef.current || liveModeRef.current) {
+          speak(msg, { onEnd: () => maybeRelisten() });
+        }
+        sfx.error();
+        return;
+      }
+      const lines: string[] = [];
+      lines.push(`**${j.workOrder}** — ${j.status}`);
+      if (j.rawSecondaryStatus) lines.push(`Status: ${j.rawSecondaryStatus}`);
+      if (j.fullAddress) lines.push(`Address: ${j.fullAddress}`);
+      if (j.workType) lines.push(`Work type: ${j.workType}`);
+      if (j.crew) lines.push(`Crew: ${j.crew}`);
+      if (j.scheduleDate) lines.push(`Scheduled: ${j.scheduleDate}`);
+      if (j.endDate) lines.push(`End: ${j.endDate}`);
+      if (j.dueDate) lines.push(`Due: ${j.dueDate}`);
+      if (j.permitNumber) lines.push(`Permit: ${j.permitNumber}`);
+      if (j.bidValue) lines.push(`Bid: ${j.bidValue}`);
+      if (j.notes) lines.push(`Notes: ${j.notes}`);
+      if (j.splicingNotes) lines.push(`Splicing: ${j.splicingNotes}`);
+      const detail = lines.join("\n");
+      setMessages((m) => [...m, { role: "model", text: detail }]);
+      memAddTurn("model", detail);
+      // If voice/live, speak a tighter summary instead of the full block.
+      if (lastSpokenInputRef.current || liveModeRef.current) {
+        const spoken = `${j.workOrder} is in ${j.status}${
+          j.rawSecondaryStatus ? `, ${j.rawSecondaryStatus}` : ""
+        }${j.scheduleDate ? `, scheduled ${j.scheduleDate}` : ""}.`;
+        speak(spoken, { onEnd: () => maybeRelisten() });
+      }
       sfx.confirm();
       return;
     }
@@ -251,6 +303,46 @@ export function LuminaPanel() {
       )
       .map((m) => ({ role: m.role, text: m.text }));
 
+    // ---- Build context with FULL job awareness ----
+    // Detect any work-order references in Billy's message and pull their full
+    // records. Patterns: "P.018509", "WO 23017359", "23017359", "WO-12345".
+    const woPatterns = [
+      /\bP\.?\d{5,8}\b/gi,                    // P.018509 / P018509
+      /\bWO[\s\-_]*\d{5,10}\b/gi,              // WO 23017359 / WO-23017359
+      /\b\d{7,9}\b/g,                          // bare 7–9 digit work order
+    ];
+    const matchedTokens = new Set<string>();
+    for (const re of woPatterns) {
+      const found = text.match(re) ?? [];
+      for (const m of found) matchedTokens.add(m.replace(/[\s\-_]/g, "").toUpperCase());
+    }
+    // Match against the loaded job set. Use loose comparison so "WO 23017359"
+    // matches a stored workOrder of "23017359" or "WO-23017359".
+    const norm = (s: string) => s.replace(/[\s\-_.]/g, "").toUpperCase();
+    const matchedJobs = jobs.filter((j) => {
+      const wo = norm(j.workOrder ?? "");
+      for (const t of matchedTokens) {
+        const tn = norm(t);
+        if (wo === tn) return true;
+        // P.018509 vs stored "018509" — strip the P prefix
+        if (tn.startsWith("P") && wo === tn.slice(1)) return true;
+        if (wo.startsWith("P") && wo.slice(1) === tn) return true;
+        // partial: stored work order ends with the queried digits
+        if (tn.length >= 5 && wo.endsWith(tn)) return true;
+      }
+      return false;
+    });
+
+    // Compact universe index — every job in a tight one-line shape so Lumina
+    // can answer existence / galaxy / city questions without round-trips.
+    const universeIndex = jobs.map((j) => ({
+      wo: j.workOrder,
+      g: j.status,
+      c: j.city ?? null,
+      s: j.rawSecondaryStatus ?? null,
+      sd: j.scheduleDate ?? null,
+    }));
+
     const context = {
       operator: "Billy Keesee",
       role: "Construction Supervisor",
@@ -263,14 +355,40 @@ export function LuminaPanel() {
       googleConnected: Boolean(googleToken),
       galaxyCounts: counts,
       totalJobs: jobs.length,
+      // Full job index of the entire universe (~50 bytes/job). Lumina can use
+      // this to confirm whether any work order exists and which galaxy it's in.
+      universeIndex,
+      // FULL records for any work orders Billy referenced in this message.
+      // This is the ground-truth data she should cite from — never fabricate.
+      matchedJobs: matchedJobs.map((j) => ({
+        workOrder: j.workOrder,
+        galaxy: j.status,
+        secondaryStatus: j.rawSecondaryStatus,
+        jobStatus: j.jobStatus,
+        address: j.fullAddress,
+        city: j.city,
+        zip: j.zip,
+        workType: j.workType,
+        base: j.base,
+        crew: j.crew,
+        permitNumber: j.permitNumber,
+        scheduleDate: j.scheduleDate,
+        endDate: j.endDate,
+        dueDate: j.dueDate,
+        receivedDate: j.receivedDate,
+        bidValue: j.bidValue,
+        notes: j.notes,
+        splicingNotes: j.splicingNotes,
+      })),
       sample: focusedGalaxy
         ? jobs
             .filter((j) => j.status === focusedGalaxy)
-            .slice(0, 8)
+            .slice(0, 12)
             .map((j) => ({
               workOrder: j.workOrder,
               address: j.fullAddress,
               status: j.rawSecondaryStatus,
+              scheduleDate: j.scheduleDate,
             }))
         : null,
     };
