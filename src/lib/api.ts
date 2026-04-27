@@ -83,7 +83,8 @@ export async function geocodeAddresses(
   return results;
 }
 
-export async function searchGmail(token: string, query: string): Promise<Satellite[]> {
+/** Gmail email threads = MOONS in this universe (closer, communications). */
+export async function searchGmail(token: string, query: string): Promise<Moon[]> {
   const r = await fetch("/api/gmail-search", {
     method: "POST",
     headers: {
@@ -115,33 +116,34 @@ export async function searchGmail(token: string, query: string): Promise<Satelli
   }));
 }
 
+/** Drive documents = SATELLITES in this universe (orbit further, structural). */
 export async function listDrive(
   token: string,
   workOrder: string,
-): Promise<{ folderId: string | null; moons: Moon[] }> {
+): Promise<{ folderId: string | null; satellites: Satellite[] }> {
   const r = await fetch("/api/drive-list", {
     method: "POST",
     headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
     body: JSON.stringify({ workOrder }),
   });
-  if (!r.ok) return { folderId: null, moons: [] };
+  if (!r.ok) return { folderId: null, satellites: [] };
   const data = (await r.json()) as {
     folder: { id: string; name: string } | null;
     files: { id: string; name: string; mimeType: string; webViewLink?: string; modifiedTime?: string }[];
   };
-  if (!data.folder) return { folderId: null, moons: [] };
-  const moons: Moon[] = data.files.map((f) => ({
+  if (!data.folder) return { folderId: null, satellites: [] };
+  const satellites: Satellite[] = data.files.map((f) => ({
     id: f.id,
     name: f.name,
     mimeType: f.mimeType,
     webViewLink: f.webViewLink,
     modifiedTime: f.modifiedTime,
-    category: categorizeMoon(f.name),
+    category: categorizeSatellite(f.name),
   }));
-  return { folderId: data.folder.id, moons };
+  return { folderId: data.folder.id, satellites };
 }
 
-function categorizeMoon(name: string): Moon["category"] {
+function categorizeSatellite(name: string): Satellite["category"] {
   const n = name.toLowerCase();
   if (n.includes("permit")) return "permit";
   if (n.includes("redline")) return "redline";

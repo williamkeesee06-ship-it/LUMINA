@@ -52,8 +52,21 @@ export type OrbMode =
   | "listening"
   | "live";
 
-/** A satellite represents communications intelligence (Gmail). */
+/**
+ * A satellite represents a Drive-linked job artifact
+ * (permits, prints, redlines, bidmaster, revisits).
+ */
 export interface Satellite {
+  id: string;
+  name: string;
+  mimeType: string;
+  webViewLink?: string;
+  category?: "permit" | "print" | "redline" | "bidmaster" | "revisit" | "other";
+  modifiedTime?: string;
+}
+
+/** A moon represents a Gmail email thread for the job. */
+export interface Moon {
   id: string;
   threadId: string;
   subject: string;
@@ -64,21 +77,8 @@ export interface Satellite {
 }
 
 /**
- * A moon represents a Drive-linked job artifact
- * (permits, prints, redlines, bidmaster, revisits).
- */
-export interface Moon {
-  id: string;
-  name: string;
-  mimeType: string;
-  webViewLink?: string;
-  category?: "permit" | "print" | "redline" | "bidmaster" | "revisit" | "other";
-  modifiedTime?: string;
-}
-
-/**
  * A Job is a Planet. Sourced from Smartsheet, enriched with
- * Gmail satellites and Drive moons.
+ * Drive satellites (documents) and Gmail moons (email threads).
  */
 export interface Job {
   id: string;
@@ -103,7 +103,9 @@ export interface Job {
   bidValue?: string;
   crew?: string;
   permitNumber?: string;
+  // Drive documents orbit as satellites
   satellites: Satellite[];
+  // Gmail email threads orbit as moons
   moons: Moon[];
   satellitesLoaded: boolean;
   moonsLoaded: boolean;

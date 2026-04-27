@@ -96,8 +96,10 @@ export interface UIState {
   diveToMap: () => void;
   /** Trigger the reverse warp back to the universe. */
   riseFromMap: () => void;
-  attachSatellites: (jobId: string, sats: Satellite[]) => void;
-  attachMoons: (jobId: string, moons: Moon[], folderId?: string | null) => void;
+  // Drive documents (satellites) come with the parent Drive folderId
+  attachSatellites: (jobId: string, sats: Satellite[], folderId?: string | null) => void;
+  // Gmail email threads (moons) — no folder concept
+  attachMoons: (jobId: string, moons: Moon[]) => void;
   toggleChecklistItem: (jobId: string, key: keyof JobChecklist) => void;
   setChecklistText: (jobId: string, key: keyof JobChecklist, value: string) => void;
 }
@@ -274,18 +276,20 @@ export const useUI = create<UIState>((set, get) => ({
     }, 1400);
   },
 
-  attachSatellites: (jobId, sats) =>
-    set((s) => ({
-      jobs: s.jobs.map((j) =>
-        j.id === jobId ? { ...j, satellites: sats, satellitesLoaded: true } : j,
-      ),
-    })),
-
-  attachMoons: (jobId, moons, folderId = null) =>
+  attachSatellites: (jobId, sats, folderId = null) =>
     set((s) => ({
       jobs: s.jobs.map((j) =>
         j.id === jobId
-          ? { ...j, moons, moonsLoaded: true, driveFolderId: folderId }
+          ? { ...j, satellites: sats, satellitesLoaded: true, driveFolderId: folderId }
+          : j,
+      ),
+    })),
+
+  attachMoons: (jobId, moons) =>
+    set((s) => ({
+      jobs: s.jobs.map((j) =>
+        j.id === jobId
+          ? { ...j, moons, moonsLoaded: true }
           : j,
       ),
     })),

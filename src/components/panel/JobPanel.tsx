@@ -27,17 +27,20 @@ export function JobPanel() {
     [selectedJobId, jobs],
   );
 
-  // Auto-fetch satellites and moons when a job is selected and Google is connected.
+  // Auto-fetch when a job is selected and Google is connected.
+  // Drive documents → satellites. Gmail email threads → moons.
   useEffect(() => {
     if (!job || !googleToken) return;
     if (!job.satellitesLoaded) {
-      const q = `(${job.workOrder}${job.address ? ` OR \"${job.address}\"` : ""})`;
-      searchGmail(googleToken, q).then((sats) => attachSatellites(job.id, sats));
+      // Drive documents orbit as SATELLITES
+      listDrive(googleToken, job.workOrder).then(({ folderId, satellites }) =>
+        attachSatellites(job.id, satellites, folderId),
+      );
     }
     if (!job.moonsLoaded) {
-      listDrive(googleToken, job.workOrder).then(({ folderId, moons }) =>
-        attachMoons(job.id, moons, folderId),
-      );
+      // Gmail threads orbit as MOONS
+      const q = `(${job.workOrder}${job.address ? ` OR \"${job.address}\"` : ""})`;
+      searchGmail(googleToken, q).then((moons) => attachMoons(job.id, moons));
     }
   }, [job, googleToken, attachSatellites, attachMoons]);
 
@@ -145,10 +148,10 @@ export function JobPanel() {
             </div>
           </Section>
 
-          {/* Moons — Gmail (email = moon) */}
+          {/* Moons — Gmail email threads (email = moon, closer orbit) */}
           <Section
             label="moons · gmail"
-            count={job.satellites.length || undefined}
+            count={job.moons.length || undefined}
             action={
               !googleToken ? (
                 <ConnectButton
@@ -168,16 +171,16 @@ export function JobPanel() {
           >
             {!googleToken ? (
               <Empty>Connect Google to surface email threads.</Empty>
-            ) : !job.satellitesLoaded ? (
-              <Loading>Acquiring satellites…</Loading>
-            ) : job.satellites.length === 0 ? (
+            ) : !job.moonsLoaded ? (
+              <Loading>Acquiring moons…</Loading>
+            ) : job.moons.length === 0 ? (
               <Empty>No email threads found.</Empty>
             ) : (
               <ul className="space-y-1.5">
-                {job.satellites.map((s) => (
-                  <li key={s.id}>
+                {job.moons.map((m) => (
+                  <li key={m.id}>
                     <a
-                      href={`https://mail.google.com/mail/u/0/#inbox/${s.threadId}`}
+                      href={`https://mail.google.com/mail/u/0/#inbox/${m.threadId}`}
                       target="_blank"
                       rel="noopener noreferrer"
                       className="panel-row block px-3 py-2 flex flex-col gap-0.5"
@@ -185,18 +188,18 @@ export function JobPanel() {
                       <div className="flex items-center gap-2">
                         <span
                           className={`w-1.5 h-1.5 rounded-full shrink-0 ${
-                            s.unread ? "bg-magenta-signal shadow-[0_0_8px_#FF3D9A]" : "bg-white/30"
+                            m.unread ? "bg-magenta-signal shadow-[0_0_8px_#FF3D9A]" : "bg-white/30"
                           }`}
                         />
                         <span className="text-[13px] text-white/95 truncate flex-1 leading-tight">
-                          {s.subject}
+                          {m.subject}
                         </span>
                       </div>
                       <div className="text-[10px] font-mono uppercase tracking-wide text-white/45 truncate pl-3.5">
-                        {s.from}
+                        {m.from}
                       </div>
-                      {s.snippet && (
-                        <div className="text-xs text-white/55 line-clamp-2 pl-3.5">{s.snippet}</div>
+                      {m.snippet && (
+                        <div className="text-xs text-white/55 line-clamp-2 pl-3.5">{m.snippet}</div>
                       )}
                     </a>
                   </li>
@@ -205,20 +208,20 @@ export function JobPanel() {
             )}
           </Section>
 
-          {/* Satellites — Drive (drive docs = satellites) */}
-          <Section label="satellites · drive" count={job.moons.length || undefined}>
+          {/* Satellites — Drive documents (drive docs = satellites, outer orbit) */}
+          <Section label="satellites · drive" count={job.satellites.length || undefined}>
             {!googleToken ? (
               <Empty>Connect Google to surface job artifacts.</Empty>
-            ) : !job.moonsLoaded ? (
-              <Loading>Acquiring moons…</Loading>
-            ) : job.moons.length === 0 ? (
+            ) : !job.satellitesLoaded ? (
+              <Loading>Acquiring satellites…</Loading>
+            ) : job.satellites.length === 0 ? (
               <Empty>No documents linked yet.</Empty>
             ) : (
               <ul className="space-y-1">
-                {job.moons.map((m) => (
-                  <li key={m.id}>
+                {job.satellites.map((s) => (
+                  <li key={s.id}>
                     <a
-                      href={m.webViewLink}
+                      href={s.webViewLink}
                       target="_blank"
                       rel="noopener noreferrer"
                       className="panel-row flex items-center gap-2 px-3 py-1.5"
@@ -227,8 +230,8 @@ export function JobPanel() {
                         className="w-1 h-1 rounded-full shrink-0"
                         style={{ background: color, boxShadow: `0 0 6px ${color}` }}
                       />
-                      <span className="text-[13px] text-white/90 truncate flex-1">{m.name}</span>
-                      {m.category && (
+                      <span className="text-[13px] text-white/90 truncate flex-1">{s.name}</span>
+                      {s.category && (
                         <span
                           className="text-[9px] font-mono uppercase tracking-[0.18em] px-1.5 py-0.5 border"
                           style={{
@@ -237,7 +240,7 @@ export function JobPanel() {
                             background: `${color}08`,
                           }}
                         >
-                          {m.category}
+                          {s.category}
                         </span>
                       )}
                     </a>
