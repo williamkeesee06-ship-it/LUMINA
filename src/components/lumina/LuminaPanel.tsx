@@ -163,8 +163,8 @@ export function LuminaPanel() {
       if (j.dueDate) lines.push(`Due: ${j.dueDate}`);
       if (j.permitNumber) lines.push(`Permit: ${j.permitNumber}`);
       if (j.bidValue) lines.push(`Bid: ${j.bidValue}`);
-      if (j.notes) lines.push(`Notes: ${j.notes}`);
-      if (j.splicingNotes) lines.push(`Splicing: ${j.splicingNotes}`);
+      if (j.notes) lines.push(`NSC Project Notes: ${j.notes}`);
+      if (j.splicingNotes) lines.push(`Splicing Notes: ${j.splicingNotes}`);
       const detail = lines.join("\n");
       setMessages((m) => [...m, { role: "model", text: detail }]);
       memAddTurn("model", detail);
