@@ -1,0 +1,60 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 32 32">
+  <defs>
+    <linearGradient id="silver" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#F4F6FA"/>
+      <stop offset="40%" stop-color="#C7CCD6"/>
+      <stop offset="100%" stop-color="#7F8694"/>
+    </linearGradient>
+    <!-- Even hotter electric blue for hover state -->
+    <linearGradient id="royal" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#DCEBFF"/>
+      <stop offset="30%" stop-color="#5B9BFF"/>
+      <stop offset="65%" stop-color="#2A66FF"/>
+      <stop offset="100%" stop-color="#0033E6"/>
+    </linearGradient>
+    <filter id="haloGlow" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur stdDeviation="2.6" result="b"/>
+      <feMerge>
+        <feMergeNode in="b"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+    <filter id="panelGlow" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur stdDeviation="1.3" result="b"/>
+      <feMerge>
+        <feMergeNode in="b"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+  </defs>
+
+  <!-- Hover-state halo: bigger and brighter -->
+  <ellipse cx="14" cy="16" rx="14" ry="12" fill="#3D7BFF" opacity="0.7" filter="url(#haloGlow)"/>
+  <ellipse cx="14" cy="16" rx="10" ry="8" fill="#7AB1FF" opacity="0.75" filter="url(#haloGlow)"/>
+
+  <path d="
+      M 1.5 1.5
+      L 22.5 12
+      L 14.5 14.5
+      L 19 24
+      L 14 20
+      L 11 26
+      L 9.5 14
+      Z"
+    fill="url(#silver)"
+    stroke="#0B1320"
+    stroke-width="0.6"
+    stroke-linejoin="round"/>
+
+  <path d="
+      M 4.5 4
+      L 18.5 11
+      L 11.5 13.5
+      Z"
+    fill="url(#royal)"
+    filter="url(#panelGlow)"/>
+
+  <path d="M 5.5 5 L 17.5 11" stroke="#FFFFFF" stroke-width="0.8" opacity="1" stroke-linecap="round"/>
+  <circle cx="5.2" cy="4.6" r="1.1" fill="#FFFFFF" opacity="1"/>
+  <path d="M 1.6 1.7 L 22.3 12" stroke="#FFFFFF" stroke-width="0.6" opacity="0.75" stroke-linecap="round"/>
+</svg>

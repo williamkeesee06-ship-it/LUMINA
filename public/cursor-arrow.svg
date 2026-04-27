@@ -1,0 +1,70 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 32 32">
+  <defs>
+    <!-- Outer silver blade gradient -->
+    <linearGradient id="silver" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#F4F6FA"/>
+      <stop offset="40%" stop-color="#C7CCD6"/>
+      <stop offset="100%" stop-color="#7F8694"/>
+    </linearGradient>
+    <!-- Intense electric royal blue gradient -->
+    <linearGradient id="royal" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#B8D8FF"/>
+      <stop offset="35%" stop-color="#3D7BFF"/>
+      <stop offset="70%" stop-color="#1A4DFF"/>
+      <stop offset="100%" stop-color="#0033E6"/>
+    </linearGradient>
+    <!-- Strong neon halo -->
+    <filter id="haloGlow" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur stdDeviation="2.2" result="b"/>
+      <feMerge>
+        <feMergeNode in="b"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+    <!-- Inner panel glow (so the blue triangle itself emits light) -->
+    <filter id="panelGlow" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur stdDeviation="1.0" result="b"/>
+      <feMerge>
+        <feMergeNode in="b"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+  </defs>
+
+  <!-- Layered halo: bright core + softer outer wash for true neon punch -->
+  <ellipse cx="14" cy="16" rx="13" ry="11" fill="#3D7BFF" opacity="0.55" filter="url(#haloGlow)"/>
+  <ellipse cx="14" cy="16" rx="9" ry="7" fill="#5B9BFF" opacity="0.65" filter="url(#haloGlow)"/>
+
+  <!-- Outer silver paper-plane / arrow blade. Hotspot near (1.5, 1.5). -->
+  <path d="
+      M 1.5 1.5
+      L 22.5 12
+      L 14.5 14.5
+      L 19 24
+      L 14 20
+      L 11 26
+      L 9.5 14
+      Z"
+    fill="url(#silver)"
+    stroke="#0B1320"
+    stroke-width="0.6"
+    stroke-linejoin="round"/>
+
+  <!-- Inner electric blue triangle, with its own glow filter so it reads as emissive -->
+  <path d="
+      M 4.5 4
+      L 18.5 11
+      L 11.5 13.5
+      Z"
+    fill="url(#royal)"
+    filter="url(#panelGlow)"/>
+
+  <!-- Bright highlight crease across the blue panel -->
+  <path d="M 5.5 5 L 17.5 11" stroke="#E8F2FF" stroke-width="0.7" opacity="1" stroke-linecap="round"/>
+
+  <!-- Hot specular dot at the inner tip -->
+  <circle cx="5.2" cy="4.6" r="0.9" fill="#FFFFFF" opacity="0.95"/>
+
+  <!-- Subtle white edge on the leading silver wing -->
+  <path d="M 1.6 1.7 L 22.3 12" stroke="#FFFFFF" stroke-width="0.5" opacity="0.55" stroke-linecap="round"/>
+</svg>

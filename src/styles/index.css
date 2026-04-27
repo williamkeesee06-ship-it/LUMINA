@@ -18,6 +18,35 @@
     --red-alert: #ff5151;
   }
 
+  /* Custom paper-plane neon-blue cursor (global). Hotspot at the tip = (1,1). */
+  html,
+  body {
+    cursor: url("/cursor-arrow.svg") 1 1, auto;
+  }
+  /* Hover/clickable state — brighter blue glow */
+  a,
+  button,
+  [role="button"],
+  [data-clickable],
+  input[type="submit"],
+  input[type="button"],
+  label,
+  summary,
+  select {
+    cursor: url("/cursor-arrow-pointer.svg") 1 1, pointer;
+  }
+  /* Text-input fields keep the standard I-beam for usability */
+  input[type="text"],
+  input[type="email"],
+  input[type="password"],
+  input[type="search"],
+  input[type="number"],
+  input[type="url"],
+  input[type="tel"],
+  textarea {
+    cursor: text;
+  }
+
   html,
   body,
   #root {
