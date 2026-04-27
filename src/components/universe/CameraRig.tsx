@@ -92,7 +92,8 @@ export function CameraRig() {
   useEffect(() => {
     const dom = gl.domElement;
     dom.style.touchAction = "none";
-    dom.style.cursor = "grab";
+    // Use custom paper-plane cursor (idle) — falls back to grab if SVG fails.
+    dom.style.cursor = "url('/cursor-arrow.svg') 1 1, grab";
 
     const enterFreeFly = () => {
       if (!freeFly.current) {
@@ -126,7 +127,8 @@ export function CameraRig() {
       if (Math.abs(dx) + Math.abs(dy) < 2.5 && !freeFly.current) return;
       lastPointer.current = { x: e.clientX, y: e.clientY };
       enterFreeFly();
-      dom.style.cursor = "grabbing";
+      // Use brighter pointer cursor while actively dragging.
+      dom.style.cursor = "url('/cursor-arrow-pointer.svg') 1 1, grabbing";
       try {
         dom.setPointerCapture(e.pointerId);
       } catch {
@@ -145,7 +147,7 @@ export function CameraRig() {
     const onPointerUp = (e: PointerEvent) => {
       isDragging.current = false;
       lastPointer.current = null;
-      dom.style.cursor = "grab";
+      dom.style.cursor = "url('/cursor-arrow.svg') 1 1, grab";
       try {
         dom.releasePointerCapture(e.pointerId);
       } catch {

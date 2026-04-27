@@ -20,7 +20,9 @@
 
   /* Custom paper-plane neon-blue cursor (global). Hotspot at the tip = (1,1). */
   html,
-  body {
+  body,
+  #root,
+  canvas {
     cursor: url("/cursor-arrow.svg") 1 1, auto;
   }
   /* Hover/clickable state — brighter blue glow */

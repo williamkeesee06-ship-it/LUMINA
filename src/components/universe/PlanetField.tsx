@@ -152,10 +152,10 @@ function Planet({
         ref={coreRef}
         onPointerOver={(e) => {
           e.stopPropagation();
-          document.body.style.cursor = "pointer";
+          document.body.style.cursor = "url('/cursor-arrow-pointer.svg') 1 1, pointer";
         }}
         onPointerOut={() => {
-          document.body.style.cursor = "default";
+          document.body.style.cursor = "";
         }}
         onClick={(e) => {
           e.stopPropagation();
