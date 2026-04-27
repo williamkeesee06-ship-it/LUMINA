@@ -22,6 +22,7 @@ import {
   speak,
   cancelSpeak,
 } from "@/lib/voice";
+import { LuminaLiveSession, type LuminaLiveStatus } from "@/lib/geminiLive";
 
 interface ToolCall {
   name:
@@ -98,10 +99,13 @@ export function LuminaPanel() {
   const [liveMode, setLiveMode] = useState(false);
   const liveModeRef = useRef(false);
   const lastSpokenInputRef = useRef(false);
+  const [liveStatus, setLiveStatus] = useState<LuminaLiveStatus>("idle");
+  const [liveCaption, setLiveCaption] = useState<string>("");
 
   const scrollRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const recognizerRef = useRef<ReturnType<typeof createRecognizer>>(null);
+  const liveSessionRef = useRef<LuminaLiveSession | null>(null);
 
   const memory = useMemo(() => loadMemory(), [memTick, isChatOpen]);
 
@@ -385,18 +389,83 @@ export function LuminaPanel() {
     }
   }
 
-  function toggleLiveMode() {
+  async function toggleLiveMode() {
     const next = !liveMode;
-    setLiveMode(next);
-    liveModeRef.current = next;
-    if (next) {
-      sfx.confirm();
-      startListening({ sendOnEnd: true });
-    } else {
-      cancelSpeak();
-      stopListening();
+
+    // Turning OFF — tear down session
+    if (!next) {
+      liveModeRef.current = false;
+      setLiveMode(false);
+      setLiveStatus("idle");
+      setLiveCaption("");
+      const sess = liveSessionRef.current;
+      liveSessionRef.current = null;
+      sess?.stop();
+      sfx.select();
+      return;
+    }
+
+    // Turning ON — boot Gemini Live
+    liveModeRef.current = true;
+    setLiveMode(true);
+    sfx.confirm();
+
+    // Cancel any in-flight Web Speech mic / TTS
+    cancelSpeak();
+    stopListening();
+
+    setMessages((m) => [
+      ...m,
+      { role: "system", text: "Live mode booting — give mic permission if asked." },
+    ]);
+
+    const session = new LuminaLiveSession({
+      onStatus: (s) => setLiveStatus(s),
+      onUserTranscript: (text, isFinal) => {
+        setLiveCaption(text);
+        if (isFinal && text.trim()) {
+          setMessages((m) => [...m, { role: "user", text: text.trim(), spokenInput: true }]);
+          memAddTurn("user", text.trim());
+          setLiveCaption("");
+        }
+      },
+      onModelTranscript: (text, isFinal) => {
+        if (isFinal && text.trim()) {
+          setMessages((m) => [...m, { role: "model", text: text.trim() }]);
+          memAddTurn("model", text.trim());
+        }
+      },
+      onError: (msg) => {
+        setMessages((m) => [...m, { role: "system", text: `Live: ${msg}`, failed: true }]);
+        sfx.error();
+      },
+      onClose: () => {
+        if (liveModeRef.current) {
+          // Unexpected drop — flip the toggle off
+          liveModeRef.current = false;
+          setLiveMode(false);
+          setLiveStatus("closed");
+        }
+      },
+    });
+    liveSessionRef.current = session;
+    try {
+      await session.start();
+    } catch {
+      // start() already reported via onError
+      liveModeRef.current = false;
+      setLiveMode(false);
+      liveSessionRef.current = null;
     }
   }
+
+  // Cleanup on unmount
+  useEffect(() => {
+    return () => {
+      liveSessionRef.current?.stop();
+      liveSessionRef.current = null;
+    };
+  }, []);
 
   if (!isChatOpen) return null;
 
@@ -448,7 +517,7 @@ export function LuminaPanel() {
             <button
               type="button"
               onClick={toggleLiveMode}
-              title={liveMode ? "Live mode active — click to stop" : "Live voice mode"}
+              title={liveMode ? `Gemini Live · ${liveStatus} — click to stop` : "Gemini Live voice mode"}
               className="font-display text-[10px] uppercase tracking-tactical px-2 py-1 rounded-sm transition-colors"
               style={{
                 color: liveMode ? "#000" : NEON_GREEN_BRIGHT,
@@ -457,7 +526,7 @@ export function LuminaPanel() {
                 boxShadow: liveMode ? `0 0 18px ${NEON_GREEN}cc` : "none",
               }}
             >
-              {liveMode ? "● live" : "live"}
+              {liveMode ? `● ${liveStatusLabel(liveStatus)}` : "live"}
             </button>
             {/* Memory drawer toggle */}
             <button
@@ -477,8 +546,12 @@ export function LuminaPanel() {
               onClick={() => {
                 cancelSpeak();
                 stopListening();
+                liveSessionRef.current?.stop();
+                liveSessionRef.current = null;
                 liveModeRef.current = false;
                 setLiveMode(false);
+                setLiveStatus("idle");
+                setLiveCaption("");
                 sfx.select();
                 setChatOpen(false);
               }}
@@ -612,6 +685,20 @@ export function LuminaPanel() {
               </div>
             );
           })}
+          {liveMode && liveCaption && (
+            <div className="flex justify-end">
+              <div
+                className="max-w-[88%] px-3 py-2 rounded-[2px] text-sm italic"
+                style={{
+                  background: "#000",
+                  color: "#fff8",
+                  border: `1px dashed ${NEON_BLUE}88`,
+                }}
+              >
+                {liveCaption}
+              </div>
+            </div>
+          )}
           {interim && (
             <div className="flex justify-end">
               <div
@@ -652,11 +739,11 @@ export function LuminaPanel() {
               }}
               placeholder={
                 liveMode
-                  ? "Live mode — just talk."
+                  ? `Gemini Live — ${liveStatusLabel(liveStatus)}. Just talk.`
                   : 'Talk to Lumina or type — "fly to needs fielding", "what\'s on my calendar this week"'
               }
               rows={2}
-              disabled={listening}
+              disabled={listening || liveMode}
               className="w-full rounded-sm px-3 py-2 pr-12 text-sm text-white placeholder:text-white/30 resize-none font-body outline-none"
               style={{
                 background: "#000",
@@ -708,6 +795,25 @@ export function LuminaPanel() {
       </div>
     </div>
   );
+}
+
+function liveStatusLabel(s: LuminaLiveStatus): string {
+  switch (s) {
+    case "connecting":
+      return "connecting";
+    case "listening":
+      return "listening";
+    case "speaking":
+      return "speaking";
+    case "thinking":
+      return "thinking";
+    case "error":
+      return "error";
+    case "closed":
+      return "closed";
+    default:
+      return "live";
+  }
 }
 
 function MicGlyph() {
