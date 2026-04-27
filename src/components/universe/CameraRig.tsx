@@ -277,7 +277,21 @@ export function CameraRig() {
       return;
     }
 
-    // Scripted shot: critical damping toward target
+    // Scripted shot: critical damping toward target.
+    // In universe view, slowly orbit the targetPos around Y for a subtle
+    // "living" drift (~0.5° per second → a full revolution every ~12 minutes
+    // is far too slow; we use ~0.0017 rad/sec ≈ 0.1°/sec which is the right
+    // amount of motion to feel cinematic without being noticeable).
+    if (viewMode === "universe") {
+      const driftRate = 0.0017; // rad/sec
+      const angle = driftRate * delta;
+      const cosA = Math.cos(angle);
+      const sinA = Math.sin(angle);
+      const x = targetPos.current.x;
+      const z = targetPos.current.z;
+      targetPos.current.x = x * cosA - z * sinA;
+      targetPos.current.z = x * sinA + z * cosA;
+    }
     const lambda = 2.4;
     const k = 1 - Math.exp(-lambda * delta);
     camera.position.lerp(targetPos.current, k);

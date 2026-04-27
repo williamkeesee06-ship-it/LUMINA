@@ -9,6 +9,8 @@ import { Stardust } from "./Stardust";
 import { CosmicDust } from "./CosmicDust";
 import { GalaxyCluster } from "./GalaxyCluster";
 import { PlanetField } from "./PlanetField";
+import { NebulaClouds } from "./NebulaClouds";
+import { Meteors } from "./Meteors";
 import { GALAXY_POSITIONS } from "./galaxyLayout";
 import { sfx } from "@/lib/audio";
 
@@ -66,10 +68,45 @@ export function UniverseScene() {
       </Suspense>
 
       <CameraRig />
-      {/* Far star field — dense pinpoint stars filling the sky */}
-      <Stardust count={1100} radius={95} dim={isPlanetView} />
-      {/* Near twinkle layer — closer, brighter motes that drift past camera */}
-      <Stardust count={350} radius={45} dim={isPlanetView} />
+      {/* Distant nebula clouds — static low-opacity color washes in deep space */}
+      <Suspense fallback={null}>
+        <NebulaClouds />
+      </Suspense>
+      {/* Far layer — tiny dim pinpoint stars filling the sky, barely twinkle */}
+      <Stardust
+        count={1500}
+        radius={130}
+        size={0.12}
+        baseOpacity={0.7}
+        twinkleFraction={0.03}
+        spin={0.005}
+        flatten={1}
+        dim={isPlanetView}
+      />
+      {/* Mid layer — medium-bright stars at conversational distance */}
+      <Stardust
+        count={600}
+        radius={70}
+        size={0.18}
+        baseOpacity={0.85}
+        twinkleFraction={0.05}
+        spin={0.01}
+        flatten={0.65}
+        dim={isPlanetView}
+      />
+      {/* Near layer — slightly larger, drift past camera, occasional twinkle */}
+      <Stardust
+        count={200}
+        radius={32}
+        size={0.26}
+        baseOpacity={0.95}
+        twinkleFraction={0.08}
+        spin={0.02}
+        flatten={0.5}
+        dim={isPlanetView}
+      />
+      {/* Shooting stars — tapered streaks every ~10s, no squares */}
+      <Meteors intervalSec={11} poolSize={5} radius={95} dim={isPlanetView} />
       {/* Cosmic dust / swirl — blends galaxies into surrounding space */}
       <CosmicDust perGalaxy={260} ambient={900} dim={isPlanetView} />
 

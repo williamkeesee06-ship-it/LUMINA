@@ -5,6 +5,27 @@ import * as THREE from "three";
 import type { Galaxy } from "@/types";
 import { GALAXY_COLORS } from "@/lib/statusMap";
 
+/**
+ * Soft additive radial sprite — used to replace the hard sphereGeometry core
+ * so the galaxy nucleus reads as a glow instead of a flat disc.
+ */
+function makeSoftSprite(): THREE.Texture {
+  const s = 128;
+  const canvas = document.createElement("canvas");
+  canvas.width = canvas.height = s;
+  const ctx = canvas.getContext("2d")!;
+  const grad = ctx.createRadialGradient(s / 2, s / 2, 0, s / 2, s / 2, s / 2);
+  grad.addColorStop(0, "rgba(255,255,255,1)");
+  grad.addColorStop(0.25, "rgba(255,255,255,0.65)");
+  grad.addColorStop(0.6, "rgba(255,255,255,0.18)");
+  grad.addColorStop(1, "rgba(255,255,255,0)");
+  ctx.fillStyle = grad;
+  ctx.fillRect(0, 0, s, s);
+  const tex = new THREE.CanvasTexture(canvas);
+  tex.needsUpdate = true;
+  return tex;
+}
+
 interface Props {
   galaxy: Galaxy;
   position: [number, number, number];
@@ -88,6 +109,7 @@ export function GalaxyCluster({
 
   const color = GALAXY_COLORS[galaxy];
   const nebulaTex = useLoader(THREE.TextureLoader, NEBULA_FOR[galaxy]);
+  const softSprite = useMemo(() => makeSoftSprite(), []);
 
   const nebulaMaterial = useMemo(() => {
     const m = makeNebulaMaterial(nebulaTex, color);
@@ -107,10 +129,14 @@ export function GalaxyCluster({
     const c = new THREE.Color(color);
     for (let i = 0; i < n; i++) {
       const t = i / n;
-      const angle = t * Math.PI * 8 + Math.random() * 0.6;
-      const r = 1.2 + Math.pow(Math.random(), 0.6) * 3.6;
+      // Looser arms: wider angular jitter so spiral looks organic, not tidy.
+      const angle = t * Math.PI * 8 + (Math.random() - 0.5) * 1.6;
+      // Wider radius distribution + per-particle radial jitter so silhouette
+      // bleeds into surrounding space instead of having a sharp edge.
+      const r = 1.0 + Math.pow(Math.random(), 0.5) * 5.0 + (Math.random() - 0.5) * 0.6;
       pos[i * 3] = Math.cos(angle) * r;
-      pos[i * 3 + 1] = (Math.random() - 0.5) * 0.5;
+      // Wider y-jitter, scaled by radius so outer arms feather out vertically.
+      pos[i * 3 + 1] = (Math.random() - 0.5) * (0.35 + r * 0.12);
       pos[i * 3 + 2] = Math.sin(angle) * r;
       const fade = 0.5 + Math.random() * 0.5;
       col[i * 3] = c.r * fade;
@@ -184,18 +210,22 @@ export function GalaxyCluster({
           toneMapped={false}
         />
       </mesh>
-      {/* Bright neon core point — small, intense, additive */}
-      <mesh ref={coreRef}>
-        <sphereGeometry args={[0.32, 32, 32]} />
-        <meshBasicMaterial
-          color={color}
-          transparent
-          opacity={0.95}
-          depthWrite={false}
-          blending={THREE.AdditiveBlending}
-          toneMapped={false}
-        />
-      </mesh>
+      {/* Bright neon core — soft additive radial sprite (no hard silhouette).
+          Replaces the previous sphereGeometry which read as a visible disc. */}
+      <Billboard>
+        <mesh ref={coreRef}>
+          <planeGeometry args={[2.4, 2.4]} />
+          <meshBasicMaterial
+            map={softSprite}
+            color={color}
+            transparent
+            opacity={0.95}
+            depthWrite={false}
+            blending={THREE.AdditiveBlending}
+            toneMapped={false}
+          />
+        </mesh>
+      </Billboard>
       {/* Highlight ring when focused */}
       {highlighted && (
         <Billboard>
