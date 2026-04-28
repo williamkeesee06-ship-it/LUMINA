@@ -58,7 +58,17 @@ function parseToolCall(text: string): { clean: string; toolCall: ToolCall | null
   }
 }
 
-export function LuminaPanel() {
+interface LuminaPanelProps {
+  /** Distance from the bottom of the viewport in px. Default 24 (legacy). */
+  anchorBottom?: number;
+  /** Distance from the left of the viewport in px. If provided, panel docks to the left edge of the screen (used by LuminaDock). */
+  anchorLeft?: number;
+}
+
+export function LuminaPanel({
+  anchorBottom,
+  anchorLeft,
+}: LuminaPanelProps = {}) {
   const isChatOpen = useUI((s) => s.isChatOpen);
   const setChatOpen = useUI((s) => s.setChatOpen);
   const hudOrientation = useUI((s) => s.hudOrientation);
@@ -587,9 +597,12 @@ export function LuminaPanel() {
 
   if (!isChatOpen) return null;
 
-  // Avoid colliding with right-docked vertical HUD
+  // Default placement (legacy callers): right-docked, avoids vertical HUD.
+  // New LuminaDock passes anchorLeft + anchorBottom and we dock to the left
+  // edge of the screen instead.
+  const useLeftAnchor = typeof anchorLeft === "number";
   const rightOffset = hudOrientation === "vertical" ? 244 : 24;
-  const bottomOffset = hudOrientation === "vertical" ? 24 : 128;
+  const bottomOffset = anchorBottom ?? (hudOrientation === "vertical" ? 24 : 128);
 
   // Neon palette
   const NEON_BLUE = "#3D7BFF";
@@ -599,8 +612,12 @@ export function LuminaPanel() {
 
   return (
     <div
-      className="pointer-events-auto fixed z-40 w-[460px] max-w-[46vw]"
-      style={{ right: rightOffset, bottom: bottomOffset }}
+      className="pointer-events-auto fixed z-40 w-[380px] max-w-[40vw]"
+      style={
+        useLeftAnchor
+          ? { left: anchorLeft, bottom: bottomOffset }
+          : { right: rightOffset, bottom: bottomOffset }
+      }
     >
       <div
         className="relative overflow-hidden rounded-[2px]"

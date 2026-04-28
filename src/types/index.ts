@@ -30,6 +30,13 @@ export type HudMode = "minimized" | "expanded";
 export type HudOrientation = "vertical" | "horizontal";
 
 /**
+ * HUD pager. The HUD shows one of two pages:
+ *   - "navigation" — galaxy shortcut widgets (action-oriented)
+ *   - "telemetry"  — system gauges + Gmail counter (passive monitoring)
+ */
+export type HudPage = "navigation" | "telemetry";
+
+/**
  * Map transition state machine. Drives the hyperspace dive into the tactical
  * map (and the reverse warp-out back to the universe).
  *  - idle: universe is the active surface, map fully closed

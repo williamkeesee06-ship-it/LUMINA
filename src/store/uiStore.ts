@@ -4,6 +4,7 @@ import type {
   Galaxy,
   HudMode,
   HudOrientation,
+  HudPage,
   Job,
   JobChecklist,
   MapTransition,
@@ -54,6 +55,13 @@ export interface UIState {
   // V3 HUD (canonical addition)
   hudMode: HudMode;
   hudOrientation: HudOrientation;
+  /**
+   * HUD pager. The HUD now flips between two pages:
+   *   - "navigation" — galaxy shortcut widgets (default; action-oriented)
+   *   - "telemetry"  — system gauges + Gmail counter (passive monitoring)
+   * A two-dot indicator at the top of the HUD swaps pages.
+   */
+  hudPage: HudPage;
 
   // Map open state (tactical map is a surface, not the home)
   isMapOpen: boolean;
@@ -84,6 +92,8 @@ export interface UIState {
   toggleHud: () => void;
   setHudOrientation: (o: HudOrientation) => void;
   toggleHudOrientation: () => void;
+  setHudPage: (p: HudPage) => void;
+  toggleHudPage: () => void;
   setChatOpen: (open: boolean) => void;
   setOrbMode: (m: OrbMode) => void;
   setShowRouteLayer: (v: boolean) => void;
@@ -131,6 +141,8 @@ export const useUI = create<UIState>((set, get) => ({
 
   hudMode: "expanded",
   hudOrientation: "vertical",
+  // Default to navigation page — action-oriented; users open the app to do something.
+  hudPage: "navigation",
   isMapOpen: false,
   mapTransition: "idle",
   // History (Complete) starts hidden so the map opens focused on active work.
@@ -207,6 +219,11 @@ export const useUI = create<UIState>((set, get) => ({
   toggleHudOrientation: () => {
     const cur = get().hudOrientation;
     set({ hudOrientation: cur === "vertical" ? "horizontal" : "vertical" });
+  },
+  setHudPage: (hudPage) => set({ hudPage }),
+  toggleHudPage: () => {
+    const cur = get().hudPage;
+    set({ hudPage: cur === "navigation" ? "telemetry" : "navigation" });
   },
 
   setChatOpen: (isChatOpen) => set({ isChatOpen }),

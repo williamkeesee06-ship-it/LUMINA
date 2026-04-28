@@ -11,6 +11,8 @@ interface Props {
   disabled?: boolean;
   onClick?: () => void;
   onMouseEnter?: () => void;
+  /** Disc diameter in px. Default 32 (legacy compact). 60+ for hero navigation page. */
+  size?: number;
 }
 
 /**
@@ -29,7 +31,12 @@ export function MiniWidget({
   disabled = false,
   onClick,
   onMouseEnter,
+  size = 32,
 }: Props) {
+  // Type sizes scale with the disc so a hero-sized widget keeps proportion.
+  const labelSize = Math.max(7, Math.round(size * 0.18));
+  const valueSize = Math.max(12.5, Math.round(size * 0.42));
+  const ringWidth = size >= 60 ? 2.2 : 1.8;
   return (
     <button
       type="button"
@@ -46,7 +53,7 @@ export function MiniWidget({
       <div
         className="font-display uppercase leading-none"
         style={{
-          fontSize: 7,
+          fontSize: labelSize,
           letterSpacing: "0.24em",
           color,
           fontWeight: 600,
@@ -54,7 +61,7 @@ export function MiniWidget({
           textShadow: disabled
             ? "none"
             : `0 0 2px ${color}, 0 0 6px ${color}aa`,
-          marginBottom: 2,
+          marginBottom: size >= 60 ? 6 : 2,
         }}
       >
         {label}
@@ -65,13 +72,12 @@ export function MiniWidget({
           "group-hover:scale-[1.06]",
         )}
         style={{
-          width: 32,
-          height: 32,
+          width: size,
+          height: size,
           background:
             "radial-gradient(circle at 50% 35%, #0e1320 0%, #060912 70%, #03050a 100%)",
-          // Thicker, brighter ring — 1.4 → 1.8px, plus a faint inner stroke
-          // helps the rim read as a crisp neon line instead of a soft glow.
-          border: `1.8px solid ${disabled ? "#3a4258" : color}`,
+          // Thicker, brighter ring — scales with disc size for hero widgets.
+          border: `${ringWidth}px solid ${disabled ? "#3a4258" : color}`,
           boxShadow: disabled
             ? "inset 0 0 6px rgba(0,0,0,0.85)"
             : active
@@ -82,7 +88,7 @@ export function MiniWidget({
         <div
           className="font-mono font-semibold tabular-nums leading-none"
           style={{
-            fontSize: 12.5,
+            fontSize: valueSize,
             // Use the galaxy color for a crisp, bright readout instead of
             // pure white — white was bleeding through the soft halo and
             // looking fuzzy. A 1px white core inside a tight color halo
@@ -100,8 +106,8 @@ export function MiniWidget({
           <svg
             className="absolute inset-0 pointer-events-none"
             viewBox="0 0 32 32"
-            width="32"
-            height="32"
+            width={size}
+            height={size}
             aria-hidden
           >
             <line

@@ -4,17 +4,14 @@ import { useUI, selectGalaxyCounts } from "@/store/uiStore";
 import { GALAXIES } from "@/types";
 import { GALAXY_COLORS } from "@/lib/statusMap";
 import type { Galaxy } from "@/types";
-import { Gauge } from "./Gauge";
 import { CircleWidget } from "./CircleWidget";
 import { DysonCore } from "./DysonCore";
-import { MiniGauge } from "./MiniGauge";
 import { MiniWidget } from "./MiniWidget";
 import { SystemGauge } from "./SystemGauge";
 import { useSystemTelemetry } from "@/hooks/useSystemTelemetry";
-import { DysonSphereHero } from "./DysonSphereHero";
 import { NeonGlobeV2 } from "./NeonGlobeV2";
 import { ActiveMicIcon } from "./ActiveMicIcon";
-import { Orb } from "@/components/lumina/Orb";
+import { HudPager } from "./HudPager";
 import { sfx } from "@/lib/audio";
 import { requestGoogleToken } from "@/lib/googleAuth";
 
@@ -122,6 +119,7 @@ function HUDVertical() {
   const hudMode = useUI((s) => s.hudMode);
   const setHudMode = useUI((s) => s.setHudMode);
   const toggleOrientation = useUI((s) => s.toggleHudOrientation);
+  const hudPage = useUI((s) => s.hudPage);
   const {
     counts,
     enterGalaxy,
@@ -150,7 +148,7 @@ function HUDVertical() {
   return (
     <div
       className="pointer-events-none fixed top-6 right-6 bottom-6 z-40 flex flex-col"
-      style={{ width: collapsed ? 96 : 220 }}
+      style={{ width: collapsed ? 96 : 240 }}
     >
       <div
         className={clsx(
@@ -246,211 +244,37 @@ function HUDVertical() {
           />
         </div>
 
-        {/* HERO — LUMINA Dyson sphere (the star of the show, literally) */}
-        <button
-          type="button"
-          onMouseEnter={() => sfx.hover()}
-          onClick={() => {
-            sfx.wake();
-            useUI.getState().setChatOpen(!useUI.getState().isChatOpen);
-          }}
-          title="Wake LUMINA"
-          aria-label="Wake LUMINA"
-          className="flex flex-col items-center gap-0.5 px-3 pt-2 pb-2 transition-transform hover:scale-[1.03] active:scale-[0.97]"
-        >
-          {collapsed ? (
-            <Orb size={48} />
-          ) : (
-            <DysonSphereHero size={92} />
-          )}
-          {!collapsed && (
-            <>
-              <div
-                className="font-display"
-                style={{
-                  fontSize: 14,
-                  fontWeight: 700,
-                  letterSpacing: "0.18em",
-                  color: "#ffffff",
-                  textShadow:
-                    "0 0 4px #5BF3FF, 0 0 9px rgba(91,243,255,0.7)",
-                  marginTop: -4,
-                }}
-              >
-                LUMINA
-              </div>
-              <div
-                className="font-mono uppercase"
-                style={{
-                  fontSize: 7,
-                  letterSpacing: "0.32em",
-                  color: "rgba(91,243,255,0.75)",
-                  textShadow: "0 0 3px rgba(91,243,255,0.55)",
-                }}
-              >
-                tactical AI core
-              </div>
-            </>
-          )}
-        </button>
-
         {!collapsed && (
           <>
-            {/* Cyan accent rule */}
-            <div className="px-3">
-              <div
-                style={{
-                  height: 1.5,
-                  background: "#5BF3FF",
-                  boxShadow: "0 0 6px #5BF3FF, 0 0 12px rgba(91,243,255,0.5)",
-                }}
-              />
+            {/* PAGE INDICATOR — vertical neon segmented bars at the top of
+                the column. Tap NAV / SYS to flip pages. Lumina is no longer
+                in the HUD; she lives at bottom-left in <LuminaDock>. */}
+            <div className="flex justify-center px-3 py-3">
+              <HudPager orientation="horizontal" />
             </div>
 
-            {/* TELEMETRY STACK — three hero gauges fill the column width */}
-            <div className="flex-1 min-h-0 overflow-y-auto px-3 py-2.5">
-              {/* Section caption */}
-              <div
-                className="font-mono uppercase mb-1.5 px-1"
-                style={{
-                  fontSize: 7,
-                  letterSpacing: "0.32em",
-                  color: "rgba(91,243,255,0.7)",
-                }}
-              >
-                · telemetry
-              </div>
-              {/* 2x3 grid of compact system gauges — living glow scales
-                  with each metric's intensity. TOTAL + GMAIL keep their
-                  original functions; CPU/MEMORY/DISK/NETWORK come from
-                  real browser telemetry (see useSystemTelemetry). */}
-              <div className="grid grid-cols-2 gap-x-1.5 gap-y-2 justify-items-center mb-3">
-                <SystemGauge
-                  label="TOTAL"
-                  value={total}
-                  // Intensity scales with how busy the universe is. 0..120 jobs maps to 0..1.
-                  intensity={Math.min(1, total / 120)}
-                  color="#5BF3FF"
+            {/* PAGE BODY — NavigationPage or TelemetryPage based on store. */}
+            <div className="flex-1 min-h-0 overflow-y-auto px-3 pt-1 pb-3">
+              {hudPage === "telemetry" ? (
+                <TelemetryPageVertical
+                  total={total}
+                  unreadCount={unreadCount}
+                  googleToken={googleToken}
+                  handleConnectGmail={handleConnectGmail}
+                  sys={sys}
                 />
-                <SystemGauge
-                  label={googleToken ? "GMAIL" : "CONNECT"}
-                  value={googleToken ? unreadCount : "→"}
-                  // Intensity climbs with unread count, capped at 20.
-                  intensity={
-                    !googleToken
-                      ? 0.4
-                      : Math.min(1, unreadCount / 20)
-                  }
-                  color={
-                    unreadCount > 0
-                      ? "#FF3D9A"
-                      : googleToken
-                        ? "#5BF3FF"
-                        : "#FFB347"
-                  }
-                  pulse={!googleToken || unreadCount > 0}
-                  onClick={handleConnectGmail}
+              ) : (
+                <NavigationPageVertical
+                  counts={counts}
+                  focusedGalaxy={focusedGalaxy}
+                  enterGalaxy={enterGalaxy}
+                  isMapOpen={isMapOpen}
+                  hiddenGalaxies={hiddenGalaxies}
+                  showHistoryOnMap={showHistoryOnMap}
+                  toggleMapFilter={toggleMapFilter}
+                  toggleHistoryOnMap={toggleHistoryOnMap}
                 />
-                <SystemGauge
-                  label="CPU"
-                  value={`${sys.cpu}%`}
-                  intensity={sys.cpu / 100}
-                  color="#5BF3FF"
-                />
-                <SystemGauge
-                  label="MEMORY"
-                  value={sys.memoryLabel}
-                  intensity={sys.memory / 100}
-                  color="#FF3D9A"
-                />
-                <SystemGauge
-                  label="DISK"
-                  value={sys.diskLabel}
-                  intensity={sys.disk / 100}
-                  color="#39FF7A"
-                />
-                <SystemGauge
-                  label="NETWORK"
-                  value={sys.networkLabel}
-                  intensity={sys.network / 100}
-                  color="#B97CFF"
-                />
-              </div>
-
-              {/* Cyan accent rule between sections */}
-              <div
-                style={{
-                  height: 1,
-                  background:
-                    "linear-gradient(90deg, transparent, #5BF3FF, transparent)",
-                  boxShadow: "0 0 4px rgba(91,243,255,0.6)",
-                  marginBottom: 8,
-                }}
-              />
-
-              {/* Galaxies caption */}
-              <div
-                className="font-mono uppercase mb-1.5 px-1"
-                style={{
-                  fontSize: 7,
-                  letterSpacing: "0.32em",
-                  color: "rgba(91,243,255,0.7)",
-                }}
-              >
-                · galaxies
-              </div>
-              {/* 7 galaxy widgets in 2-col grid (4+3) — labels above tiny disc.
-                  When the map is open, click toggles map visibility filter.
-                  When the map is closed, click enters the galaxy as before. */}
-              <div className="grid grid-cols-2 gap-x-1.5 gap-y-1.5 justify-items-center pb-1">
-                {GALAXIES.filter((g) => g !== "Complete").map((g) => {
-                  const c = GALAXY_COLORS[g];
-                  const rgb = hexToRgbTriplet(c);
-                  const active = focusedGalaxy === g;
-                  const cnt = counts[g];
-                  const isFiltered = isMapOpen && hiddenGalaxies.includes(g);
-                  return (
-                    <MiniWidget
-                      key={g}
-                      label={GALAXY_SHORT[g]}
-                      value={cnt}
-                      color={c}
-                      rgb={rgb}
-                      active={active && !isMapOpen}
-                      disabled={isFiltered}
-                      onMouseEnter={() => sfx.hover()}
-                      onClick={() => {
-                        if (isMapOpen) {
-                          toggleMapFilter(g);
-                        } else {
-                          sfx.select();
-                          enterGalaxy(active ? null : g);
-                        }
-                      }}
-                    />
-                  );
-                })}
-                {/* HISTORY widget — toggles black-marker Complete jobs on the map.
-                    Always rendered alongside the 6 active galaxies for the 7-cell
-                    layout the HUD was designed around. */}
-                <MiniWidget
-                  label="HISTORY"
-                  value={counts.Complete}
-                  color="#8A93A8"
-                  rgb="138,147,168"
-                  active={false}
-                  disabled={isMapOpen ? !showHistoryOnMap : false}
-                  onMouseEnter={() => sfx.hover()}
-                  onClick={() => {
-                    if (isMapOpen) {
-                      toggleHistoryOnMap();
-                    } else {
-                      sfx.select();
-                      enterGalaxy(focusedGalaxy === "Complete" ? null : "Complete");
-                    }
-                  }}
-                />
-              </div>
+              )}
             </div>
 
             {/* Cyan accent rule above utility row */}
@@ -632,6 +456,7 @@ function HUDHorizontal() {
   const hudMode = useUI((s) => s.hudMode);
   const setHudMode = useUI((s) => s.setHudMode);
   const toggleOrientation = useUI((s) => s.toggleHudOrientation);
+  const hudPage = useUI((s) => s.hudPage);
   const {
     counts,
     enterGalaxy,
@@ -639,7 +464,7 @@ function HUDHorizontal() {
     total,
     googleToken,
     unreadCount,
-    universeVitality,
+    universeVitality: _universeVitality,
     isMapOpen,
     mapTransition,
     diveToMap,
@@ -650,6 +475,10 @@ function HUDHorizontal() {
     toggleHistoryOnMap,
     handleConnectGmail,
   } = useHudData();
+  void _universeVitality; // retired — universe gauge replaced by 4 system gauges
+
+  // Real-time system telemetry powering CPU/MEMORY/DISK/NETWORK gauges.
+  const sys = useSystemTelemetry();
 
   return (
     <div className="pointer-events-none fixed bottom-3 left-1/2 -translate-x-1/2 z-40 w-[min(96vw,1480px)]">
@@ -710,9 +539,9 @@ function HUDHorizontal() {
           {hudMode === "minimized" && (
             <div className="flex items-center justify-between px-6 py-4">
               <div className="flex items-center gap-3">
-                <DysonSphereHero size={48} />
+                <HudPager orientation="vertical" compact />
                 <div className="font-display text-xs uppercase tracking-tactical text-cyan-glow/70">
-                  LUMINA · standby
+                  {hudPage === "telemetry" ? "telemetry" : "navigation"}
                 </div>
               </div>
               <DysonCore size={36} />
@@ -733,90 +562,77 @@ function HUDHorizontal() {
               <span className="rivet" style={{ left: "75%", bottom: 8 }} />
 
               <div className="flex items-stretch px-6 py-3 gap-4">
-                {/* Left bay: LUMINA Dyson sphere hero matches vertical mode */}
-                <button
-                  type="button"
-                  onMouseEnter={() => sfx.hover()}
-                  onClick={() => {
-                    sfx.wake();
-                    useUI.getState().setChatOpen(
-                      !useUI.getState().isChatOpen,
-                    );
-                  }}
-                  title="Wake LUMINA"
-                  aria-label="Wake LUMINA"
-                  className="flex items-center gap-3 pr-2 transition-transform hover:scale-[1.02] active:scale-[0.98]"
-                >
-                  <DysonSphereHero size={68} />
-                  <div className="hidden lg:block text-left">
-                    <div
-                      className="font-display"
-                      style={{
-                        fontSize: 14,
-                        fontWeight: 700,
-                        letterSpacing: "0.18em",
-                        color: "#ffffff",
-                        textShadow:
-                          "0 0 4px #5BF3FF, 0 0 9px rgba(91,243,255,0.7)",
-                      }}
-                    >
-                      LUMINA
-                    </div>
-                    <div
-                      className="font-mono uppercase"
-                      style={{
-                        fontSize: 7.5,
-                        letterSpacing: "0.32em",
-                        color: "rgba(91,243,255,0.75)",
-                        textShadow: "0 0 3px rgba(91,243,255,0.55)",
-                      }}
-                    >
-                      tactical AI core
-                    </div>
-                    <div className="mt-1 inline-flex items-center gap-1 px-1.5 py-0.5 border border-cyan-glow/20 bg-black/40 rounded-sm">
-                      <span className="w-1 h-1 rounded-full bg-teal-glow shadow-[0_0_6px_#3CFFD2]" />
-                      <span className="font-mono text-[8px] uppercase tracking-[0.24em] text-teal-glow">
-                        online
-                      </span>
-                    </div>
-                  </div>
-                </button>
+                {/* Left bay: vertical neon segmented page indicator. Lumina
+                    is no longer in the HUD — she lives at bottom-left in
+                    <LuminaDock>. The pager flips between Navigation and
+                    Telemetry pages. */}
+                <div className="flex items-center pr-2">
+                  <HudPager orientation="vertical" />
+                </div>
 
                 <Divider />
 
-                <div className="gauge-bay px-4 py-2 rounded-[2px] flex items-center gap-3">
-                  <Gauge label="Total" value={total} tone="cyan" rainbow />
-                  <Gauge
-                    label={googleToken ? "Gmail" : "Connect"}
-                    value={googleToken ? unreadCount : "→"}
-                    tone={
-                      unreadCount > 0
-                        ? "magenta"
-                        : googleToken
-                          ? "cyan"
-                          : "amber"
-                    }
-                    pulse={!googleToken || unreadCount > 0}
-                    onClick={handleConnectGmail}
-                  />
-                  <Gauge
-                    label="Universe"
-                    value={`${universeVitality}%`}
-                    max={100}
-                    tone={
-                      universeVitality > 60
-                        ? "teal"
-                        : universeVitality > 30
-                          ? "amber"
-                          : "magenta"
-                    }
-                    pulse={universeVitality < 40}
-                  />
-                </div>
-
-                {hudMode === "expanded" && (
-                  <>
-                    <Divider />
+                {/* PAGE BODY — swaps between gauges and galaxy widgets
+                    based on the active page. Both pages are sized to fill
+                    the same horizontal bay so the bar height stays steady
+                    on swap. */}
+                {hudPage === "telemetry" ? (
+                  <div className="gauge-bay px-4 py-2 rounded-[2px] flex items-center gap-3 flex-1 min-w-0 justify-around">
+                    <SystemGauge
+                      label="TOTAL"
+                      value={total}
+                      intensity={Math.min(1, total / 120)}
+                      color="#5BF3FF"
+                      size={84}
+                    />
+                    <SystemGauge
+                      label={googleToken ? "GMAIL" : "CONNECT"}
+                      value={googleToken ? unreadCount : "→"}
+                      intensity={
+                        !googleToken ? 0.4 : Math.min(1, unreadCount / 20)
+                      }
+                      color={
+                        unreadCount > 0
+                          ? "#FF3D9A"
+                          : googleToken
+                            ? "#5BF3FF"
+                            : "#FFB347"
+                      }
+                      pulse={!googleToken || unreadCount > 0}
+                      onClick={handleConnectGmail}
+                      size={84}
+                    />
+                    <SystemGauge
+                      label="CPU"
+                      value={`${sys.cpu}%`}
+                      intensity={sys.cpu / 100}
+                      color="#5BF3FF"
+                      size={84}
+                    />
+                    <SystemGauge
+                      label="MEMORY"
+                      value={sys.memoryLabel}
+                      intensity={sys.memory / 100}
+                      color="#FF3D9A"
+                      size={84}
+                    />
+                    <SystemGauge
+                      label="DISK"
+                      value={sys.diskLabel}
+                      intensity={sys.disk / 100}
+                      color="#39FF7A"
+                      size={84}
+                    />
+                    <SystemGauge
+                      label="NETWORK"
+                      value={sys.networkLabel}
+                      intensity={sys.network / 100}
+                      color="#B97CFF"
+                      size={84}
+                    />
+                  </div>
+                ) : (
+                  hudMode === "expanded" && (
                     <div className="flex-1 flex items-center justify-around gap-2 min-w-0 px-1">
                       {GALAXIES.filter((g) => g !== "Complete").map((g) => {
                         const c = GALAXY_COLORS[g];
@@ -863,7 +679,7 @@ function HUDHorizontal() {
                         }}
                       />
                     </div>
-                  </>
+                  )
                 )}
 
                 {/* Solid divider to kill ghost-icon bleed */}
@@ -1246,5 +1062,203 @@ function ChevronModeButton({
         />
       </svg>
     </button>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// HUD pages (vertical layout)
+//
+// The HUD now flips between two pages — Navigation and Telemetry — controlled
+// by the HudPager indicator at the top of the column. Each page fills the
+// reclaimed space (Lumina is no longer in the HUD; she lives at bottom-left
+// in <LuminaDock>) so widgets and gauges can be hero-sized and crisp.
+
+interface SystemTelemetry {
+  cpu: number;
+  memory: number;
+  memoryLabel: string;
+  disk: number;
+  diskLabel: string;
+  network: number;
+  networkLabel: string;
+}
+
+/**
+ * NavigationPageVertical — galaxy shortcut widgets in a single column,
+ * hero-sized so each label and number reads at a glance from across the room.
+ */
+function NavigationPageVertical({
+  counts,
+  focusedGalaxy,
+  enterGalaxy,
+  isMapOpen,
+  hiddenGalaxies,
+  showHistoryOnMap,
+  toggleMapFilter,
+  toggleHistoryOnMap,
+}: {
+  counts: Record<Galaxy, number>;
+  focusedGalaxy: Galaxy | null;
+  enterGalaxy: (g: Galaxy | null) => void;
+  isMapOpen: boolean;
+  hiddenGalaxies: Galaxy[];
+  showHistoryOnMap: boolean;
+  toggleMapFilter: (g: Galaxy) => void;
+  toggleHistoryOnMap: () => void;
+}) {
+  return (
+    <div className="flex flex-col items-stretch">
+      <div
+        className="font-mono uppercase mb-2 px-1"
+        style={{
+          fontSize: 8,
+          letterSpacing: "0.32em",
+          color: "rgba(91,243,255,0.85)",
+          textShadow: "0 0 4px rgba(91,243,255,0.45)",
+        }}
+      >
+        · navigation
+      </div>
+      {/* Single-column hero galaxy widgets. Order matches the original
+          left-to-right reading order of the universe. */}
+      <div className="flex flex-col gap-3 items-center pb-1">
+        {GALAXIES.filter((g) => g !== "Complete").map((g) => {
+          const c = GALAXY_COLORS[g];
+          const rgb = hexToRgbTriplet(c);
+          const active = focusedGalaxy === g;
+          const cnt = counts[g];
+          const isFiltered = isMapOpen && hiddenGalaxies.includes(g);
+          return (
+            <MiniWidget
+              key={g}
+              label={GALAXY_SHORT[g]}
+              value={cnt}
+              color={c}
+              rgb={rgb}
+              active={active && !isMapOpen}
+              disabled={isFiltered}
+              size={66}
+              onMouseEnter={() => sfx.hover()}
+              onClick={() => {
+                if (isMapOpen) {
+                  toggleMapFilter(g);
+                } else {
+                  sfx.select();
+                  enterGalaxy(active ? null : g);
+                }
+              }}
+            />
+          );
+        })}
+        {/* HISTORY widget — toggles black-marker Complete jobs on the map. */}
+        <MiniWidget
+          label="HISTORY"
+          value={counts.Complete}
+          color="#8A93A8"
+          rgb="138,147,168"
+          active={false}
+          disabled={isMapOpen ? !showHistoryOnMap : false}
+          size={66}
+          onMouseEnter={() => sfx.hover()}
+          onClick={() => {
+            if (isMapOpen) {
+              toggleHistoryOnMap();
+            } else {
+              sfx.select();
+              enterGalaxy(focusedGalaxy === "Complete" ? null : "Complete");
+            }
+          }}
+        />
+      </div>
+    </div>
+  );
+}
+
+/**
+ * TelemetryPageVertical — system gauges (CPU/MEM/DISK/NET) plus TOTAL +
+ * GMAIL counter in a single column, hero-sized so the living-glow detail
+ * is glanceable from across the room.
+ */
+function TelemetryPageVertical({
+  total,
+  unreadCount,
+  googleToken,
+  handleConnectGmail,
+  sys,
+}: {
+  total: number;
+  unreadCount: number;
+  googleToken: string | null;
+  handleConnectGmail: () => void;
+  sys: SystemTelemetry;
+}) {
+  return (
+    <div className="flex flex-col items-stretch">
+      <div
+        className="font-mono uppercase mb-2 px-1"
+        style={{
+          fontSize: 8,
+          letterSpacing: "0.32em",
+          color: "rgba(91,243,255,0.85)",
+          textShadow: "0 0 4px rgba(91,243,255,0.45)",
+        }}
+      >
+        · telemetry
+      </div>
+      {/* Single-column hero gauges — bumped from 56 → 96 since the column
+          is no longer fighting Lumina or galaxy widgets for space. */}
+      <div className="flex flex-col gap-2.5 items-center pb-1">
+        <SystemGauge
+          label="TOTAL"
+          value={total}
+          intensity={Math.min(1, total / 120)}
+          color="#5BF3FF"
+          size={96}
+        />
+        <SystemGauge
+          label={googleToken ? "GMAIL" : "CONNECT"}
+          value={googleToken ? unreadCount : "→"}
+          intensity={!googleToken ? 0.4 : Math.min(1, unreadCount / 20)}
+          color={
+            unreadCount > 0
+              ? "#FF3D9A"
+              : googleToken
+                ? "#5BF3FF"
+                : "#FFB347"
+          }
+          pulse={!googleToken || unreadCount > 0}
+          onClick={handleConnectGmail}
+          size={96}
+        />
+        <SystemGauge
+          label="CPU"
+          value={`${sys.cpu}%`}
+          intensity={sys.cpu / 100}
+          color="#5BF3FF"
+          size={96}
+        />
+        <SystemGauge
+          label="MEMORY"
+          value={sys.memoryLabel}
+          intensity={sys.memory / 100}
+          color="#FF3D9A"
+          size={96}
+        />
+        <SystemGauge
+          label="DISK"
+          value={sys.diskLabel}
+          intensity={sys.disk / 100}
+          color="#39FF7A"
+          size={96}
+        />
+        <SystemGauge
+          label="NETWORK"
+          value={sys.networkLabel}
+          intensity={sys.network / 100}
+          color="#B97CFF"
+          size={96}
+        />
+      </div>
+    </div>
   );
 }

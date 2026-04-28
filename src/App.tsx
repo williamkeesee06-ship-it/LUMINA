@@ -4,7 +4,7 @@ import { fetchJobs, geocodeAddresses } from "@/lib/api";
 import { UniverseScene } from "@/components/universe/UniverseScene";
 import { HUD } from "@/components/hud/HUD";
 import { JobPanel } from "@/components/panel/JobPanel";
-import { LuminaPanel } from "@/components/lumina/LuminaPanel";
+import { LuminaDock } from "@/components/lumina/LuminaDock";
 import { TacticalMap } from "@/components/map/TacticalMap";
 import { Boot } from "@/components/effects/Boot";
 import { FailureOverlay } from "@/components/effects/FailureOverlay";
@@ -97,8 +97,9 @@ export default function App() {
       {/* Planet intelligence panel */}
       <JobPanel />
 
-      {/* LUMINA chat */}
-      <LuminaPanel />
+      {/* LUMINA — stationary orb at bottom-left + chat panel that
+          slides out to the right when activated. */}
+      <LuminaDock />
 
       {/* Tactical map — fullscreen surface, lives inside the universe */}
       <TacticalMap />
