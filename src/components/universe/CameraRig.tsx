@@ -48,6 +48,11 @@ export function CameraRig() {
   const pitch = useRef(0);
   const isDragging = useRef(false);
   const lastPointer = useRef<{ x: number; y: number } | null>(null);
+  // Total pointer travel since pointerdown — used to suppress the synthetic
+  // click that fires after a drag-pan so it doesn't accidentally re-select
+  // a galaxy or pick a different planet.
+  const dragStart = useRef<{ x: number; y: number } | null>(null);
+  const dragTravel = useRef(0);
   const keys = useRef<Record<string, boolean>>({});
   const wheelImpulse = useRef(0);
 
@@ -115,6 +120,8 @@ export function CameraRig() {
 
       isDragging.current = true;
       lastPointer.current = { x: e.clientX, y: e.clientY };
+      dragStart.current = { x: e.clientX, y: e.clientY };
+      dragTravel.current = 0;
       // Capture and grabbing-cursor only after we confirm it's a drag —
       // otherwise raycast clicks on galaxies/planets won't fire.
     };
@@ -123,6 +130,7 @@ export function CameraRig() {
       if (!isDragging.current || !lastPointer.current) return;
       const dx = e.clientX - lastPointer.current.x;
       const dy = e.clientY - lastPointer.current.y;
+      dragTravel.current += Math.abs(dx) + Math.abs(dy);
       // Only enter free-fly once movement actually happens (preserves clicks)
       if (Math.abs(dx) + Math.abs(dy) < 2.5 && !freeFly.current) return;
       lastPointer.current = { x: e.clientX, y: e.clientY };
@@ -153,6 +161,21 @@ export function CameraRig() {
       } catch {
         /* no-op */
       }
+    };
+
+    // After a real drag, the browser still fires a synthetic click on whatever
+    // is under the cursor at pointerup. R3F's raycaster picks up that click
+    // and calls onClick on planets / galaxy nebulas — which is what was
+    // dumping the user out of the planet view when they panned the camera.
+    // We swallow the click in capture phase whenever the pointer travelled
+    // more than ~6px between down and up.
+    const onClickCapture = (e: MouseEvent) => {
+      if (dragTravel.current > 6) {
+        e.stopPropagation();
+        e.preventDefault();
+      }
+      dragTravel.current = 0;
+      dragStart.current = null;
     };
 
     const onWheel = (e: WheelEvent) => {
@@ -197,6 +220,8 @@ export function CameraRig() {
     dom.addEventListener("pointermove", onPointerMove);
     dom.addEventListener("pointerup", onPointerUp);
     dom.addEventListener("pointercancel", onPointerUp);
+    // Capture-phase click on the canvas — must intercept before R3F.
+    dom.addEventListener("click", onClickCapture, true);
     dom.addEventListener("wheel", onWheel, { passive: false });
     window.addEventListener("keydown", onKeyDown);
     window.addEventListener("keyup", onKeyUp);
@@ -206,6 +231,7 @@ export function CameraRig() {
       dom.removeEventListener("pointermove", onPointerMove);
       dom.removeEventListener("pointerup", onPointerUp);
       dom.removeEventListener("pointercancel", onPointerUp);
+      dom.removeEventListener("click", onClickCapture, true);
       dom.removeEventListener("wheel", onWheel);
       window.removeEventListener("keydown", onKeyDown);
       window.removeEventListener("keyup", onKeyUp);

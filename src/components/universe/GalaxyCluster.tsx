@@ -33,7 +33,10 @@ interface Props {
   highlighted?: boolean;
   dimmed?: boolean;
   insideThis?: boolean;
-  onSelect: () => void;
+  /** Click-to-select. Pass `null` to disable so the cluster's huge
+   *  nebula billboard doesn't intercept clicks (e.g. once the user is
+   *  already inside this galaxy and panning around). */
+  onSelect: (() => void) | null;
 }
 
 const NEBULA_FOR: Record<Galaxy, string> = {
@@ -179,17 +182,30 @@ export function GalaxyCluster({
       ref={groupRef}
       position={position}
       scale={scale}
-      onPointerOver={(e) => {
-        e.stopPropagation();
-        document.body.style.cursor = "url('/cursor-arrow-pointer.svg') 1 1, pointer";
-      }}
-      onPointerOut={() => {
-        document.body.style.cursor = "";
-      }}
-      onClick={(e) => {
-        e.stopPropagation();
-        onSelect();
-      }}
+      onPointerOver={
+        onSelect
+          ? (e) => {
+              e.stopPropagation();
+              document.body.style.cursor =
+                "url('/cursor-arrow-pointer.svg') 1 1, pointer";
+            }
+          : undefined
+      }
+      onPointerOut={
+        onSelect
+          ? () => {
+              document.body.style.cursor = "";
+            }
+          : undefined
+      }
+      onClick={
+        onSelect
+          ? (e) => {
+              e.stopPropagation();
+              onSelect();
+            }
+          : undefined
+      }
     >
       {/* Nebula billboard — always faces camera, radial alpha mask hides edges.
           Larger plane (10×10) lets the existing alpha-masked texture feather

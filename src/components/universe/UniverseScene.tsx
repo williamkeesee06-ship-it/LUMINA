@@ -117,6 +117,12 @@ export function UniverseScene() {
           const isFocused = focusedGalaxy === g;
           const isDimmed = (focusedGalaxy !== null && !isFocused) || (isPlanetView && !isFocused);
           const insideThis = isFocused && viewMode !== "universe";
+          // Galaxy nebula clicks only enter the galaxy from the universe
+          // view. Once inside a galaxy (or with a planet selected), the
+          // huge nebula billboards become no-op so accidental clicks
+          // while panning the camera don't dump the user back to the
+          // galaxy view and close their open job card.
+          const canSelect = viewMode === "universe";
           return (
             <GalaxyCluster
               key={g}
@@ -126,10 +132,14 @@ export function UniverseScene() {
               highlighted={isFocused && viewMode === "universe"}
               dimmed={isDimmed}
               insideThis={insideThis}
-              onSelect={() => {
-                sfx.select();
-                enterGalaxy(g);
-              }}
+              onSelect={
+                canSelect
+                  ? () => {
+                      sfx.select();
+                      enterGalaxy(g);
+                    }
+                  : null
+              }
             />
           );
         })}
