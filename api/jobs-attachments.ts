@@ -10,6 +10,13 @@ import type { VercelRequest, VercelResponse } from "@vercel/node";
  *   GET  ?attachmentId=<n>                  -> resolve a fresh download URL
  *                                              (Smartsheet URLs expire ~2min,
  *                                              so we mint just-in-time)
+ *   GET  ?openId=<n>                        -> server-side proxy that streams
+ *                                              the file back inline so the
+ *                                              browser previews it instead of
+ *                                              forcing a download. Smartsheet's
+ *                                              signed URL ships with
+ *                                              Content-Disposition: attachment
+ *                                              which we strip here.
  *   POST ?rowId=<n>&filename=<x>            -> upload a file to a row.
  *                                              Body is the raw file bytes.
  *                                              Content-Type header is the
@@ -82,10 +89,60 @@ async function handleGet(
   res: VercelResponse,
   token: string,
 ) {
-  const { rowId, attachmentId } = req.query as {
+  const { rowId, attachmentId, openId } = req.query as {
     rowId?: string;
     attachmentId?: string;
+    openId?: string;
   };
+
+  // Mode C: stream the file back inline so the browser previews instead
+  // of downloading. We resolve the temp URL on the server, fetch the
+  // bytes, and re-emit with Content-Disposition: inline + correct type.
+  if (openId) {
+    const meta = await fetch(
+      `https://api.smartsheet.com/2.0/sheets/${SHEET_ID}/attachments/${encodeURIComponent(openId)}`,
+      { headers: { Authorization: `Bearer ${token}` } },
+    );
+    if (!meta.ok) {
+      res.status(502).json({
+        ok: false,
+        message: `Smartsheet attachment lookup failed (${meta.status})`,
+      });
+      return;
+    }
+    const a = (await meta.json()) as SmartsheetAttachment;
+    if (!a.url) {
+      res.status(502).json({ ok: false, message: "No download URL on attachment" });
+      return;
+    }
+    const fileResp = await fetch(a.url);
+    if (!fileResp.ok || !fileResp.body) {
+      res.status(502).json({
+        ok: false,
+        message: `Smartsheet file fetch failed (${fileResp.status})`,
+      });
+      return;
+    }
+    const mime = a.mimeType || guessMimeFromName(a.name) || "application/octet-stream";
+    res.setHeader("Content-Type", mime);
+    res.setHeader(
+      "Content-Disposition",
+      `inline; filename="${sanitizeFilename(a.name || "file")}"`,
+    );
+    res.setHeader("Cache-Control", "private, max-age=300");
+    const len = fileResp.headers.get("content-length");
+    if (len) res.setHeader("Content-Length", len);
+    // Pipe Web ReadableStream into Node response.
+    const reader = fileResp.body.getReader();
+    res.status(200);
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      if (value) res.write(Buffer.from(value));
+    }
+    res.end();
+    return;
+  }
 
   // Mode A: fresh download URL for one attachment.
   if (attachmentId) {
@@ -261,4 +318,27 @@ function sanitizeFilename(name: string): string {
   // Strip quotes, control chars, and path separators. Keep it simple — we
   // don't want a header-injection vector via Content-Disposition.
   return name.replace(/["\r\n\\/]/g, "_").slice(0, 200) || "upload.bin";
+}
+
+function guessMimeFromName(name: string | undefined): string {
+  if (!name) return "";
+  const ext = name.split(".").pop()?.toLowerCase() || "";
+  const map: Record<string, string> = {
+    jpg: "image/jpeg",
+    jpeg: "image/jpeg",
+    png: "image/png",
+    gif: "image/gif",
+    webp: "image/webp",
+    heic: "image/heic",
+    pdf: "application/pdf",
+    mp4: "video/mp4",
+    mov: "video/quicktime",
+    mp3: "audio/mpeg",
+    wav: "audio/wav",
+    txt: "text/plain",
+    csv: "text/csv",
+    json: "application/json",
+    svg: "image/svg+xml",
+  };
+  return map[ext] || "";
 }

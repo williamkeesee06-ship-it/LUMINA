@@ -2,8 +2,24 @@ import { useMemo, useRef } from "react";
 import { useFrame } from "@react-three/fiber";
 import { Billboard, Text } from "@react-three/drei";
 import * as THREE from "three";
-import type { Job } from "@/types";
+import type { Job, Satellite } from "@/types";
 import { GALAXY_COLORS } from "@/lib/statusMap";
+
+/**
+ * Per-category neon colors for orbiting satellites. Mirrors the chip
+ * colors used in the JobPanel satellites list so the same file reads
+ * the same color in 3D and in the panel.
+ */
+const SATELLITE_COLORS: Record<NonNullable<Satellite["category"]>, string> = {
+  permit: "#FFC857",     // amber
+  print: "#5BF3FF",      // cyan
+  redline: "#FF3D9A",    // hot pink
+  bidmaster: "#A78BFA",  // violet
+  revisit: "#F97316",    // orange
+  photo: "#22D3EE",      // bright teal
+  other: "#9CA3AF",      // neutral grey
+};
+const DEFAULT_SAT_COLOR = "#E5E7EB";
 
 interface Props {
   jobs: Job[];
@@ -65,19 +81,23 @@ export function PlanetField({ jobs, selectedJobId, onSelect, focusMode = false }
 
   return (
     <group>
-      {layout.map((p, i) => (
-        <Planet
-          key={p.id}
-          position={p.pos}
-          color={p.color}
-          tiltDeg={p.tilt}
-          label={p.label}
-          selected={selectedJobId === p.id}
-          dim={focusMode && selectedJobId !== p.id}
-          phase={i * 0.13}
-          onSelect={() => onSelect(p.id)}
-        />
-      ))}
+      {layout.map((p, i) => {
+        const job = jobs[i];
+        return (
+          <Planet
+            key={p.id}
+            position={p.pos}
+            color={p.color}
+            tiltDeg={p.tilt}
+            label={p.label}
+            selected={selectedJobId === p.id}
+            dim={focusMode && selectedJobId !== p.id}
+            phase={i * 0.13}
+            satellites={job?.satellites ?? []}
+            onSelect={() => onSelect(p.id)}
+          />
+        );
+      })}
     </group>
   );
 }
@@ -90,6 +110,7 @@ function Planet({
   selected,
   dim = false,
   phase,
+  satellites,
   onSelect,
 }: {
   position: [number, number, number];
@@ -99,6 +120,7 @@ function Planet({
   selected: boolean;
   dim?: boolean;
   phase: number;
+  satellites: Satellite[];
   onSelect: () => void;
 }) {
   const groupRef = useRef<THREE.Group>(null);
@@ -264,6 +286,147 @@ function Planet({
           </mesh>
         </Billboard>
       )}
+
+      {/* Satellites — small glowing dots orbiting the selected planet, one
+          per Smartsheet attachment. Color = attachment category. */}
+      {selected && satellites.length > 0 && (
+        <SatelliteOrbit satellites={satellites} planetColor={color} />
+      )}
+    </group>
+  );
+}
+
+/**
+ * Renders attachments as small luminous dots in a tilted orbit around
+ * the planet. Multiple orbital rings if there are many — keeps density
+ * legible. Each dot pulses slightly and follows a slow orbital rotation.
+ */
+function SatelliteOrbit({
+  satellites,
+  planetColor,
+}: {
+  satellites: Satellite[];
+  planetColor: string;
+}) {
+  const groupRef = useRef<THREE.Group>(null);
+  // Distribute satellites across up to 3 rings so 30+ attachments stay readable.
+  const layout = useMemo(() => {
+    const PER_RING = 12;
+    const ringCount = Math.min(3, Math.max(1, Math.ceil(satellites.length / PER_RING)));
+    const radii = [0.95, 1.25, 1.55];
+    const tilts = [0.42, -0.28, 0.62]; // radians; varied so rings don't overlap
+    const items = satellites.map((s, i) => {
+      const ring = i % ringCount;
+      const inRing = Math.floor(i / ringCount);
+      const ringSize = Math.max(
+        1,
+        Math.ceil(satellites.length / ringCount) +
+          (ring < satellites.length % ringCount ? 1 : 0),
+      );
+      const angle = (inRing / ringSize) * Math.PI * 2;
+      const cat = s.category ?? "other";
+      return {
+        id: s.id,
+        radius: radii[ring],
+        tilt: tilts[ring],
+        baseAngle: angle,
+        speed: 0.18 + ring * 0.05, // slower for outer rings
+        color: SATELLITE_COLORS[cat] ?? DEFAULT_SAT_COLOR,
+        ring,
+        phase: i * 0.31,
+      };
+    });
+    return { items, ringCount };
+  }, [satellites]);
+
+  // Refs for each satellite mesh so we can animate position per-frame.
+  const meshRefs = useRef<(THREE.Group | null)[]>([]);
+  const glowRefs = useRef<(THREE.Mesh | null)[]>([]);
+
+  useFrame((state) => {
+    const t = state.clock.elapsedTime;
+    layout.items.forEach((it, idx) => {
+      const m = meshRefs.current[idx];
+      if (!m) return;
+      const a = it.baseAngle + t * it.speed;
+      // Orbit on a tilted ring — same math as a tilted unit circle.
+      const x = Math.cos(a) * it.radius;
+      const yFlat = Math.sin(a) * it.radius;
+      // Tilt around X-axis by `it.tilt`.
+      const y = yFlat * Math.cos(it.tilt);
+      const z = yFlat * Math.sin(it.tilt);
+      m.position.set(x, y, z);
+      // Subtle pulse on the glow halo.
+      const g = glowRefs.current[idx];
+      if (g) {
+        const mat = g.material as THREE.MeshBasicMaterial;
+        const tgt = 0.7 + Math.sin(t * 2 + it.phase) * 0.15;
+        mat.opacity += (tgt - mat.opacity) * 0.1;
+      }
+    });
+  });
+
+  // Faint orbital track lines — luminous rings hinting at the orbit paths.
+  const trackRings = useMemo(() => {
+    const radii = [0.95, 1.25, 1.55];
+    const tilts = [0.42, -0.28, 0.62];
+    return Array.from({ length: layout.ringCount }, (_, i) => ({
+      radius: radii[i],
+      tilt: tilts[i],
+      opacity: 0.12,
+    }));
+  }, [layout.ringCount]);
+
+  return (
+    <group ref={groupRef}>
+      {/* Orbit track rings — dim guide rings showing the satellite paths */}
+      {trackRings.map((r, i) => (
+        <group key={`track-${i}`} rotation={[r.tilt, 0, 0]}>
+          <mesh>
+            <ringGeometry args={[r.radius - 0.005, r.radius + 0.005, 96]} />
+            <meshBasicMaterial
+              color={planetColor}
+              transparent
+              opacity={r.opacity}
+              side={THREE.DoubleSide}
+              depthWrite={false}
+              blending={THREE.AdditiveBlending}
+              toneMapped={false}
+            />
+          </mesh>
+        </group>
+      ))}
+      {/* Satellite dots — small bright cores with halo */}
+      {layout.items.map((it, i) => (
+        <group
+          key={it.id}
+          ref={(g) => {
+            meshRefs.current[i] = g;
+          }}
+        >
+          {/* Halo */}
+          <mesh
+            ref={(m) => {
+              glowRefs.current[i] = m;
+            }}
+          >
+            <sphereGeometry args={[0.05, 12, 12]} />
+            <meshBasicMaterial
+              color={it.color}
+              transparent
+              opacity={0.7}
+              depthWrite={false}
+              blending={THREE.AdditiveBlending}
+              toneMapped={false}
+            />
+          </mesh>
+          {/* Bright core */}
+          <mesh>
+            <sphereGeometry args={[0.025, 12, 12]} />
+            <meshBasicMaterial color={it.color} toneMapped={false} />
+          </mesh>
+        </group>
+      ))}
     </group>
   );
 }

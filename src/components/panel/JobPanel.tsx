@@ -685,19 +685,18 @@ function SatellitesSection({
     [rowId, onAdd],
   );
 
-  async function handleOpen(satelliteId: string) {
+  async function handleOpen(satelliteId: string, name: string, mimeType: string) {
     if (openingId) return;
     setOpeningId(satelliteId);
     sfx.select();
-    const result = await getAttachmentUrl(satelliteId);
+    // Server-side proxy strips Content-Disposition: attachment and emits the
+    // file inline with the correct MIME type, so the browser previews it
+    // (PDFs, images, video) instead of downloading. Non-previewable types
+    // (DWG, ZIP, DOC, XLS) still download — nothing the browser can render.
+    void name; void mimeType; // kept for future extension-based fallback
+    const proxyUrl = `/api/jobs-attachments?openId=${encodeURIComponent(satelliteId)}`;
+    window.open(proxyUrl, "_blank", "noopener,noreferrer");
     setOpeningId(null);
-    if (result.ok) {
-      window.open(result.url, "_blank", "noopener,noreferrer");
-    } else {
-      setError(result.message);
-      sfx.error();
-      setTimeout(() => setError(null), 4500);
-    }
   }
 
   async function handleDelete(satelliteId: string, name: string) {
@@ -813,7 +812,7 @@ function SatellitesSection({
                   <button
                     type="button"
                     onMouseEnter={() => sfx.hover()}
-                    onClick={() => handleOpen(s.id)}
+                    onClick={() => handleOpen(s.id, s.name, s.mimeType)}
                     disabled={openingId === s.id}
                     className="text-[13px] text-white/90 truncate flex-1 text-left hover:text-white disabled:opacity-60 transition-colors"
                     title={`${s.name}${s.sizeInKb ? ` — ${formatKb(s.sizeInKb)}` : ""}`}
