@@ -1,7 +1,13 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useUI } from "@/store/uiStore";
 import { GALAXY_COLORS } from "@/lib/statusMap";
-import { listDrive, searchGmail, updateJobNotes } from "@/lib/api";
+import {
+  listDrive,
+  searchGmail,
+  updateJobNotes,
+  updateJobSecondaryStatus,
+  SECONDARY_STATUS_OPTIONS,
+} from "@/lib/api";
 import { sfx } from "@/lib/audio";
 import { requestGoogleToken } from "@/lib/googleAuth";
 import { CHECKLIST_LABELS, CHECKLIST_TEXT_FIELDS, type JobChecklist } from "@/types";
@@ -98,8 +104,8 @@ export function JobPanel() {
             </div>
           </div>
 
-          {/* Status line */}
-          <div className="mt-3 flex items-center gap-2">
+          {/* Status line — galaxy badge + editable secondary-status dropdown */}
+          <div className="mt-3 flex items-center gap-2 flex-wrap">
             <span
               className="inline-block w-1.5 h-1.5 rounded-full"
               style={{ background: color, boxShadow: `0 0 10px ${color}` }}
@@ -110,11 +116,13 @@ export function JobPanel() {
             >
               {job.status}
             </span>
-            {job.rawSecondaryStatus && job.rawSecondaryStatus !== job.status && (
-              <span className="font-mono text-[9px] text-white/35 uppercase tracking-[0.18em]">
-                · {job.rawSecondaryStatus}
-              </span>
-            )}
+            <span className="font-mono text-[9px] text-white/30 uppercase">·</span>
+            <EditableSecondaryStatus
+              rowId={job.rowId}
+              jobId={job.id}
+              current={job.rawSecondaryStatus ?? ""}
+              accent={color}
+            />
           </div>
 
           {/* Header underline */}
@@ -608,6 +616,165 @@ function EditableNotes({
           </button>
         </div>
       </div>
+    </div>
+  );
+}
+
+/**
+ * EditableSecondaryStatus — click-to-open dropdown matching the Smartsheet
+ * "Secondary Job Status" picklist. Sets local state optimistically (so the
+ * planet recolors / regalaxies instantly) then PUTs to /api/jobs-update.
+ * On failure, rolls back to the previous value and shows an error pill.
+ */
+function EditableSecondaryStatus({
+  rowId,
+  jobId,
+  current,
+  accent,
+}: {
+  rowId: string;
+  jobId: string;
+  current: string;
+  accent: string;
+}) {
+  const setJobSecondaryStatus = useUI((s) => s.setJobSecondaryStatus);
+  const [open, setOpen] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const containerRef = useRef<HTMLDivElement>(null);
+
+  // Close on outside click / ESC.
+  useEffect(() => {
+    if (!open) return;
+    function onDown(e: MouseEvent) {
+      if (!containerRef.current) return;
+      if (!containerRef.current.contains(e.target as Node)) setOpen(false);
+    }
+    function onKey(e: KeyboardEvent) {
+      if (e.key === "Escape") setOpen(false);
+    }
+    document.addEventListener("mousedown", onDown);
+    document.addEventListener("keydown", onKey);
+    return () => {
+      document.removeEventListener("mousedown", onDown);
+      document.removeEventListener("keydown", onKey);
+    };
+  }, [open]);
+
+  // Reset error when the job changes.
+  useEffect(() => {
+    setError(null);
+    setOpen(false);
+  }, [jobId]);
+
+  const display = current || "—";
+
+  async function handleChoose(next: string) {
+    setOpen(false);
+    if (next === current || saving) return;
+    const previous = current;
+    setError(null);
+    setSaving(true);
+    sfx.select();
+    // Optimistic local update so the planet jumps galaxies immediately.
+    setJobSecondaryStatus(jobId, next);
+    const result = await updateJobSecondaryStatus(rowId, next);
+    setSaving(false);
+    if (result.ok) {
+      sfx.confirm();
+    } else {
+      // Rollback local state, surface error briefly.
+      setJobSecondaryStatus(jobId, previous);
+      setError(result.message);
+      sfx.error();
+      // Auto-clear error after a few seconds so it doesn't linger.
+      setTimeout(() => setError(null), 4500);
+    }
+  }
+
+  return (
+    <div ref={containerRef} className="relative inline-flex items-center">
+      <button
+        type="button"
+        onMouseEnter={() => sfx.hover()}
+        onClick={() => {
+          sfx.select();
+          setOpen((v) => !v);
+        }}
+        disabled={saving}
+        className="font-mono text-[9px] uppercase tracking-[0.18em] px-1.5 py-0.5 rounded-sm border transition-colors disabled:opacity-60"
+        style={{
+          color: error ? "#FF6464" : "rgba(255,255,255,0.7)",
+          borderColor: open
+            ? `${accent}99`
+            : error
+              ? "rgba(255,100,100,0.55)"
+              : "rgba(255,255,255,0.15)",
+          background: open ? `${accent}14` : "rgba(255,255,255,0.02)",
+        }}
+        aria-haspopup="listbox"
+        aria-expanded={open}
+        title="Click to change secondary status — syncs to Smartsheet"
+      >
+        <span className="truncate inline-block max-w-[200px] align-middle">
+          {saving ? "saving…" : display}
+        </span>
+        <span className="ml-1 opacity-60" aria-hidden>
+          ▾
+        </span>
+      </button>
+
+      {error && !open && (
+        <span
+          className="ml-2 font-mono text-[8px] uppercase tracking-[0.2em]"
+          style={{ color: "#FF6464", textShadow: "0 0 4px #FF6464" }}
+          title={error}
+        >
+          sync failed
+        </span>
+      )}
+
+      {open && (
+        <div
+          role="listbox"
+          className="absolute left-0 top-full mt-1.5 z-50 min-w-[240px] max-h-[320px] overflow-y-auto rounded-sm border shadow-2xl"
+          style={{
+            background: "rgba(8, 12, 20, 0.97)",
+            borderColor: `${accent}55`,
+            boxShadow: `0 8px 32px rgba(0,0,0,0.65), 0 0 12px ${accent}33`,
+            backdropFilter: "blur(8px)",
+          }}
+        >
+          {SECONDARY_STATUS_OPTIONS.map((opt) => {
+            const selected = opt === current;
+            return (
+              <button
+                key={opt}
+                type="button"
+                role="option"
+                aria-selected={selected}
+                onMouseEnter={() => sfx.hover()}
+                onClick={() => handleChoose(opt)}
+                className="w-full text-left font-mono text-[11px] uppercase tracking-[0.12em] px-3 py-1.5 transition-colors hover:bg-white/5 focus:outline-none focus:bg-white/5 flex items-center gap-2"
+                style={{
+                  color: selected ? accent : "rgba(255,255,255,0.85)",
+                  background: selected ? `${accent}14` : "transparent",
+                  textShadow: selected ? `0 0 6px ${accent}66` : undefined,
+                }}
+              >
+                <span
+                  className="inline-block w-1 h-1 rounded-full shrink-0"
+                  style={{
+                    background: selected ? accent : "rgba(255,255,255,0.18)",
+                    boxShadow: selected ? `0 0 6px ${accent}` : undefined,
+                  }}
+                />
+                <span className="truncate">{opt}</span>
+              </button>
+            );
+          })}
+        </div>
+      )}
     </div>
   );
 }

@@ -97,6 +97,74 @@ export async function updateJobNotes(
   }
 }
 
+/**
+ * Persist edited Secondary Job Status back to Smartsheet. Server uses
+ * strict:true so an unknown picklist value is rejected by Smartsheet
+ * rather than silently written.
+ */
+export async function updateJobSecondaryStatus(
+  rowId: string,
+  secondaryStatus: string,
+): Promise<{ ok: true } | { ok: false; message: string }> {
+  try {
+    const r = await fetch("/api/jobs-update", {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ rowId, secondaryStatus }),
+    });
+    const data = await r.json().catch(() => ({}));
+    if (!r.ok || !data?.ok) {
+      return {
+        ok: false,
+        message: data?.message ?? `Smartsheet update failed (${r.status})`,
+      };
+    }
+    return { ok: true };
+  } catch (err) {
+    return {
+      ok: false,
+      message: err instanceof Error ? err.message : "Network error.",
+    };
+  }
+}
+
+/**
+ * Live snapshot of the Smartsheet "Secondary Job Status" PICKLIST options,
+ * in the exact order they appear in the sheet. Smartsheet validates picklist
+ * writes when strict:true, so these strings must match exactly. If the column
+ * is edited in Smartsheet, mirror the change here.
+ */
+export const SECONDARY_STATUS_OPTIONS: readonly string[] = [
+  "In Progress",
+  "Needs Fielding",
+  "Scheduled",
+  "Fielded",
+  "Pending BAA/BEA",
+  "Pending Splicing",
+  "Pending HSR",
+  "Pending Permit",
+  "PENDING UNITS IN BM",
+  "On Hold",
+  "On Hold / Partial Bill",
+  "In Billing",
+  "Pending GIGs",
+  "Cancelled",
+  "Pending Consolidation Report",
+  "In Review",
+  "Complete",
+  "Complete/Pending Prod",
+  "Routed to SUB",
+  "Pending Pole Removal",
+  "Pending Customer",
+  "NEEDS LOCATES",
+  "PENDING OTHER UTILITIES",
+  "FIELDED - RTS",
+  "FIELDED - NEEDS COORDINATION",
+  "FIELDED - NEEDS INFO",
+  "Ready to move to billing",
+  "PENDING ENGINEERING",
+] as const;
+
 export async function geocodeAddresses(
   addresses: string[],
 ): Promise<Record<string, { lat: number; lng: number } | null>> {

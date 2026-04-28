@@ -6,10 +6,15 @@ import type { VercelRequest, VercelResponse } from "@vercel/node";
  * Updates editable cells on a Smartsheet row.
  *
  * Currently supports:
- *   - notes -> "NSC Project Notes" column
+ *   - notes            -> "NSC Project Notes" column
+ *   - secondaryStatus  -> "Secondary Job Status" column (PICKLIST)
  *
- * Body:  { rowId: string, notes?: string }
+ * Body:  { rowId: string, notes?: string, secondaryStatus?: string }
  * Auth:  server-side SMARTSHEET_TOKEN (never exposed to browser)
+ *
+ * Either notes or secondaryStatus (or both) must be provided. Each updates
+ * its own cell in the same row in a single PUT — Smartsheet supports many
+ * cells per row update.
  *
  * Returns: { ok: true } on success, or { ok: false, message } on failure.
  *
@@ -48,28 +53,61 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     return;
   }
 
-  const { rowId, notes } = (req.body ?? {}) as { rowId?: string; notes?: string };
+  const { rowId, notes, secondaryStatus } = (req.body ?? {}) as {
+    rowId?: string;
+    notes?: string;
+    secondaryStatus?: string;
+  };
   if (!rowId) {
     res.status(400).json({ ok: false, message: "rowId is required" });
     return;
   }
-  if (typeof notes !== "string") {
-    res.status(400).json({ ok: false, message: "notes (string) is required" });
+  const hasNotes = typeof notes === "string";
+  const hasStatus = typeof secondaryStatus === "string";
+  if (!hasNotes && !hasStatus) {
+    res
+      .status(400)
+      .json({ ok: false, message: "Provide notes and/or secondaryStatus" });
     return;
   }
 
   try {
-    const colId = await resolveColumnId(token, "NSC Project Notes");
-    if (!colId) {
+    // Resolve the column IDs we need in parallel — only the ones we'll write.
+    const [notesColId, statusColId] = await Promise.all([
+      hasNotes ? resolveColumnId(token, "NSC Project Notes") : Promise.resolve(null),
+      hasStatus ? resolveColumnId(token, "Secondary Job Status") : Promise.resolve(null),
+    ]);
+
+    if (hasNotes && !notesColId) {
       res.status(502).json({
         ok: false,
         message: "Could not resolve 'NSC Project Notes' column on the sheet.",
       });
       return;
     }
+    if (hasStatus && !statusColId) {
+      res.status(502).json({
+        ok: false,
+        message: "Could not resolve 'Secondary Job Status' column on the sheet.",
+      });
+      return;
+    }
+
+    const cells: Array<{ columnId: number; value: string; strict: boolean }> = [];
+    if (hasNotes && notesColId) {
+      cells.push({ columnId: notesColId, value: notes as string, strict: false });
+    }
+    if (hasStatus && statusColId) {
+      // strict:true on the picklist — we want Smartsheet to reject unknown
+      // values rather than silently writing free text into a constrained col.
+      cells.push({
+        columnId: statusColId,
+        value: secondaryStatus as string,
+        strict: true,
+      });
+    }
 
     // Smartsheet update-rows: PUT /sheets/{id}/rows with array of row updates.
-    // strict:false lets us pass an empty string to clear the cell.
     const updateRes = await fetch(
       `https://api.smartsheet.com/2.0/sheets/${SHEET_ID}/rows`,
       {
@@ -78,18 +116,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           Authorization: `Bearer ${token}`,
           "Content-Type": "application/json",
         },
-        body: JSON.stringify([
-          {
-            id: Number(rowId),
-            cells: [
-              {
-                columnId: colId,
-                value: notes,
-                strict: false,
-              },
-            ],
-          },
-        ]),
+        body: JSON.stringify([{ id: Number(rowId), cells }]),
       },
     );
 

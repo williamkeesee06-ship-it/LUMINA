@@ -1,5 +1,6 @@
 import { create } from "zustand";
 import { sfx } from "@/lib/audio";
+import { mapStatusToGalaxy } from "@/lib/statusMap";
 import type {
   Galaxy,
   HudMode,
@@ -115,6 +116,11 @@ export interface UIState {
   /** Local update to a job's NSC Project Notes — persistence to Smartsheet
    *  is handled by the JobPanel save action via updateJobNotes(). */
   setJobNotes: (jobId: string, notes: string) => void;
+  /** Local update to a job's Secondary Job Status. Also recomputes the
+   *  derived galaxy (`status`) so the planet jumps to the correct galaxy
+   *  immediately. Persistence to Smartsheet is handled by the JobPanel
+   *  via updateJobSecondaryStatus(). */
+  setJobSecondaryStatus: (jobId: string, secondaryStatus: string) => void;
 }
 
 export const useUI = create<UIState>((set, get) => ({
@@ -344,6 +350,22 @@ export const useUI = create<UIState>((set, get) => ({
       jobs: s.jobs.map((j) =>
         j.id === jobId ? { ...j, notes: notes || undefined } : j,
       ),
+    })),
+
+  setJobSecondaryStatus: (jobId, secondaryStatus) =>
+    set((s) => ({
+      jobs: s.jobs.map((j) => {
+        if (j.id !== jobId) return j;
+        const nextGalaxy = mapStatusToGalaxy(secondaryStatus);
+        // If the new status is "Cancelled" mapStatusToGalaxy returns null —
+        // we keep the job in the universe but pin it to its current galaxy
+        // until the next Smartsheet refresh drops it. Server still writes.
+        return {
+          ...j,
+          rawSecondaryStatus: secondaryStatus,
+          status: nextGalaxy ?? j.status,
+        };
+      }),
     })),
 }));
 
