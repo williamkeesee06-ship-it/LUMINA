@@ -47,9 +47,13 @@ export function MiniWidget({
         className="font-display uppercase leading-none"
         style={{
           fontSize: 7,
-          letterSpacing: "0.22em",
+          letterSpacing: "0.24em",
           color,
-          textShadow: disabled ? "none" : `0 0 4px ${color}cc`,
+          fontWeight: 600,
+          // Brighter, tighter halo — was a single 4px blur which read fuzzy.
+          textShadow: disabled
+            ? "none"
+            : `0 0 2px ${color}, 0 0 6px ${color}aa`,
           marginBottom: 2,
         }}
       >
@@ -65,21 +69,27 @@ export function MiniWidget({
           height: 32,
           background:
             "radial-gradient(circle at 50% 35%, #0e1320 0%, #060912 70%, #03050a 100%)",
-          border: `1.4px solid ${disabled ? "#3a4258" : color}`,
+          // Thicker, brighter ring — 1.4 → 1.8px, plus a faint inner stroke
+          // helps the rim read as a crisp neon line instead of a soft glow.
+          border: `1.8px solid ${disabled ? "#3a4258" : color}`,
           boxShadow: disabled
             ? "inset 0 0 6px rgba(0,0,0,0.85)"
             : active
-              ? `0 0 0 1px ${color}, 0 0 10px ${color}, 0 0 18px rgba(${rgb}, 0.55), inset 0 0 10px rgba(${rgb}, 0.2)`
-              : `0 0 5px ${color}, 0 0 11px rgba(${rgb}, 0.45), inset 0 0 8px rgba(0,0,0,0.65)`,
+              ? `0 0 0 1px ${color}, 0 0 6px ${color}, 0 0 14px rgba(${rgb}, 0.85), 0 0 22px rgba(${rgb}, 0.55), inset 0 0 10px rgba(${rgb}, 0.25)`
+              : `0 0 4px ${color}, 0 0 9px rgba(${rgb}, 0.7), 0 0 16px rgba(${rgb}, 0.4), inset 0 0 8px rgba(0,0,0,0.65)`,
         }}
       >
         <div
           className="font-mono font-semibold tabular-nums leading-none"
           style={{
             fontSize: 12.5,
+            // Use the galaxy color for a crisp, bright readout instead of
+            // pure white — white was bleeding through the soft halo and
+            // looking fuzzy. A 1px white core inside a tight color halo
+            // gives the number a sharp neon-tube feel.
             color: "#ffffff",
-            textShadow:
-              "0 0 5px rgba(255,255,255,0.9), 0 0 10px rgba(255,255,255,0.5)",
+            textShadow: `0 0 1px #ffffff, 0 0 3px ${color}, 0 0 6px ${color}aa`,
+            WebkitFontSmoothing: "antialiased",
           }}
         >
           {value}

@@ -601,3 +601,22 @@
   letter-spacing: 0.05em;
   text-transform: uppercase;
 }
+
+/* ──────────────────────────────────────────────────────────────────────
+   Gauge living glow — when a gauge crosses 70% intensity (or pulse=true),
+   it gently breathes so the dashboard feels reactive to the universe's
+   energy without being distracting. Pure opacity + filter pulse, no
+   layout shift.
+   ────────────────────────────────────────────────────────────────────── */
+.gauge-living {
+  animation: gauge-living 2.4s ease-in-out infinite;
+}
+
+@keyframes gauge-living {
+  0%, 100% {
+    filter: brightness(1) saturate(1);
+  }
+  50% {
+    filter: brightness(1.18) saturate(1.15);
+  }
+}

@@ -9,6 +9,8 @@ import { CircleWidget } from "./CircleWidget";
 import { DysonCore } from "./DysonCore";
 import { MiniGauge } from "./MiniGauge";
 import { MiniWidget } from "./MiniWidget";
+import { SystemGauge } from "./SystemGauge";
+import { useSystemTelemetry } from "@/hooks/useSystemTelemetry";
 import { DysonSphereHero } from "./DysonSphereHero";
 import { NeonGlobeV2 } from "./NeonGlobeV2";
 import { ActiveMicIcon } from "./ActiveMicIcon";
@@ -127,7 +129,7 @@ function HUDVertical() {
     total,
     googleToken,
     unreadCount,
-    universeVitality,
+    universeVitality: _universeVitality,
     isMapOpen,
     mapTransition,
     diveToMap,
@@ -138,6 +140,10 @@ function HUDVertical() {
     toggleHistoryOnMap,
     handleConnectGmail,
   } = useHudData();
+  void _universeVitality; // retired — universe gauge replaced by 4 system gauges
+
+  // Real-time system telemetry powering CPU/MEMORY/DISK/NETWORK gauges.
+  const sys = useSystemTelemetry();
 
   const collapsed = hudMode === "minimized";
 
@@ -314,39 +320,60 @@ function HUDVertical() {
               >
                 · telemetry
               </div>
-              <div className="flex flex-col items-center gap-2.5 mb-3">
-                <MiniGauge
+              {/* 2x3 grid of compact system gauges — living glow scales
+                  with each metric's intensity. TOTAL + GMAIL keep their
+                  original functions; CPU/MEMORY/DISK/NETWORK come from
+                  real browser telemetry (see useSystemTelemetry). */}
+              <div className="grid grid-cols-2 gap-x-1.5 gap-y-2 justify-items-center mb-3">
+                <SystemGauge
                   label="TOTAL"
                   value={total}
-                  tone="cyan"
-                  size={86}
+                  // Intensity scales with how busy the universe is. 0..120 jobs maps to 0..1.
+                  intensity={Math.min(1, total / 120)}
+                  color="#5BF3FF"
                 />
-                <MiniGauge
+                <SystemGauge
                   label={googleToken ? "GMAIL" : "CONNECT"}
                   value={googleToken ? unreadCount : "→"}
-                  tone={
+                  // Intensity climbs with unread count, capped at 20.
+                  intensity={
+                    !googleToken
+                      ? 0.4
+                      : Math.min(1, unreadCount / 20)
+                  }
+                  color={
                     unreadCount > 0
-                      ? "magenta"
+                      ? "#FF3D9A"
                       : googleToken
-                        ? "cyan"
-                        : "amber"
+                        ? "#5BF3FF"
+                        : "#FFB347"
                   }
                   pulse={!googleToken || unreadCount > 0}
                   onClick={handleConnectGmail}
-                  size={86}
                 />
-                <MiniGauge
-                  label="UNIVERSE"
-                  value={`${universeVitality}%`}
-                  tone={
-                    universeVitality > 60
-                      ? "teal"
-                      : universeVitality > 30
-                        ? "amber"
-                        : "magenta"
-                  }
-                  pulse={universeVitality < 40}
-                  size={86}
+                <SystemGauge
+                  label="CPU"
+                  value={`${sys.cpu}%`}
+                  intensity={sys.cpu / 100}
+                  color="#5BF3FF"
+                />
+                <SystemGauge
+                  label="MEMORY"
+                  value={sys.memoryLabel}
+                  intensity={sys.memory / 100}
+                  color="#FF3D9A"
+                />
+                <SystemGauge
+                  label="DISK"
+                  value={sys.diskLabel}
+                  intensity={sys.disk / 100}
+                  color="#39FF7A"
+                />
+                <SystemGauge
+                  label="NETWORK"
+                  value={sys.networkLabel}
+                  intensity={sys.network / 100}
+                  color="#B97CFF"
                 />
               </div>
 
@@ -456,7 +483,7 @@ function HUDVertical() {
                 <ActiveMicIcon size={20} />
               </LabeledUtility>
               <LabeledUtility
-                label={isMapOpen ? "WARP" : "MAP"}
+                label="MAP"
                 title={
                   isMapOpen
                     ? "Warp out to universe"
@@ -859,7 +886,7 @@ function HUDHorizontal() {
                     <ActiveMicIcon size={20} />
                   </LabeledUtility>
                   <LabeledUtility
-                    label={isMapOpen ? "WARP" : "MAP"}
+                    label="MAP"
                     title={
                       isMapOpen
                         ? "Warp out to universe"
