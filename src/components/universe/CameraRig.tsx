@@ -159,7 +159,24 @@ export function CameraRig() {
       e.preventDefault();
       enterFreeFly();
       // Zoom = forward dolly. Positive deltaY scrolls down → move backward.
-      wheelImpulse.current += -e.deltaY * 0.06;
+      // Scale impulse by distance to current focus target so each notch
+      // moves a sensible fraction of the remaining distance — slow when
+      // close to a planet, fast when far away in deep space.
+      // Find the focus point: selected planet > focused galaxy > origin.
+      const state = useUI.getState();
+      let focus = new THREE.Vector3(0, 0, 0);
+      if (state.focusedGalaxy) {
+        const g = GALAXY_POSITIONS[state.focusedGalaxy];
+        focus.set(g[0], g[1], g[2]);
+      }
+      const distToFocus = camera.position.distanceTo(focus);
+      // Map distance → step. At 60+ units (universe distance), behave like
+      // before (~0.06 per deltaY). At 3 units (right next to a planet),
+      // shrink to ~0.008 so a single wheel notch moves you ~5% closer
+      // instead of skipping past.
+      const scale = THREE.MathUtils.clamp(distToFocus / 60, 0.12, 1.0);
+      const stepCoef = 0.06 * scale;
+      wheelImpulse.current += -e.deltaY * stepCoef;
     };
 
     const onKeyDown = (e: KeyboardEvent) => {

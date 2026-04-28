@@ -533,8 +533,10 @@ function HUDHorizontal() {
         >
           {hudMode === "minimized" && (
             <div className="flex items-center justify-between px-6 py-4">
-              <div className="flex items-center gap-3">
-                <HudPager orientation="vertical" compact />
+              <div className="flex items-center gap-4">
+                {/* Horizontal pager with full labels so the user can see
+                    both pages and tap to switch even when minimized. */}
+                <HudPager orientation="horizontal" />
                 <div className="font-display text-xs uppercase tracking-tactical text-cyan-glow/70">
                   {hudPage === "telemetry" ? "telemetry" : "navigation"}
                 </div>
@@ -557,12 +559,11 @@ function HUDHorizontal() {
               <span className="rivet" style={{ left: "75%", bottom: 8 }} />
 
               <div className="flex items-stretch px-6 py-3 gap-4">
-                {/* Left bay: vertical neon segmented page indicator. Lumina
-                    is no longer in the HUD — she lives at bottom-left in
-                    <LuminaDock>. The pager flips between Navigation and
-                    Telemetry pages. */}
+                {/* Left bay: horizontal neon segmented page indicator with
+                    full NAV / SYS labels so it's obvious how to switch pages
+                    when the HUD is laid out horizontally. */}
                 <div className="flex items-center pr-2">
-                  <HudPager orientation="vertical" />
+                  <HudPager orientation="horizontal" />
                 </div>
 
                 <Divider />
