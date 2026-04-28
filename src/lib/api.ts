@@ -67,6 +67,36 @@ export async function fetchJobs(): Promise<Job[]> {
   return mapped;
 }
 
+/**
+ * Persist edited NSC Project Notes back to Smartsheet for a row.
+ * Server resolves the column ID and uses the SMARTSHEET_TOKEN env secret.
+ */
+export async function updateJobNotes(
+  rowId: string,
+  notes: string,
+): Promise<{ ok: true } | { ok: false; message: string }> {
+  try {
+    const r = await fetch("/api/jobs-update", {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ rowId, notes }),
+    });
+    const data = await r.json().catch(() => ({}));
+    if (!r.ok || !data?.ok) {
+      return {
+        ok: false,
+        message: data?.message ?? `Smartsheet update failed (${r.status})`,
+      };
+    }
+    return { ok: true };
+  } catch (err) {
+    return {
+      ok: false,
+      message: err instanceof Error ? err.message : "Network error.",
+    };
+  }
+}
+
 export async function geocodeAddresses(
   addresses: string[],
 ): Promise<Record<string, { lat: number; lng: number } | null>> {

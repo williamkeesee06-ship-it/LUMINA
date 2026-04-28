@@ -27,6 +27,11 @@ interface Props {
   pulse?: boolean;
   onClick?: () => void;
   size?: number;
+  /**
+   * Hide the rotating needle for headline-only counters (e.g. TOTAL, GMAIL)
+   * where the number itself is the data — a needle just adds noise.
+   */
+  showNeedle?: boolean;
 }
 
 export function SystemGauge({
@@ -37,6 +42,7 @@ export function SystemGauge({
   pulse = false,
   onClick,
   size = 56,
+  showNeedle = true,
 }: Props) {
   // Clamp intensity to [0, 1].
   const i = Math.max(0, Math.min(1, intensity));
@@ -66,9 +72,15 @@ export function SystemGauge({
 
   const Tag = onClick ? "button" : "div";
 
-  // Truncate value if too long for the small disc.
+  // Value font scales with disc size and string length so a hero-sized
+  // gauge (96px) gets a big readable numeral instead of the legacy 12px.
   const valueStr = String(value);
-  const valueSize = valueStr.length > 4 ? 8 : valueStr.length > 2 ? 10 : 12;
+  const valueSize =
+    valueStr.length > 4
+      ? Math.round(size * 0.18) // long strings (e.g. "240MB") — ~17 at 96
+      : valueStr.length > 2
+        ? Math.round(size * 0.24) // medium (e.g. "100%") — ~23 at 96
+        : Math.round(size * 0.3); // 1-2 chars (e.g. "12") — ~29 at 96
 
   return (
     <Tag
@@ -136,72 +148,80 @@ export function SystemGauge({
         </svg>
 
         {/* Needle — overlaid as a separate rotating element so we can
-            transition it smoothly without re-rendering the SVG. */}
-        <div
-          aria-hidden
-          className="absolute inset-0 pointer-events-none"
-          style={{
-            transform: `rotate(${needleAngle}deg)`,
-            transition: "transform 480ms cubic-bezier(0.34, 1.2, 0.64, 1)",
-          }}
-        >
-          {/* The needle is a vertical line from center upward to the rim */}
+            transition it smoothly without re-rendering the SVG.
+            Hidden when showNeedle=false (e.g. TOTAL / GMAIL counters where
+            the number is the data and the needle just adds noise). */}
+        {showNeedle && (
           <div
-            className="absolute"
+            aria-hidden
+            className="absolute inset-0 pointer-events-none"
             style={{
-              left: "50%",
-              top: "50%",
-              width: 1.5,
-              height: size * 0.42,
-              background: "#FFFFFF",
-              transform: "translate(-50%, -100%)",
-              transformOrigin: "bottom center",
-              boxShadow: `0 0 4px #FFFFFF, 0 0 8px ${color}, 0 0 14px ${color}`,
-              borderRadius: 1,
+              transform: `rotate(${needleAngle}deg)`,
+              transition: "transform 480ms cubic-bezier(0.34, 1.2, 0.64, 1)",
             }}
-          />
-          {/* Tiny pivot dot at center */}
-          <div
-            className="absolute"
-            style={{
-              left: "50%",
-              top: "50%",
-              width: 3,
-              height: 3,
-              background: "#FFFFFF",
-              transform: "translate(-50%, -50%)",
-              borderRadius: 999,
-              boxShadow: `0 0 4px ${color}, 0 0 8px ${color}`,
-            }}
-          />
-        </div>
+          >
+            {/* The needle is a vertical line from center upward to the rim */}
+            <div
+              className="absolute"
+              style={{
+                left: "50%",
+                top: "50%",
+                width: 1.5,
+                height: size * 0.42,
+                background: "#FFFFFF",
+                transform: "translate(-50%, -100%)",
+                transformOrigin: "bottom center",
+                boxShadow: `0 0 4px #FFFFFF, 0 0 8px ${color}, 0 0 14px ${color}`,
+                borderRadius: 1,
+              }}
+            />
+            {/* Tiny pivot dot at center */}
+            <div
+              className="absolute"
+              style={{
+                left: "50%",
+                top: "50%",
+                width: 3,
+                height: 3,
+                background: "#FFFFFF",
+                transform: "translate(-50%, -50%)",
+                borderRadius: 999,
+                boxShadow: `0 0 4px ${color}, 0 0 8px ${color}`,
+              }}
+            />
+          </div>
+        )}
 
-        {/* Value readout — sits inside the dark face */}
+        {/* Value readout — sits inside the dark face. When the needle is
+            hidden, the number is the hero element so we center it; when
+            the needle is visible, push the number down slightly so the
+            needle reads above. */}
         <div
-          className="absolute font-mono font-semibold tabular-nums leading-none pointer-events-none"
+          className="absolute font-mono font-bold tabular-nums leading-none pointer-events-none"
           style={{
             fontSize: valueSize,
             color: "#FFFFFF",
-            // Crisp value text — single tight halo, no soft bleed
-            textShadow: `0 0 2px #FFFFFF, 0 0 4px ${color}`,
-            // Sit slightly below center so the needle reads above
-            transform: "translateY(2px)",
+            // Crisp value text — tighter halo, smaller bleed for sharper edges
+            textShadow: `0 0 1px #FFFFFF, 0 0 3px #FFFFFF, 0 0 6px ${color}`,
+            transform: showNeedle ? "translateY(2px)" : "translateY(0)",
+            letterSpacing: "0.01em",
           }}
         >
           {valueStr}
         </div>
       </div>
 
-      {/* Label below disc */}
+      {/* Label below disc — scales with size so hero gauges get a readable
+         caption (legacy 7.5px was illegible at 96px disc). */}
       <div
         className="font-display uppercase leading-none text-center"
         style={{
-          fontSize: 7.5,
-          letterSpacing: "0.22em",
+          fontSize: Math.max(8, Math.round(size * 0.11)),
+          letterSpacing: "0.24em",
           color,
-          marginTop: 4,
-          fontWeight: 600,
-          textShadow: `0 0 3px ${color}, 0 0 6px ${color}55`,
+          marginTop: 5,
+          fontWeight: 700,
+          textShadow: `0 0 2px ${color}, 0 0 5px ${color}88`,
         }}
       >
         {label}

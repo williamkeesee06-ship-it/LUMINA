@@ -112,6 +112,9 @@ export interface UIState {
   attachMoons: (jobId: string, moons: Moon[]) => void;
   toggleChecklistItem: (jobId: string, key: keyof JobChecklist) => void;
   setChecklistText: (jobId: string, key: keyof JobChecklist, value: string) => void;
+  /** Local update to a job's NSC Project Notes — persistence to Smartsheet
+   *  is handled by the JobPanel save action via updateJobNotes(). */
+  setJobNotes: (jobId: string, notes: string) => void;
 }
 
 export const useUI = create<UIState>((set, get) => ({
@@ -333,6 +336,13 @@ export const useUI = create<UIState>((set, get) => ({
         j.id === jobId
           ? { ...j, checklistText: { ...(j.checklistText ?? {}), [key]: value } }
           : j,
+      ),
+    })),
+
+  setJobNotes: (jobId, notes) =>
+    set((s) => ({
+      jobs: s.jobs.map((j) =>
+        j.id === jobId ? { ...j, notes: notes || undefined } : j,
       ),
     })),
 }));

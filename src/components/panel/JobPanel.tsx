@@ -1,7 +1,7 @@
-import { useEffect, useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useUI } from "@/store/uiStore";
 import { GALAXY_COLORS } from "@/lib/statusMap";
-import { listDrive, searchGmail } from "@/lib/api";
+import { listDrive, searchGmail, updateJobNotes } from "@/lib/api";
 import { sfx } from "@/lib/audio";
 import { requestGoogleToken } from "@/lib/googleAuth";
 import { CHECKLIST_LABELS, CHECKLIST_TEXT_FIELDS, type JobChecklist } from "@/types";
@@ -364,27 +364,25 @@ export function JobPanel() {
             </ul>
           </Section>
 
-          {/* Notes */}
+          {/* Notes — NSC Project Notes column is now editable.
+              Save persists back to Smartsheet for the row. */}
           <Section label="operational notes">
-            {job.notes || job.splicingNotes ? (
-              <div className="space-y-2">
-                {job.notes && (
-                  <div className="panel-tile px-3 py-2.5 text-[13px] text-white/90 whitespace-pre-wrap leading-relaxed">
-                    {job.notes}
+            <div className="space-y-2">
+              <EditableNotes
+                rowId={job.rowId}
+                jobId={job.id}
+                notes={job.notes ?? ""}
+                accent={color}
+              />
+              {job.splicingNotes && (
+                <div className="panel-tile px-3 py-2.5">
+                  <div className="section-bracket mb-1">// splicing</div>
+                  <div className="text-xs text-white/80 whitespace-pre-wrap leading-relaxed">
+                    {job.splicingNotes}
                   </div>
-                )}
-                {job.splicingNotes && (
-                  <div className="panel-tile px-3 py-2.5">
-                    <div className="section-bracket mb-1">// splicing</div>
-                    <div className="text-xs text-white/80 whitespace-pre-wrap leading-relaxed">
-                      {job.splicingNotes}
-                    </div>
-                  </div>
-                )}
-              </div>
-            ) : (
-              <Empty>No additional telemetry recorded.</Empty>
-            )}
+                </div>
+              )}
+            </div>
           </Section>
         </div>
       </div>
@@ -466,6 +464,151 @@ function ConnectButton({ onClick }: { onClick: () => void }) {
     >
       connect
     </button>
+  );
+}
+
+/**
+ * EditableNotes — inline editor for NSC Project Notes.
+ *
+ * Shows the current value in a textarea styled like the other panel tiles.
+ * Tracks dirty state (when textarea content differs from the saved notes).
+ * On save: optimistic local update, then PUT /api/jobs-update. On failure,
+ * the inline status flips to an error state but the local edit is kept so
+ * the user doesn't lose their work.
+ */
+function EditableNotes({
+  rowId,
+  jobId,
+  notes,
+  accent,
+}: {
+  rowId: string;
+  jobId: string;
+  notes: string;
+  accent: string;
+}) {
+  const setJobNotes = useUI((s) => s.setJobNotes);
+  const [draft, setDraft] = useState(notes);
+  const [status, setStatus] = useState<
+    | { kind: "idle" }
+    | { kind: "saving" }
+    | { kind: "saved"; at: number }
+    | { kind: "error"; message: string }
+  >({ kind: "idle" });
+
+  // When the user selects a different planet (or the upstream notes change
+  // via a fresh Smartsheet pull), reset the draft to match.
+  useEffect(() => {
+    setDraft(notes);
+    setStatus({ kind: "idle" });
+  }, [jobId, notes]);
+
+  const dirty = draft !== notes;
+
+  async function handleSave() {
+    if (!dirty || status.kind === "saving") return;
+    setStatus({ kind: "saving" });
+    sfx.select();
+    // Optimistic local update so the universe reflects the change instantly.
+    setJobNotes(jobId, draft);
+    const result = await updateJobNotes(rowId, draft);
+    if (result.ok) {
+      setStatus({ kind: "saved", at: Date.now() });
+      sfx.confirm();
+    } else {
+      // Roll back local notes only if it makes sense — we keep the draft
+      // editable so the user can retry without re-typing.
+      setStatus({ kind: "error", message: result.message });
+      sfx.error();
+    }
+  }
+
+  function handleRevert() {
+    setDraft(notes);
+    setStatus({ kind: "idle" });
+  }
+
+  const statusText =
+    status.kind === "saving"
+      ? "saving…"
+      : status.kind === "saved"
+        ? "synced to smartsheet"
+        : status.kind === "error"
+          ? `error: ${status.message}`
+          : dirty
+            ? "unsaved changes"
+            : "in sync";
+
+  const statusColor =
+    status.kind === "error"
+      ? "#FF6464"
+      : status.kind === "saved"
+        ? "#39FF7A"
+        : dirty
+          ? "#FFB347"
+          : "rgba(255,255,255,0.4)";
+
+  return (
+    <div className="panel-tile px-3 py-2.5 space-y-2">
+      <textarea
+        value={draft}
+        onChange={(e) => setDraft(e.target.value)}
+        placeholder="No notes recorded. Add operational notes here — they sync to the Smartsheet 'NSC Project Notes' column on save."
+        rows={Math.max(3, Math.min(10, draft.split("\n").length + 1))}
+        className="w-full bg-black/40 border border-white/10 rounded-sm px-2.5 py-2 text-[13px] text-white/95 placeholder:text-white/30 leading-relaxed resize-y focus:outline-none transition-colors"
+        style={{
+          fontFamily: "inherit",
+          minHeight: 70,
+          borderColor: dirty ? `${accent}66` : "rgba(255,255,255,0.1)",
+          boxShadow: dirty
+            ? `inset 0 0 0 1px ${accent}33`
+            : "inset 0 0 0 1px rgba(0,0,0,0.4)",
+        }}
+      />
+      <div className="flex items-center justify-between gap-2">
+        <span
+          className="font-mono uppercase text-[9px]"
+          style={{
+            color: statusColor,
+            letterSpacing: "0.18em",
+            textShadow:
+              status.kind === "saved" || status.kind === "error"
+                ? `0 0 4px ${statusColor}`
+                : undefined,
+          }}
+        >
+          {statusText}
+        </span>
+        <div className="flex items-center gap-1.5">
+          {dirty && status.kind !== "saving" && (
+            <button
+              type="button"
+              onClick={handleRevert}
+              className="font-mono uppercase text-[10px] tracking-[0.18em] px-2.5 py-1 rounded-sm border border-white/15 text-white/65 hover:text-white hover:border-white/35 transition-colors"
+            >
+              revert
+            </button>
+          )}
+          <button
+            type="button"
+            onClick={handleSave}
+            disabled={!dirty || status.kind === "saving"}
+            className="font-mono uppercase text-[10px] tracking-[0.22em] px-3 py-1 rounded-sm border transition-all disabled:opacity-40 disabled:cursor-not-allowed"
+            style={{
+              borderColor: dirty ? accent : "rgba(255,255,255,0.18)",
+              color: dirty ? "#000" : "rgba(255,255,255,0.55)",
+              background: dirty ? accent : "transparent",
+              boxShadow: dirty
+                ? `0 0 8px ${accent}, 0 0 16px ${accent}66`
+                : "none",
+              fontWeight: 700,
+            }}
+          >
+            {status.kind === "saving" ? "saving…" : "save"}
+          </button>
+        </div>
+      </div>
+    </div>
   );
 }
 

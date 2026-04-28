@@ -10,7 +10,6 @@ import { MiniWidget } from "./MiniWidget";
 import { SystemGauge } from "./SystemGauge";
 import { useSystemTelemetry } from "@/hooks/useSystemTelemetry";
 import { NeonGlobeV2 } from "./NeonGlobeV2";
-import { ActiveMicIcon } from "./ActiveMicIcon";
 import { HudPager } from "./HudPager";
 import { sfx } from "@/lib/audio";
 import { requestGoogleToken } from "@/lib/googleAuth";
@@ -301,12 +300,6 @@ function HUDVertical() {
                 <DysonCore size={28} />
               </LabeledUtility>
               <LabeledUtility
-                label="VOICE"
-                title="Voice — reserved for V3 phase two"
-              >
-                <ActiveMicIcon size={20} />
-              </LabeledUtility>
-              <LabeledUtility
                 label="MAP"
                 title={
                   isMapOpen
@@ -584,6 +577,7 @@ function HUDHorizontal() {
                       intensity={Math.min(1, total / 120)}
                       color="#5BF3FF"
                       size={84}
+                      showNeedle={false}
                     />
                     <SystemGauge
                       label={googleToken ? "GMAIL" : "CONNECT"}
@@ -601,6 +595,7 @@ function HUDHorizontal() {
                       pulse={!googleToken || unreadCount > 0}
                       onClick={handleConnectGmail}
                       size={84}
+                      showNeedle={false}
                     />
                     <SystemGauge
                       label="CPU"
@@ -694,12 +689,6 @@ function HUDHorizontal() {
                     }}
                   >
                     <DysonCore size={28} />
-                  </LabeledUtility>
-                  <LabeledUtility
-                    label="VOICE"
-                    title="Voice — reserved for V3 phase two"
-                  >
-                    <ActiveMicIcon size={20} />
                   </LabeledUtility>
                   <LabeledUtility
                     label="MAP"
@@ -1214,6 +1203,7 @@ function TelemetryPageVertical({
           intensity={Math.min(1, total / 120)}
           color="#5BF3FF"
           size={96}
+          showNeedle={false}
         />
         <SystemGauge
           label={googleToken ? "GMAIL" : "CONNECT"}
@@ -1229,6 +1219,7 @@ function TelemetryPageVertical({
           pulse={!googleToken || unreadCount > 0}
           onClick={handleConnectGmail}
           size={96}
+          showNeedle={false}
         />
         <SystemGauge
           label="CPU"

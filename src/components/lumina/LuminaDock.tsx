@@ -45,21 +45,22 @@ export function LuminaDock() {
           <Orb size={ORB_SIZE} onActivate={() => setChatOpen(!isChatOpen)} />
 
           {/* LUMINA wordmark beneath the orb so she always reads as a
-              labeled presence, not an unidentified glow. */}
+              labeled presence, not an unidentified glow. Sized big enough
+              to be the dock's signature — not a footnote. */}
           <div
             aria-hidden
-            className="absolute left-1/2 -translate-x-1/2 flex flex-col items-center"
-            style={{ top: ORB_FRAME - 10 }}
+            className="absolute left-1/2 -translate-x-1/2 flex flex-col items-center whitespace-nowrap"
+            style={{ top: ORB_FRAME - 4 }}
           >
             <div
               className="font-display"
               style={{
-                fontSize: 11,
-                fontWeight: 700,
-                letterSpacing: "0.28em",
+                fontSize: 18,
+                fontWeight: 800,
+                letterSpacing: "0.32em",
                 color: "#ffffff",
                 textShadow:
-                  "0 0 3px #5BF3FF, 0 0 8px rgba(91,243,255,0.7)",
+                  "0 0 4px #5BF3FF, 0 0 10px rgba(91,243,255,0.85), 0 0 20px rgba(91,243,255,0.5)",
               }}
             >
               LUMINA
@@ -67,10 +68,11 @@ export function LuminaDock() {
             <div
               className="font-mono uppercase"
               style={{
-                fontSize: 7,
-                letterSpacing: "0.32em",
-                color: "rgba(91,243,255,0.7)",
-                marginTop: 1,
+                fontSize: 8,
+                letterSpacing: "0.34em",
+                color: "rgba(91,243,255,0.78)",
+                marginTop: 3,
+                textShadow: "0 0 4px rgba(91,243,255,0.5)",
               }}
             >
               {isChatOpen ? "online · listening" : "tap to wake"}
