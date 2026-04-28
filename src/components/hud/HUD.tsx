@@ -321,7 +321,7 @@ function HUDVertical() {
                   mapTransition === "diving" || mapTransition === "rising"
                 }
               >
-                <NeonGlobeV2 size={22} active={isMapOpen} />
+                <NeonGlobeV2 size={32} active={isMapOpen} />
               </LabeledUtility>
             </div>
           </>
@@ -362,19 +362,21 @@ function LabeledUtility({
         title={title}
         aria-label={title}
         className={clsx(
-          "rounded-full flex items-center justify-center transition-all duration-200",
-          active
-            ? "border border-cyan-glow/80 bg-cyan-glow/15"
-            : "border border-cyan-glow/30 bg-cyan-glow/5 hover:border-cyan-glow/70 hover:bg-cyan-glow/10",
+          "flex items-center justify-center transition-all duration-200 bg-transparent border-0 group",
+          interactive && !wait && "hover:scale-110",
+          active && "scale-105",
           !interactive && "cursor-default",
           wait && "opacity-60 cursor-wait",
         )}
         style={{
+          // No circular chrome — the icon itself is the affordance.
+          // Sized to comfortably contain the larger MAP globe (32px).
           width: 40,
           height: 40,
-          boxShadow: active
-            ? "0 0 12px rgba(91,243,255,0.55), inset 0 0 8px rgba(91,243,255,0.3)"
-            : "0 0 6px rgba(91,243,255,0.18), inset 0 0 6px rgba(91,243,255,0.12)",
+          padding: 0,
+          filter: active
+            ? "drop-shadow(0 0 6px rgba(91,243,255,0.85)) drop-shadow(0 0 12px rgba(91,243,255,0.45))"
+            : "drop-shadow(0 0 3px rgba(91,243,255,0.35))",
         }}
       >
         {children}
@@ -712,7 +714,7 @@ function HUDHorizontal() {
                       mapTransition === "diving" || mapTransition === "rising"
                     }
                   >
-                    <NeonGlobeV2 size={22} active={isMapOpen} />
+                    <NeonGlobeV2 size={32} active={isMapOpen} />
                   </LabeledUtility>
                 </div>
               </div>
