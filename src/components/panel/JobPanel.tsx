@@ -1,16 +1,24 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useUI } from "@/store/uiStore";
 import { GALAXY_COLORS } from "@/lib/statusMap";
 import {
-  listDrive,
   searchGmail,
   updateJobNotes,
   updateJobSecondaryStatus,
   SECONDARY_STATUS_OPTIONS,
+  listJobAttachments,
+  getAttachmentUrl,
+  uploadJobAttachment,
+  deleteJobAttachment,
 } from "@/lib/api";
 import { sfx } from "@/lib/audio";
 import { requestGoogleToken } from "@/lib/googleAuth";
-import { CHECKLIST_LABELS, CHECKLIST_TEXT_FIELDS, type JobChecklist } from "@/types";
+import {
+  CHECKLIST_LABELS,
+  CHECKLIST_TEXT_FIELDS,
+  type JobChecklist,
+  type Satellite,
+} from "@/types";
 
 /**
  * Job intelligence panel — luxurious dark metal w/ neon data readouts.
@@ -23,6 +31,8 @@ export function JobPanel() {
   const googleToken = useUI((s) => s.googleToken);
   const setGoogleToken = useUI((s) => s.setGoogleToken);
   const attachSatellites = useUI((s) => s.attachSatellites);
+  const addSatellite = useUI((s) => s.addSatellite);
+  const removeSatellite = useUI((s) => s.removeSatellite);
   const attachMoons = useUI((s) => s.attachMoons);
   const toggleChecklistItem = useUI((s) => s.toggleChecklistItem);
   const setChecklistText = useUI((s) => s.setChecklistText);
@@ -33,18 +43,24 @@ export function JobPanel() {
     [selectedJobId, jobs],
   );
 
-  // Auto-fetch when a job is selected and Google is connected.
-  // Drive documents → satellites. Gmail email threads → moons.
+  // SATELLITES = Smartsheet row attachments. No Google auth required —
+  // hits /api/jobs-attachments which uses the server-side SMARTSHEET_TOKEN.
+  // MOONS = Gmail email threads (still gated on Google OAuth, blocked
+  // by Workspace policy at the moment but harmless if token is null).
   useEffect(() => {
-    if (!job || !googleToken) return;
+    if (!job) return;
     if (!job.satellitesLoaded) {
-      // Drive documents orbit as SATELLITES
-      listDrive(googleToken, job.workOrder).then(({ folderId, satellites }) =>
-        attachSatellites(job.id, satellites, folderId),
-      );
+      listJobAttachments(job.rowId).then((result) => {
+        if (result.ok) {
+          attachSatellites(job.id, result.satellites);
+        } else {
+          // Mark as loaded with empty list so the spinner doesn't hang —
+          // the panel surfaces the failure as "No documents linked yet."
+          attachSatellites(job.id, []);
+        }
+      });
     }
-    if (!job.moonsLoaded) {
-      // Gmail threads orbit as MOONS
+    if (googleToken && !job.moonsLoaded) {
       const q = `(${job.workOrder}${job.address ? ` OR \"${job.address}\"` : ""})`;
       searchGmail(googleToken, q).then((moons) => attachMoons(job.id, moons));
     }
@@ -219,47 +235,17 @@ export function JobPanel() {
             )}
           </Section>
 
-          {/* Satellites — Drive documents (drive docs = satellites, outer orbit) */}
-          <Section label="satellites · drive" count={job.satellites.length || undefined}>
-            {!googleToken ? (
-              <Empty>Connect Google to surface job artifacts.</Empty>
-            ) : !job.satellitesLoaded ? (
-              <Loading>Acquiring satellites…</Loading>
-            ) : job.satellites.length === 0 ? (
-              <Empty>No documents linked yet.</Empty>
-            ) : (
-              <ul className="space-y-1">
-                {job.satellites.map((s) => (
-                  <li key={s.id}>
-                    <a
-                      href={s.webViewLink}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="panel-row flex items-center gap-2 px-3 py-1.5"
-                    >
-                      <span
-                        className="w-1 h-1 rounded-full shrink-0"
-                        style={{ background: color, boxShadow: `0 0 6px ${color}` }}
-                      />
-                      <span className="text-[13px] text-white/90 truncate flex-1">{s.name}</span>
-                      {s.category && (
-                        <span
-                          className="text-[9px] font-mono uppercase tracking-[0.18em] px-1.5 py-0.5 border"
-                          style={{
-                            color,
-                            borderColor: `${color}55`,
-                            background: `${color}08`,
-                          }}
-                        >
-                          {s.category}
-                        </span>
-                      )}
-                    </a>
-                  </li>
-                ))}
-              </ul>
-            )}
-          </Section>
+          {/* Satellites — Smartsheet row attachments. Drag a file anywhere
+              on this section to upload; click a row to open. */}
+          <SatellitesSection
+            jobId={job.id}
+            rowId={job.rowId}
+            satellites={job.satellites}
+            satellitesLoaded={job.satellitesLoaded}
+            color={color}
+            onAdd={(sat) => addSatellite(job.id, sat)}
+            onRemove={(satId) => removeSatellite(job.id, satId)}
+          />
 
           {/* Operational checklist — neon red empty / neon green checked */}
           <Section label="operational checklist">
@@ -618,6 +604,342 @@ function EditableNotes({
       </div>
     </div>
   );
+}
+
+/* ------------------------------------------------------------------ */
+/*  Satellites — Smartsheet attachments orbit                          */
+/* ------------------------------------------------------------------ */
+
+/**
+ * Satellites section: lists Smartsheet row attachments, click-to-open
+ * (mints a fresh signed URL), drag-drop or click-to-upload, hover-to-delete.
+ * Self-contained so JobPanel stays readable.
+ */
+function SatellitesSection({
+  jobId,
+  rowId,
+  satellites,
+  satellitesLoaded,
+  color,
+  onAdd,
+  onRemove,
+}: {
+  jobId: string;
+  rowId: string;
+  satellites: Satellite[];
+  satellitesLoaded: boolean;
+  color: string;
+  onAdd: (sat: Satellite) => void;
+  onRemove: (id: string) => void;
+}) {
+  const [dragOver, setDragOver] = useState(false);
+  const [uploading, setUploading] = useState<
+    Array<{ id: string; name: string; progress: "working" | "error"; message?: string }>
+  >([]);
+  const [openingId, setOpeningId] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // Reset transient state on job change.
+  useEffect(() => {
+    setUploading([]);
+    setError(null);
+    setDragOver(false);
+  }, [jobId]);
+
+  const handleFiles = useCallback(
+    async (files: FileList | File[]) => {
+      const list = Array.from(files);
+      if (list.length === 0) return;
+      setError(null);
+      // Use a stable temp id per upload so we can correlate row -> result.
+      const newRows = list.map((f) => ({
+        id: `${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+        name: f.name,
+        progress: "working" as const,
+      }));
+      setUploading((u) => [...u, ...newRows]);
+      sfx.select();
+      // Upload in parallel — each completes independently.
+      await Promise.all(
+        list.map(async (f, i) => {
+          const tempId = newRows[i].id;
+          const result = await uploadJobAttachment(rowId, f);
+          if (result.ok) {
+            onAdd(result.satellite);
+            setUploading((u) => u.filter((x) => x.id !== tempId));
+            sfx.confirm();
+          } else {
+            setUploading((u) =>
+              u.map((x) =>
+                x.id === tempId
+                  ? { ...x, progress: "error", message: result.message }
+                  : x,
+              ),
+            );
+            sfx.error();
+          }
+        }),
+      );
+    },
+    [rowId, onAdd],
+  );
+
+  async function handleOpen(satelliteId: string) {
+    if (openingId) return;
+    setOpeningId(satelliteId);
+    sfx.select();
+    const result = await getAttachmentUrl(satelliteId);
+    setOpeningId(null);
+    if (result.ok) {
+      window.open(result.url, "_blank", "noopener,noreferrer");
+    } else {
+      setError(result.message);
+      sfx.error();
+      setTimeout(() => setError(null), 4500);
+    }
+  }
+
+  async function handleDelete(satelliteId: string, name: string) {
+    if (!window.confirm(`Delete \"${name}\" from Smartsheet? This cannot be undone.`))
+      return;
+    sfx.select();
+    // Optimistic remove — reinsert on failure.
+    onRemove(satelliteId);
+    const result = await deleteJobAttachment(satelliteId);
+    if (!result.ok) {
+      // Reload list to recover the row that was optimistically removed.
+      const fresh = await listJobAttachments(rowId);
+      if (fresh.ok) {
+        const lost = fresh.satellites.find((s) => s.id === satelliteId);
+        if (lost) onAdd(lost);
+      }
+      setError(result.message);
+      sfx.error();
+      setTimeout(() => setError(null), 4500);
+    } else {
+      sfx.confirm();
+    }
+  }
+
+  // Drag handlers — only react to file drags.
+  function onDragEnter(e: React.DragEvent) {
+    if (!hasFiles(e)) return;
+    e.preventDefault();
+    e.stopPropagation();
+    setDragOver(true);
+  }
+  function onDragOver(e: React.DragEvent) {
+    if (!hasFiles(e)) return;
+    e.preventDefault();
+    e.stopPropagation();
+    e.dataTransfer.dropEffect = "copy";
+  }
+  function onDragLeave(e: React.DragEvent) {
+    // Only count as leaving when crossing out of the section, not when
+    // moving between child elements (relatedTarget will be inside).
+    const next = e.relatedTarget as Node | null;
+    if (next && e.currentTarget.contains(next)) return;
+    setDragOver(false);
+  }
+  function onDrop(e: React.DragEvent) {
+    if (!hasFiles(e)) return;
+    e.preventDefault();
+    e.stopPropagation();
+    setDragOver(false);
+    const files = e.dataTransfer.files;
+    if (files && files.length) void handleFiles(files);
+  }
+
+  const showEmpty = satellitesLoaded && satellites.length === 0 && uploading.length === 0;
+
+  return (
+    <div
+      onDragEnter={onDragEnter}
+      onDragOver={onDragOver}
+      onDragLeave={onDragLeave}
+      onDrop={onDrop}
+      className="relative"
+    >
+      <Section
+        label="satellites · smartsheet"
+        count={satellites.length || undefined}
+        action={
+          <button
+            type="button"
+            onMouseEnter={() => sfx.hover()}
+            onClick={() => {
+              sfx.select();
+              fileInputRef.current?.click();
+            }}
+            className="font-mono text-[9px] uppercase tracking-[0.18em] px-1.5 py-0.5 border transition-colors hover:bg-white/5"
+            style={{
+              color: "rgba(255,255,255,0.7)",
+              borderColor: "rgba(255,255,255,0.15)",
+            }}
+            title="Upload a file to this job's Smartsheet row"
+          >
+            + upload
+          </button>
+        }
+      >
+        <input
+          ref={fileInputRef}
+          type="file"
+          multiple
+          className="hidden"
+          onChange={(e) => {
+            if (e.target.files) void handleFiles(e.target.files);
+            // Reset so re-selecting the same file refires onChange.
+            e.target.value = "";
+          }}
+        />
+
+        {!satellitesLoaded ? (
+          <Loading>Acquiring satellites…</Loading>
+        ) : showEmpty ? (
+          <Empty>
+            No documents linked yet. Drag files here or click + upload.
+          </Empty>
+        ) : (
+          <ul className="space-y-1">
+            {satellites.map((s) => (
+              <li key={s.id}>
+                <div className="panel-row flex items-center gap-2 px-3 py-1.5 group">
+                  <span
+                    className="w-1 h-1 rounded-full shrink-0"
+                    style={{ background: color, boxShadow: `0 0 6px ${color}` }}
+                  />
+                  <button
+                    type="button"
+                    onMouseEnter={() => sfx.hover()}
+                    onClick={() => handleOpen(s.id)}
+                    disabled={openingId === s.id}
+                    className="text-[13px] text-white/90 truncate flex-1 text-left hover:text-white disabled:opacity-60 transition-colors"
+                    title={`${s.name}${s.sizeInKb ? ` — ${formatKb(s.sizeInKb)}` : ""}`}
+                  >
+                    {openingId === s.id ? "opening…" : s.name}
+                  </button>
+                  {s.category && (
+                    <span
+                      className="text-[9px] font-mono uppercase tracking-[0.18em] px-1.5 py-0.5 border shrink-0"
+                      style={{
+                        color,
+                        borderColor: `${color}55`,
+                        background: `${color}08`,
+                      }}
+                    >
+                      {s.category}
+                    </span>
+                  )}
+                  <button
+                    type="button"
+                    onMouseEnter={() => sfx.hover()}
+                    onClick={() => handleDelete(s.id, s.name)}
+                    className="opacity-0 group-hover:opacity-100 transition-opacity text-white/40 hover:text-red-400 text-xs leading-none w-4 h-4 flex items-center justify-center shrink-0"
+                    aria-label={`Delete ${s.name}`}
+                    title="Delete from Smartsheet"
+                  >
+                    ×
+                  </button>
+                </div>
+              </li>
+            ))}
+            {uploading.map((u) => (
+              <li key={u.id}>
+                <div
+                  className="panel-row flex items-center gap-2 px-3 py-1.5"
+                  style={{
+                    borderColor:
+                      u.progress === "error"
+                        ? "rgba(255,100,100,0.4)"
+                        : "rgba(255,255,255,0.1)",
+                  }}
+                >
+                  <span
+                    className="w-1 h-1 rounded-full shrink-0"
+                    style={{
+                      background:
+                        u.progress === "error" ? "#FF6464" : "rgba(255,255,255,0.4)",
+                      animation:
+                        u.progress === "working"
+                          ? "pulse 1.4s ease-in-out infinite"
+                          : undefined,
+                    }}
+                  />
+                  <span className="text-[13px] text-white/60 truncate flex-1">
+                    {u.name}
+                  </span>
+                  <span
+                    className="text-[9px] font-mono uppercase tracking-[0.18em]"
+                    style={{
+                      color: u.progress === "error" ? "#FF6464" : "rgba(255,255,255,0.5)",
+                    }}
+                    title={u.message}
+                  >
+                    {u.progress === "error" ? "failed" : "uploading…"}
+                  </span>
+                  {u.progress === "error" && (
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setUploading((s) => s.filter((x) => x.id !== u.id))
+                      }
+                      className="text-white/40 hover:text-white text-xs leading-none w-4 h-4 flex items-center justify-center"
+                      aria-label="Dismiss"
+                    >
+                      ×
+                    </button>
+                  )}
+                </div>
+              </li>
+            ))}
+          </ul>
+        )}
+
+        {error && (
+          <div
+            className="mt-2 font-mono text-[10px] uppercase tracking-[0.18em] px-2 py-1 border"
+            style={{
+              color: "#FF6464",
+              borderColor: "rgba(255,100,100,0.45)",
+              background: "rgba(255,100,100,0.05)",
+            }}
+          >
+            {error}
+          </div>
+        )}
+      </Section>
+
+      {/* Drag overlay — only paints when files are being dragged. */}
+      {dragOver && (
+        <div
+          className="absolute inset-0 z-10 flex items-center justify-center pointer-events-none"
+          style={{
+            background: `${color}1a`,
+            border: `1.5px dashed ${color}aa`,
+            backdropFilter: "blur(2px)",
+          }}
+        >
+          <div
+            className="font-mono text-[11px] uppercase tracking-[0.28em] px-3 py-2"
+            style={{ color, textShadow: `0 0 8px ${color}aa` }}
+          >
+            Drop to attach to row
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function hasFiles(e: React.DragEvent): boolean {
+  return Array.from(e.dataTransfer.types).includes("Files");
+}
+
+function formatKb(kb: number): string {
+  if (kb < 1024) return `${kb} KB`;
+  return `${(kb / 1024).toFixed(1)} MB`;
 }
 
 /**

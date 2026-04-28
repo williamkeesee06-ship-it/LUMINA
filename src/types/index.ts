@@ -60,16 +60,23 @@ export type OrbMode =
   | "live";
 
 /**
- * A satellite represents a Drive-linked job artifact
- * (permits, prints, redlines, bidmaster, revisits).
+ * A satellite represents a Smartsheet row attachment for a job
+ * (permits, prints, redlines, bidmaster, revisits, photos, etc.).
+ *
+ * Sourced from /api/jobs-attachments via the SMARTSHEET_TOKEN — no Google
+ * OAuth required. The download URL is intentionally NOT stored here because
+ * Smartsheet temp URLs expire after ~2 minutes; the client mints a fresh
+ * URL on demand via getAttachmentUrl(id).
  */
 export interface Satellite {
   id: string;
   name: string;
   mimeType: string;
-  webViewLink?: string;
-  category?: "permit" | "print" | "redline" | "bidmaster" | "revisit" | "other";
-  modifiedTime?: string;
+  sizeInKb?: number;
+  attachmentType?: string;     // "FILE" | "GOOGLE_DRIVE" | "LINK" | etc.
+  attachmentSubType?: string;  // "PDF" | "DOCUMENT" | etc.
+  createdAt?: string;
+  category?: "permit" | "print" | "redline" | "bidmaster" | "revisit" | "photo" | "other";
 }
 
 /** A moon represents a Gmail email thread for the job. */

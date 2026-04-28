@@ -241,14 +241,185 @@ export async function listDrive(
   return { folderId: data.folder.id, satellites };
 }
 
-function categorizeSatellite(name: string): Satellite["category"] {
+/**
+ * Lightweight name-based categorizer used to label satellites in the job
+ * panel. It's a best-effort heuristic — the file's actual MIME also bumps
+ * unmatched images into "photo" so a JPEG named "IMG_3942.jpg" doesn't
+ * collapse to "other".
+ */
+export function categorizeSatellite(
+  name: string,
+  mimeType?: string,
+): Satellite["category"] {
   const n = name.toLowerCase();
   if (n.includes("permit")) return "permit";
   if (n.includes("redline")) return "redline";
   if (n.includes("bidmaster") || n.includes("bid master")) return "bidmaster";
   if (n.includes("revisit")) return "revisit";
-  if (n.includes("print") || n.includes(".pdf")) return "print";
+  if (n.includes("print")) return "print";
+  if (mimeType?.startsWith("image/") || /\.(jpe?g|png|heic|webp|gif)$/i.test(n))
+    return "photo";
+  if (n.endsWith(".pdf")) return "print";
   return "other";
+}
+
+/* ------------------------------------------------------------------ */
+/*  Smartsheet attachments  (satellite source of truth in V3)         */
+/* ------------------------------------------------------------------ */
+
+/**
+ * List all attachments on a Smartsheet row — these become the planet's
+ * satellites. Server uses SMARTSHEET_TOKEN; no Google OAuth required.
+ */
+export async function listJobAttachments(
+  rowId: string,
+): Promise<{ ok: true; satellites: Satellite[] } | { ok: false; message: string }> {
+  try {
+    const r = await fetch(
+      `/api/jobs-attachments?rowId=${encodeURIComponent(rowId)}`,
+    );
+    const data = await r.json().catch(() => ({}));
+    if (!r.ok || !data?.ok) {
+      return {
+        ok: false,
+        message: data?.message ?? `Attachment fetch failed (${r.status})`,
+      };
+    }
+    type Raw = {
+      id: string;
+      name: string;
+      mimeType: string;
+      sizeInKb?: number;
+      attachmentType?: string;
+      attachmentSubType?: string;
+      createdAt?: string;
+    };
+    const satellites: Satellite[] = (data.attachments as Raw[]).map((a) => ({
+      id: a.id,
+      name: a.name,
+      mimeType: a.mimeType ?? "",
+      sizeInKb: a.sizeInKb,
+      attachmentType: a.attachmentType,
+      attachmentSubType: a.attachmentSubType,
+      createdAt: a.createdAt,
+      category: categorizeSatellite(a.name, a.mimeType),
+    }));
+    return { ok: true, satellites };
+  } catch (err) {
+    return {
+      ok: false,
+      message: err instanceof Error ? err.message : "Network error.",
+    };
+  }
+}
+
+/**
+ * Mint a fresh download URL for one Smartsheet attachment. Smartsheet
+ * temp URLs expire ~2 minutes after creation, so we always request a new
+ * one right before opening the file.
+ */
+export async function getAttachmentUrl(
+  attachmentId: string,
+): Promise<{ ok: true; url: string } | { ok: false; message: string }> {
+  try {
+    const r = await fetch(
+      `/api/jobs-attachments?attachmentId=${encodeURIComponent(attachmentId)}`,
+    );
+    const data = await r.json().catch(() => ({}));
+    if (!r.ok || !data?.ok || !data.url) {
+      return {
+        ok: false,
+        message: data?.message ?? `Could not resolve URL (${r.status})`,
+      };
+    }
+    return { ok: true, url: data.url as string };
+  } catch (err) {
+    return {
+      ok: false,
+      message: err instanceof Error ? err.message : "Network error.",
+    };
+  }
+}
+
+/**
+ * Upload a file as a row attachment. Sends the raw bytes (server forwards
+ * to Smartsheet). Returns the new satellite for optimistic UI insert.
+ */
+export async function uploadJobAttachment(
+  rowId: string,
+  file: File,
+): Promise<{ ok: true; satellite: Satellite } | { ok: false; message: string }> {
+  try {
+    const r = await fetch(
+      `/api/jobs-attachments?rowId=${encodeURIComponent(rowId)}&filename=${encodeURIComponent(file.name)}`,
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": file.type || "application/octet-stream",
+        },
+        body: file,
+      },
+    );
+    const data = await r.json().catch(() => ({}));
+    if (!r.ok || !data?.ok || !data.attachment) {
+      return {
+        ok: false,
+        message: data?.message ?? `Upload failed (${r.status})`,
+      };
+    }
+    const a = data.attachment as {
+      id: string;
+      name: string;
+      mimeType: string;
+      sizeInKb?: number;
+      attachmentType?: string;
+      attachmentSubType?: string;
+      createdAt?: string;
+    };
+    const satellite: Satellite = {
+      id: a.id,
+      name: a.name,
+      mimeType: a.mimeType,
+      sizeInKb: a.sizeInKb,
+      attachmentType: a.attachmentType,
+      attachmentSubType: a.attachmentSubType,
+      createdAt: a.createdAt,
+      category: categorizeSatellite(a.name, a.mimeType),
+    };
+    return { ok: true, satellite };
+  } catch (err) {
+    return {
+      ok: false,
+      message: err instanceof Error ? err.message : "Network error.",
+    };
+  }
+}
+
+/**
+ * Delete one attachment by id.
+ */
+export async function deleteJobAttachment(
+  attachmentId: string,
+): Promise<{ ok: true } | { ok: false; message: string }> {
+  try {
+    const r = await fetch(
+      `/api/jobs-attachments?attachmentId=${encodeURIComponent(attachmentId)}`,
+      { method: "DELETE" },
+    );
+    const data = await r.json().catch(() => ({}));
+    if (!r.ok || !data?.ok) {
+      return {
+        ok: false,
+        message: data?.message ?? `Delete failed (${r.status})`,
+      };
+    }
+    return { ok: true };
+  } catch (err) {
+    return {
+      ok: false,
+      message: err instanceof Error ? err.message : "Network error.",
+    };
+  }
 }
 
 export interface LuminaMessage {

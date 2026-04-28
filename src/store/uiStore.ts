@@ -121,6 +121,11 @@ export interface UIState {
    *  immediately. Persistence to Smartsheet is handled by the JobPanel
    *  via updateJobSecondaryStatus(). */
   setJobSecondaryStatus: (jobId: string, secondaryStatus: string) => void;
+  /** Insert a new satellite (uploaded attachment) at the head of the
+   *  job's satellite list — newest-first ordering. */
+  addSatellite: (jobId: string, sat: Satellite) => void;
+  /** Remove a satellite by id (after Smartsheet delete). */
+  removeSatellite: (jobId: string, satelliteId: string) => void;
 }
 
 export const useUI = create<UIState>((set, get) => ({
@@ -366,6 +371,29 @@ export const useUI = create<UIState>((set, get) => ({
           status: nextGalaxy ?? j.status,
         };
       }),
+    })),
+
+  addSatellite: (jobId, sat) =>
+    set((s) => ({
+      jobs: s.jobs.map((j) =>
+        j.id === jobId
+          ? {
+              ...j,
+              // Newest-first so the just-uploaded file lands at the top.
+              satellites: [sat, ...j.satellites.filter((x) => x.id !== sat.id)],
+              satellitesLoaded: true,
+            }
+          : j,
+      ),
+    })),
+
+  removeSatellite: (jobId, satelliteId) =>
+    set((s) => ({
+      jobs: s.jobs.map((j) =>
+        j.id === jobId
+          ? { ...j, satellites: j.satellites.filter((x) => x.id !== satelliteId) }
+          : j,
+      ),
     })),
 }));
 
