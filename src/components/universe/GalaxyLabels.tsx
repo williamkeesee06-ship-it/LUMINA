@@ -1,17 +1,21 @@
 /**
- * Subtle in-galaxy labels.
+ * Galaxy labels rendered as neon-LED signs above each cluster.
  *
- * Each galaxy gets its name rendered at its center as a soft, color-matched
- * tag. Color matches the galaxy's status hue, opacity is intentionally low
- * (≈0.32) so labels read as ambient orientation cues — legible but not loud.
+ * Each label is composed of three layered Text instances all sharing the
+ * galaxy's color, drawn back-to-front:
  *
- * Labels:
- *  - hide entirely when a galaxy is focused or when inside a galaxy
- *  - use Billboard so they always face the camera
- *  - sit slightly above the cluster center (y +0.4) so the bright core
- *    doesn't wash out the type
+ *   1. Wide additive halo — large fillOpacity, big outlineWidth in the
+ *      galaxy color, soft. Reads as the bloom around an LED tube.
+ *   2. Mid tint pass — same color, smaller halo, more saturated.
+ *   3. Crisp white-hot core — brilliant white inner letters with a tight
+ *      color outline. Mimics the glowing filament inside neon.
+ *
+ * Position is well above each cluster (y + 4.5) so the label sits like a
+ * marquee in space rather than overlapping the spiral arms. Labels fade
+ * to zero when a galaxy is focused or when inside any galaxy.
  */
 import { Billboard, Text } from "@react-three/drei";
+import * as THREE from "three";
 import { useUI } from "@/store/uiStore";
 import { GALAXIES } from "@/types";
 import { GALAXY_COLORS } from "@/lib/statusMap";
@@ -29,25 +33,77 @@ export function GalaxyLabels() {
       {GALAXIES.filter((g) => g !== "Complete").map((g) => {
         const pos = GALAXY_POSITIONS[g];
         const color = GALAXY_COLORS[g];
-        // Dim the non-focused labels even further when one is focused.
         const isFocused = focusedGalaxy === g;
-        // Bumped opacity so labels read at a glance while keeping the soft
-        // ambient feel. Adds a subtle dark outline so the bright cluster cores
-        // can't wash the type out.
-        const opacity = isFocused ? 0 : focusedGalaxy ? 0.45 : 0.78;
+        // Master opacity envelope — fade non-focused labels when another
+        // galaxy is focused.
+        const opMul = isFocused ? 0 : focusedGalaxy ? 0.55 : 1.0;
+
+        // Lift label well above the cluster so it sits as a marquee, not
+        // inside the dust. The 14-unit nebula scaled by ~3 reaches roughly
+        // y +3.5; +4.5 keeps the label clearly above that.
+        const yOffset = 4.5;
 
         return (
-          <Billboard key={g} position={[pos[0], pos[1] + 0.55, pos[2]]}>
+          <Billboard key={g} position={[pos[0], pos[1] + yOffset, pos[2]]}>
+            {/* Layer 1 — wide soft halo (the outer LED bloom). Drawn first
+                so subsequent passes sit on top. Big outlineWidth in the
+                galaxy color makes the entire glyph radiate. */}
             <Text
-              fontSize={0.7}
+              fontSize={0.95}
               color={color}
               anchorX="center"
               anchorY="middle"
-              letterSpacing={0.2}
-              fillOpacity={opacity}
-              outlineWidth={0.05}
-              outlineColor="#000000"
-              outlineOpacity={0.55}
+              letterSpacing={0.22}
+              fillOpacity={0.0}
+              outlineWidth={0.32}
+              outlineColor={color}
+              outlineOpacity={0.32 * opMul}
+              outlineBlur={0.22}
+              material-blending={THREE.AdditiveBlending}
+              material-toneMapped={false}
+              material-depthWrite={false}
+              material-transparent={true}
+            >
+              {g.toUpperCase()}
+            </Text>
+
+            {/* Layer 2 — mid tint pass. Slightly smaller halo, deeper color
+                so the letters feel saturated rather than just bright. */}
+            <Text
+              fontSize={0.95}
+              color={color}
+              anchorX="center"
+              anchorY="middle"
+              letterSpacing={0.22}
+              fillOpacity={0.65 * opMul}
+              outlineWidth={0.12}
+              outlineColor={color}
+              outlineOpacity={0.85 * opMul}
+              outlineBlur={0.08}
+              material-blending={THREE.AdditiveBlending}
+              material-toneMapped={false}
+              material-depthWrite={false}
+              material-transparent={true}
+            >
+              {g.toUpperCase()}
+            </Text>
+
+            {/* Layer 3 — white-hot inner core. The brilliant filament
+                inside neon tubing. Tight, additive, pure white. */}
+            <Text
+              fontSize={0.95}
+              color="#ffffff"
+              anchorX="center"
+              anchorY="middle"
+              letterSpacing={0.22}
+              fillOpacity={0.95 * opMul}
+              outlineWidth={0.025}
+              outlineColor={color}
+              outlineOpacity={1.0 * opMul}
+              material-blending={THREE.AdditiveBlending}
+              material-toneMapped={false}
+              material-depthWrite={false}
+              material-transparent={true}
             >
               {g.toUpperCase()}
             </Text>

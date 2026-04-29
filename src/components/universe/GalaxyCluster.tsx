@@ -121,22 +121,28 @@ export function GalaxyCluster({
   }, [nebulaTex, color]);
 
   const scale = useMemo(() => {
-    if (count === 0) return 0.7;
-    return 0.95 + Math.min(Math.log2(count + 1) * 0.18, 1.6);
+    // Galaxies now occupy more space — bumped base scale and growth coefficient
+    // so each cluster reads as a genuinely large structure rather than a tight
+    // dot of dust. The user asked for "longer and wider".
+    if (count === 0) return 1.05;
+    return 1.4 + Math.min(Math.log2(count + 1) * 0.22, 1.9);
   }, [count]);
 
   const { positions, colors } = useMemo(() => {
-    const n = Math.max(120, Math.min(700, count * 12));
+    // More particles + wider radial extent = bigger, more diffuse galaxies.
+    const n = Math.max(220, Math.min(1100, count * 18));
     const pos = new Float32Array(n * 3);
     const col = new Float32Array(n * 3);
     const c = new THREE.Color(color);
     for (let i = 0; i < n; i++) {
       const t = i / n;
       // Looser arms: wider angular jitter so spiral looks organic, not tidy.
-      const angle = t * Math.PI * 8 + (Math.random() - 0.5) * 1.6;
+      const angle = t * Math.PI * 8 + (Math.random() - 0.5) * 1.8;
       // Wider radius distribution + per-particle radial jitter so silhouette
       // bleeds into surrounding space instead of having a sharp edge.
-      const r = 1.0 + Math.pow(Math.random(), 0.5) * 5.0 + (Math.random() - 0.5) * 0.6;
+      // Stretched from ~5 to ~8.5 so each arm extends much further.
+      const r =
+        1.2 + Math.pow(Math.random(), 0.45) * 8.5 + (Math.random() - 0.5) * 0.9;
       pos[i * 3] = Math.cos(angle) * r;
       // Wider y-jitter, scaled by radius so outer arms feather out vertically.
       pos[i * 3 + 1] = (Math.random() - 0.5) * (0.35 + r * 0.12);
@@ -214,7 +220,9 @@ export function GalaxyCluster({
           stretching the same nebula sprite over a larger area. */}
       <Billboard>
         <mesh material={nebulaMaterial}>
-          <planeGeometry args={[10, 10]} />
+          {/* Larger nebula footprint so the cluster's color wash extends
+              well past the spiral arms — the visible "galaxy" feels bigger. */}
+          <planeGeometry args={[14, 14]} />
         </mesh>
       </Billboard>
 
@@ -269,7 +277,9 @@ export function GalaxyCluster({
           <bufferAttribute attach="attributes-color" args={[colors, 3]} />
         </bufferGeometry>
         <pointsMaterial
-          size={0.07}
+          // Smaller per-particle so the dense particle count reads as fine
+          // grain dust rather than a galaxy of round balls.
+          size={0.05}
           sizeAttenuation
           vertexColors
           transparent

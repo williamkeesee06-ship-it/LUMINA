@@ -73,33 +73,34 @@ export function UniverseScene() {
       <Suspense fallback={null}>
         <NebulaClouds />
       </Suspense>
-      {/* Far layer — tiny dim pinpoint stars filling the sky, barely twinkle */}
+      {/* Far layer — dense field of tiny crisp pinpoint stars filling the
+          whole sky. The user wanted "more white stars" — boosted from 1500. */}
       <Stardust
-        count={1500}
-        radius={130}
-        size={0.12}
-        baseOpacity={0.7}
-        twinkleFraction={0.03}
+        count={2400}
+        radius={140}
+        size={0.10}
+        baseOpacity={0.75}
+        twinkleFraction={0.025}
         spin={0.005}
         flatten={1}
         dim={isPlanetView}
       />
       {/* Mid layer — medium-bright stars at conversational distance */}
       <Stardust
-        count={600}
-        radius={70}
-        size={0.18}
-        baseOpacity={0.85}
-        twinkleFraction={0.05}
+        count={900}
+        radius={75}
+        size={0.15}
+        baseOpacity={0.88}
+        twinkleFraction={0.04}
         spin={0.01}
-        flatten={0.65}
+        flatten={0.7}
         dim={isPlanetView}
       />
       {/* Near layer — slightly larger, drift past camera, occasional twinkle */}
       <Stardust
-        count={200}
+        count={260}
         radius={32}
-        size={0.26}
+        size={0.22}
         baseOpacity={0.95}
         twinkleFraction={0.08}
         spin={0.02}
@@ -109,7 +110,10 @@ export function UniverseScene() {
       {/* Shooting stars — tapered streaks every ~10s, no squares */}
       <Meteors intervalSec={11} poolSize={5} radius={95} dim={isPlanetView} />
       {/* Cosmic dust / swirl — blends galaxies into surrounding space */}
-      <CosmicDust perGalaxy={260} ambient={900} dim={isPlanetView} />
+      {/* Per-galaxy haze pulled down (was 260) and spread wider — less
+          "floating balls" feel, more atmospheric grain. Ambient sweep
+          slightly thicker since dust is now spread over a larger volume. */}
+      <CosmicDust perGalaxy={140} ambient={1100} dim={isPlanetView} />
 
       {/* Universe layer — always render, fade out when entering galaxy */}
       <Suspense fallback={null}>

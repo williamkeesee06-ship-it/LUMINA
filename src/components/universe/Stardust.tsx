@@ -38,20 +38,27 @@ export function Stardust({
   const ref = useRef<THREE.Points>(null);
   const matRef = useRef<THREE.ShaderMaterial>(null);
 
-  // Soft circular radial sprite — same approach as CosmicDust. This is what
-  // kills the "square stars" problem at any zoom level.
+  // High-resolution sharp pinpoint sprite. Tight bright core + tiny halo
+  // makes stars read as crisp pixels of light at any distance instead of
+  // soft glowy bokeh balls.
   const sprite = useMemo(() => {
-    const s = 64;
+    const s = 128;
     const canvas = document.createElement("canvas");
     canvas.width = canvas.height = s;
     const ctx = canvas.getContext("2d")!;
     const grad = ctx.createRadialGradient(s / 2, s / 2, 0, s / 2, s / 2, s / 2);
-    grad.addColorStop(0, "rgba(255,255,255,1)");
-    grad.addColorStop(0.4, "rgba(255,255,255,0.55)");
-    grad.addColorStop(1, "rgba(255,255,255,0)");
+    // Bright pinpoint core, very tight falloff, tiny soft halo for atmosphere.
+    grad.addColorStop(0.0, "rgba(255,255,255,1)");
+    grad.addColorStop(0.08, "rgba(255,255,255,0.95)");
+    grad.addColorStop(0.18, "rgba(255,255,255,0.35)");
+    grad.addColorStop(0.45, "rgba(255,255,255,0.06)");
+    grad.addColorStop(1.0, "rgba(255,255,255,0)");
     ctx.fillStyle = grad;
     ctx.fillRect(0, 0, s, s);
     const tex = new THREE.CanvasTexture(canvas);
+    // Higher anisotropy + linear filter = sharper at oblique angles.
+    tex.minFilter = THREE.LinearFilter;
+    tex.magFilter = THREE.LinearFilter;
     tex.needsUpdate = true;
     return tex;
   }, []);
@@ -72,25 +79,35 @@ export function Stardust({
       pos[i * 3 + 1] = r * Math.sin(phi) * Math.sin(theta) * flatten;
       pos[i * 3 + 2] = r * Math.cos(phi);
 
-      // Mostly cool whites with a few faint cyan / teal tints.
+      // Mostly bright cool whites with rarer cyan / teal / warm-white tints.
+      // Heavier on whites — the user wanted "more white stars".
       const tint = Math.random();
-      if (tint < 0.04) {
-        col[i * 3] = 0.36;
+      if (tint < 0.025) {
+        // cool cyan
+        col[i * 3] = 0.45;
         col[i * 3 + 1] = 0.95;
         col[i * 3 + 2] = 1;
-      } else if (tint < 0.08) {
-        col[i * 3] = 0.24;
+      } else if (tint < 0.045) {
+        // teal
+        col[i * 3] = 0.34;
         col[i * 3 + 1] = 1;
-        col[i * 3 + 2] = 0.83;
+        col[i * 3 + 2] = 0.88;
+      } else if (tint < 0.06) {
+        // warm white
+        col[i * 3] = 1;
+        col[i * 3 + 1] = 0.94;
+        col[i * 3 + 2] = 0.82;
       } else {
-        const b = 0.7 + Math.random() * 0.3;
+        // mostly bright neutral whites, biased brighter than before.
+        const b = 0.85 + Math.random() * 0.15;
         col[i * 3] = b;
         col[i * 3 + 1] = b;
         col[i * 3 + 2] = b;
       }
 
-      // Per-star size variation — a few brighter "near" stars stand out.
-      siz[i] = 0.6 + Math.random() * Math.random() * 1.2;
+      // Per-star size variation. The double-Math.random() bias keeps most
+      // stars small (sharp pinpoints) with rarer brighter "near" stars.
+      siz[i] = 0.55 + Math.random() * Math.random() * 1.4;
 
       // Only ~twinkleFraction of stars actually twinkle; the rest are still.
       tw[i * 2] = Math.random() * Math.PI * 2;

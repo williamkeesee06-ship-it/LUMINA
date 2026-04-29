@@ -55,16 +55,17 @@ export function CosmicDust({ perGalaxy = 380, ambient = 900, dim = false }: Prop
 
     let idx = 0;
 
-    // 1. Per-galaxy haze
+    // 1. Per-galaxy haze — spread over a much larger footprint so dust
+    //    feathers out into space instead of clumping near the cluster.
     galaxyEntries.forEach(([g, p]) => {
       const c = new THREE.Color(GALAXY_COLORS[g]);
       for (let i = 0; i < perGalaxy; i++) {
-        // Gaussian-ish cluster around galaxy position with ~7 unit spread.
-        const r = Math.pow(Math.random(), 1.4) * 9;
+        // Wider Gaussian-ish cluster (~16 unit spread vs old 9).
+        const r = Math.pow(Math.random(), 1.3) * 17;
         const theta = Math.random() * Math.PI * 2;
-        const phi = (Math.random() - 0.5) * 0.7; // flatten to disk
+        const phi = (Math.random() - 0.5) * 0.85; // slightly thicker disk
         pos[idx * 3] = p[0] + Math.cos(theta) * r;
-        pos[idx * 3 + 1] = p[1] + Math.sin(phi) * r * 0.5;
+        pos[idx * 3 + 1] = p[1] + Math.sin(phi) * r * 0.55;
         pos[idx * 3 + 2] = p[2] + Math.sin(theta) * r;
 
         // Tint slightly desaturated toward white so dust isn't garish.
@@ -73,17 +74,24 @@ export function CosmicDust({ perGalaxy = 380, ambient = 900, dim = false }: Prop
         col[idx * 3 + 1] = c.g * fade + 0.08;
         col[idx * 3 + 2] = c.b * fade + 0.08;
 
-        // Mostly tiny motes, a few larger glowing puffs.
-        siz[idx] = Math.random() < 0.08 ? 1.4 + Math.random() * 0.9 : 0.35 + Math.random() * 0.55;
+        // Mostly fine grain motes; just ~1% larger puffs (was 8%) and even
+        // those puffs are smaller now — the user explicitly didn't want
+        // "floating balls". Sharp pinpoint stars are the star layer's job.
+        siz[idx] =
+          Math.random() < 0.01
+            ? 1.0 + Math.random() * 0.5
+            : 0.22 + Math.random() * 0.4;
         idx++;
       }
     });
 
-    // 2. Ambient sweep — broad, sparse, cool palette.
+    // 2. Ambient sweep — broader, sparser, spread across a wider ring so
+    //    the void between galaxies has texture.
     for (let i = 0; i < ambient; i++) {
-      const r = 18 + Math.pow(Math.random(), 0.7) * 38;
+      // Ring spans 14..78 units (was 18..56) for a wider field.
+      const r = 14 + Math.pow(Math.random(), 0.65) * 64;
       const theta = Math.random() * Math.PI * 2;
-      const y = (Math.random() - 0.5) * 14;
+      const y = (Math.random() - 0.5) * 22;
       pos[idx * 3] = Math.cos(theta) * r;
       pos[idx * 3 + 1] = y;
       pos[idx * 3 + 2] = Math.sin(theta) * r;
@@ -105,7 +113,9 @@ export function CosmicDust({ perGalaxy = 380, ambient = 900, dim = false }: Prop
       col[idx * 3 + 1] = g2;
       col[idx * 3 + 2] = b2;
 
-      siz[idx] = 0.3 + Math.random() * 0.6;
+      // Smaller ambient mote sizes — these should never read as discrete
+      // bokeh balls; they're atmospheric grain.
+      siz[idx] = 0.18 + Math.random() * 0.35;
       idx++;
     }
 
