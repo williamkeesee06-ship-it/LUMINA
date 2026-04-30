@@ -33,6 +33,10 @@ interface Props {
   highlighted?: boolean;
   dimmed?: boolean;
   insideThis?: boolean;
+  /** When the user is in planet (focus) view inside this galaxy, push the
+   *  nebula / dust / halo down to almost nothing so the close-up planet
+   *  reads against a near-black background. */
+  planetView?: boolean;
   /** Click-to-select. Pass `null` to disable so the cluster's huge
    *  nebula billboard doesn't intercept clicks (e.g. once the user is
    *  already inside this galaxy and panning around). */
@@ -102,6 +106,7 @@ export function GalaxyCluster({
   highlighted = false,
   dimmed = false,
   insideThis = false,
+  planetView = false,
   onSelect,
 }: Props) {
   const groupRef = useRef<THREE.Group>(null);
@@ -158,28 +163,45 @@ export function GalaxyCluster({
   useFrame((state, delta) => {
     const t = state.clock.elapsedTime;
     if (nebulaMatRef.current) {
-      // When camera is inside this galaxy, fade the billboard so it acts as
-      // ambient atmosphere rather than dominating the view.
-      const baseOpacity = insideThis ? 0.18 : dimmed ? 0.22 : 0.7;
+      // Planet view kills the nebula almost entirely so the hero planet
+      // sits against open space. Galaxy view keeps it as soft ambient.
+      const baseOpacity = planetView
+        ? 0.02
+        : insideThis
+          ? 0.18
+          : dimmed
+            ? 0.22
+            : 0.7;
       nebulaMatRef.current.uniforms.uOpacity.value =
-        baseOpacity + Math.sin(t * 0.6) * 0.04;
+        baseOpacity + Math.sin(t * 0.6) * 0.02;
     }
     if (haloRef.current) {
       const m = haloRef.current.material as THREE.MeshBasicMaterial;
-      m.opacity = insideThis
+      m.opacity = planetView
         ? 0
-        : (dimmed ? 0.04 : 0.22) + Math.sin(t * 1.2) * 0.04;
+        : insideThis
+          ? 0
+          : (dimmed ? 0.04 : 0.22) + Math.sin(t * 1.2) * 0.04;
     }
     if (coreRef.current) {
       const m = coreRef.current.material as THREE.MeshBasicMaterial;
-      m.opacity = insideThis
+      m.opacity = planetView
         ? 0
-        : (dimmed ? 0.4 : 0.95) + Math.sin(t * 1.6) * 0.05;
+        : insideThis
+          ? 0
+          : (dimmed ? 0.4 : 0.95) + Math.sin(t * 1.6) * 0.05;
     }
     if (dustRef.current) {
       dustRef.current.rotation.y += delta * 0.04;
       const m = dustRef.current.material as THREE.PointsMaterial;
-      m.opacity = insideThis ? 0.05 : dimmed ? 0.12 : 0.85;
+      // Planet view: galaxy bokeh dust drops to near-zero. Otherwise normal.
+      m.opacity = planetView
+        ? 0.02
+        : insideThis
+          ? 0.05
+          : dimmed
+            ? 0.12
+            : 0.85;
     }
   });
 

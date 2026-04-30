@@ -136,6 +136,7 @@ export function UniverseScene() {
               highlighted={isFocused && viewMode === "universe"}
               dimmed={isDimmed}
               insideThis={insideThis}
+              planetView={isPlanetView}
               onSelect={
                 canSelect
                   ? () => {

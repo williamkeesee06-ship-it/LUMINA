@@ -115,15 +115,21 @@ export function PlanetField({ jobs, selectedJobId, onSelect, focusMode = false }
     <group>
       {layout.map((p, i) => {
         const job = jobs[i];
+        // In planet (focus) mode, hide every planet that isn't the selected
+        // one. The user's request was crystal clear: "that planet be the
+        // only planet in view." Dimming wasn't enough — dozens of orbiting
+        // dots still cluttered the foreground.
+        if (focusMode && selectedJobId !== p.id) return null;
         return (
           <Planet
             key={p.id}
-            position={p.pos}
+            position={focusMode && selectedJobId === p.id ? [0, 0, 0] : p.pos}
             color={p.color}
             tiltDeg={p.tilt}
             label={p.label}
             selected={selectedJobId === p.id}
-            dim={focusMode && selectedJobId !== p.id}
+            dim={false}
+            hero={focusMode && selectedJobId === p.id}
             phase={i * 0.13}
             satellites={job?.satellites ?? []}
             onSelect={() => onSelect(p.id)}
@@ -141,6 +147,7 @@ function Planet({
   label,
   selected,
   dim = false,
+  hero = false,
   phase,
   satellites,
   onSelect,
@@ -151,6 +158,10 @@ function Planet({
   label: string;
   selected: boolean;
   dim?: boolean;
+  /** Hero mode — this planet is alone on stage in planet view. Scales up,
+   *  adds an atmosphere halo, slows rotation a touch, and bumps the ring
+   *  glow so it reads as a real cinematic close-up. */
+  hero?: boolean;
   phase: number;
   satellites: Satellite[];
   onSelect: () => void;
@@ -166,10 +177,21 @@ function Planet({
   // billboarded with a constant Y-squash so all planets read identically.
   void tiltDeg;
 
+  // Smooth scale interpolation so transitions in/out of hero mode glide
+  // rather than snap. Hero is ~3.4× the regular planet size.
+  const heroTargetScale = hero ? 3.4 : 1.0;
+  const currentScale = useRef(1.0);
+
   useFrame((state, delta) => {
     const t = state.clock.elapsedTime + phase;
+    // Interpolate group scale toward hero/non-hero target.
+    if (groupRef.current) {
+      currentScale.current += (heroTargetScale - currentScale.current) * Math.min(1, delta * 3);
+      groupRef.current.scale.setScalar(currentScale.current);
+    }
     if (coreRef.current) {
-      coreRef.current.rotation.y += delta * 0.3;
+      // Slow rotation down a touch in hero mode — looks more cinematic.
+      coreRef.current.rotation.y += delta * (hero ? 0.12 : 0.3);
     }
     if (groupRef.current) {
       groupRef.current.position.y = position[1] + Math.sin(t * 0.6) * 0.04;
@@ -181,7 +203,9 @@ function Planet({
     }
     if (ringGlowRef.current) {
       const m = ringGlowRef.current.material as THREE.MeshBasicMaterial;
-      const tgt = (dim ? 0.08 : selected ? 0.7 : 0.55) + Math.sin(t * 1.2) * 0.08;
+      // Hero mode pumps the halo so the neon ring really sings up close.
+      const baseGlow = hero ? 0.95 : selected ? 0.7 : 0.55;
+      const tgt = (dim ? 0.08 : baseGlow) + Math.sin(t * 1.2) * (hero ? 0.12 : 0.08);
       m.opacity += (tgt - m.opacity) * Math.min(1, delta * 5);
     }
     if (lockRef.current) {

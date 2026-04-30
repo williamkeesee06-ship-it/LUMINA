@@ -87,8 +87,12 @@ export function CameraRig() {
       targetPos.current.set(p[0] + 0, p[1] + 4, p[2] + 14);
       targetLook.current.set(p[0], p[1], p[2]);
     } else if (viewMode === "planet" && selectedJobId && focusedGalaxy) {
+      // Hero close-up. PlanetField repositions the selected planet to the
+      // galaxy origin in focus mode, so we frame the camera tight on that
+      // origin point. ~3.5 units back, slightly above, gives a beauty shot
+      // that fills the canvas and lets the ring read in 3D.
       const p = GALAXY_POSITIONS[focusedGalaxy];
-      targetPos.current.set(p[0] + 7, p[1] + 3, p[2] + 9);
+      targetPos.current.set(p[0] + 1.6, p[1] + 1.0, p[2] + 3.5);
       targetLook.current.set(p[0], p[1], p[2]);
     }
   }, [viewMode, focusedGalaxy, selectedJobId]);

@@ -163,7 +163,9 @@ export function CosmicDust({ perGalaxy = 380, ambient = 900, dim = false }: Prop
       ref.current.rotation.x = Math.sin(state.clock.elapsedTime * 0.04) * 0.03;
     }
     if (matRef.current) {
-      const target = dim ? 0.08 : 0.42;
+      // Planet view goes nearly black — the user wants the focused planet
+      // alone with just "faint dust and stars" behind it.
+      const target = dim ? 0.018 : 0.42;
       matRef.current.opacity += (target - matRef.current.opacity) * Math.min(1, delta * 4);
     }
   });
