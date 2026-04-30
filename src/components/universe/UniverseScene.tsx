@@ -110,10 +110,10 @@ export function UniverseScene() {
       {/* Shooting stars — tapered streaks every ~10s, no squares */}
       <Meteors intervalSec={11} poolSize={5} radius={95} dim={isPlanetView} />
       {/* Cosmic dust / swirl — blends galaxies into surrounding space */}
-      {/* Per-galaxy haze pulled down (was 260) and spread wider — less
-          "floating balls" feel, more atmospheric grain. Ambient sweep
-          slightly thicker since dust is now spread over a larger volume. */}
-      <CosmicDust perGalaxy={140} ambient={1100} dim={isPlanetView} />
+      {/* Cosmic dust now elongates per galaxy into long stretched streaks
+          rotated to a unique angle each — fills the void between clusters
+          with drifting bands instead of concentric circles of bokeh. */}
+      <CosmicDust perGalaxy={220} ambient={1200} dim={isPlanetView} />
 
       {/* Universe layer — always render, fade out when entering galaxy */}
       <Suspense fallback={null}>

@@ -55,18 +55,52 @@ export function CosmicDust({ perGalaxy = 380, ambient = 900, dim = false }: Prop
 
     let idx = 0;
 
-    // 1. Per-galaxy haze — spread over a much larger footprint so dust
-    //    feathers out into space instead of clumping near the cluster.
+    // 1. Per-galaxy haze — each cluster gets an *elongated* dust cloud,
+    //    not a circular halo. Each galaxy is assigned a unique stretch
+    //    direction + aspect ratio so the void between galaxies feels like
+    //    real space with drifting dust streams, not concentric rings of
+    //    bokeh circles. The math: dust is sampled in a stretched ellipsoid
+    //    (long X, short Z, even shorter Y), then rotated by a per-galaxy
+    //    angle so the long axis isn't always east-west.
+    //
+    //    Deterministic per-galaxy seed (just sin(g.length * k)) so the
+    //    layout is stable across rerenders.
     galaxyEntries.forEach(([g, p]) => {
       const c = new THREE.Color(GALAXY_COLORS[g]);
+      // Per-galaxy elongation parameters.
+      const seed = (g.charCodeAt(0) * 13 + g.charCodeAt(g.length - 1) * 7) % 360;
+      const rot = (seed / 360) * Math.PI * 2;
+      // Aspect ratio for the ellipsoid: long axis ~2.4x the short axis.
+      // Y stays small so dust lays in a disk, not a sphere.
+      const ax = 2.6 + ((seed % 40) / 40) * 1.4; // 2.6..4.0 long axis
+      const az = 0.7 + ((seed % 17) / 17) * 0.5; // 0.7..1.2 short axis
+      const ay = 0.55;
+      const cosR = Math.cos(rot);
+      const sinR = Math.sin(rot);
       for (let i = 0; i < perGalaxy; i++) {
-        // Wider Gaussian-ish cluster (~16 unit spread vs old 9).
-        const r = Math.pow(Math.random(), 1.3) * 17;
+        // Sample inside a unit ellipsoid: bias particles toward the long
+        // axis with a higher exponent so the cloud looks streaked, not blobby.
+        const u = Math.pow(Math.random(), 1.15);
         const theta = Math.random() * Math.PI * 2;
-        const phi = (Math.random() - 0.5) * 0.85; // slightly thicker disk
-        pos[idx * 3] = p[0] + Math.cos(theta) * r;
-        pos[idx * 3 + 1] = p[1] + Math.sin(phi) * r * 0.55;
-        pos[idx * 3 + 2] = p[2] + Math.sin(theta) * r;
+        const phi = (Math.random() - 0.5) * 1.0;
+        // Local frame coords — long axis = local X.
+        let lx = Math.cos(theta) * u * ax;
+        const ly = Math.sin(phi) * u * ay;
+        let lz = Math.sin(theta) * u * az;
+        // Stretch the long axis further with a power curve so the cloud
+        // tapers (denser core, thinner streamers).
+        lx *= 1 + Math.pow(Math.abs(Math.cos(theta)) * u, 1.4) * 1.2;
+        // Scale to overall galaxy footprint (~14 unit base).
+        const footprint = 14;
+        lx *= footprint;
+        const lyOut = ly * footprint;
+        lz *= footprint;
+        // Rotate around Y so each galaxy points its long axis differently.
+        const wx = lx * cosR - lz * sinR;
+        const wz = lx * sinR + lz * cosR;
+        pos[idx * 3] = p[0] + wx;
+        pos[idx * 3 + 1] = p[1] + lyOut;
+        pos[idx * 3 + 2] = p[2] + wz;
 
         // Tint slightly desaturated toward white so dust isn't garish.
         const fade = 0.55 + Math.random() * 0.45;

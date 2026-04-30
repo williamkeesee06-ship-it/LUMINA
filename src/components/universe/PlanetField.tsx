@@ -40,8 +40,19 @@ interface Props {
 export function PlanetField({ jobs, selectedJobId, onSelect, focusMode = false }: Props) {
   const layout = useMemo(() => {
     const n = jobs.length || 1;
-    // Wider radius for crowded clusters — keeps rings from overlapping at high job counts.
-    const radius = 6 + Math.sqrt(n) * 0.7;
+    // Galactic-disk layout. Instead of a fixed-radius Fibonacci sphere
+    // (which reads as a hollow ball / ring from any vantage), planets are
+    // distributed across a stretched flattened disk with a logarithmic
+    // spiral bias — think planetary positions in an actual spiral galaxy.
+    // This gives the cluster real volume and an elongated silhouette
+    // instead of a tight bunched circle.
+    //
+    // Key changes vs. the old layout:
+    //   - Radius varies (~3..21) per planet instead of one fixed shell.
+    //   - Spiral arm bias — angular phase rotates with sqrt(radius).
+    //   - Disk-flat: y-thickness scales down with radius * 0.18.
+    //   - Per-planet jitter scales with local radius so outer planets
+    //     drift further than inner ones (not the same fixed amount).
     const out: {
       id: string;
       label: string;
@@ -49,28 +60,49 @@ export function PlanetField({ jobs, selectedJobId, onSelect, focusMode = false }
       color: string;
       tilt: number;
     }[] = [];
-    // Deterministic pseudo-random for per-planet position jitter — breaks
-    // the perfectly-uniform Fibonacci look without losing overall layout.
     const jitter = (seed: number) => {
       const x = Math.sin(seed * 12.9898) * 43758.5453;
       return x - Math.floor(x); // 0..1
     };
+    // Disk extent grows with sqrt(n) so 50 planets and 500 planets both
+    // read at sensible density. Inner radius is small (3) so the cluster
+    // has a visible "core" instead of a hole.
+    const innerR = 3;
+    const outerR = 8 + Math.sqrt(n) * 1.4;
+    const armCount = 2; // number of spiral arms
+    const armTwist = 1.6; // how much each arm winds
+    const goldenAngle = Math.PI * (3 - Math.sqrt(5));
     for (let i = 0; i < n; i++) {
       if (!jobs[i]) break;
-      const t = (i + 0.5) / n;
-      const phi = Math.acos(1 - 2 * t);
-      const goldenAngle = Math.PI * (3 - Math.sqrt(5));
-      const theta = goldenAngle * i;
-      const jx = (jitter(i + 1) - 0.5) * 0.9;
-      const jy = (jitter(i + 7.13) - 0.5) * 0.7;
-      const jz = (jitter(i + 19.37) - 0.5) * 0.9;
+      // Square-root index distribution biases more planets toward the
+      // outer disk while leaving a populated core. Avoids a hollow hole.
+      const tIdx = (i + 0.5) / n;
+      const r = innerR + Math.sqrt(tIdx) * (outerR - innerR);
+      // Spiral arm — each planet sits near one of `armCount` arms, with the
+      // arm angle winding outward. goldenAngle adds variation between
+      // adjacent indices so consecutive planets don't stack.
+      const arm = i % armCount;
+      const armBase = (arm / armCount) * Math.PI * 2;
+      const armAngle =
+        armBase +
+        ((r - innerR) / (outerR - innerR)) * armTwist * Math.PI * 2 +
+        goldenAngle * i * 0.18;
+      // Lateral jitter perpendicular to the arm so planets feather the arm,
+      // not sit on a perfect spiral line.
+      const jr = (jitter(i + 1) - 0.5) * (1.6 + r * 0.18);
+      const jt = (jitter(i + 7.13) - 0.5) * 0.55; // tangential angular jitter
+      const finalR = Math.max(1.5, r + jr);
+      const finalAngle = armAngle + jt;
+      // Disk thickness — thin at center, slightly thicker at the rim, with
+      // strong y-flatten so the whole thing reads as a disk not a sphere.
+      const yJ = (jitter(i + 19.37) - 0.5) * (1.0 + r * 0.18);
       out.push({
         id: jobs[i].id,
         label: jobs[i].workOrder || jobs[i].id,
         pos: [
-          radius * Math.sin(phi) * Math.cos(theta) + jx,
-          radius * Math.sin(phi) * Math.sin(theta) * 0.55 + jy,
-          radius * Math.cos(phi) + jz,
+          finalR * Math.cos(finalAngle),
+          yJ,
+          finalR * Math.sin(finalAngle),
         ],
         color: GALAXY_COLORS[jobs[i].status],
         tilt: 0, // unused now — ring orientation is locked globally
