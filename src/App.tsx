@@ -9,6 +9,7 @@ import { TacticalMap } from "@/components/map/TacticalMap";
 import { Boot } from "@/components/effects/Boot";
 import { FailureOverlay } from "@/components/effects/FailureOverlay";
 import { HyperspaceTransition } from "@/components/effects/HyperspaceTransition";
+import { JobFocusMode } from "@/components/focus/JobFocusMode";
 
 export default function App() {
   const setJobs = useUI((s) => s.setJobs);
@@ -83,6 +84,40 @@ export default function App() {
       .catch(() => {});
   }, [googleToken, setUnreadCount]);
 
+  // Global "F" hotkey — enter Focus mode for the currently selected job.
+  // Bound at app level so the user can hit F from any view (universe,
+  // galaxy, map). We ignore key events that originate inside an editable
+  // field so the user can type the letter "f" in notes/picklists.
+  useEffect(() => {
+    function onKey(e: KeyboardEvent) {
+      if (e.key !== "f" && e.key !== "F") return;
+      if (e.metaKey || e.ctrlKey || e.altKey) return;
+      const ae = document.activeElement;
+      if (
+        ae instanceof HTMLInputElement ||
+        ae instanceof HTMLTextAreaElement ||
+        ae instanceof HTMLSelectElement ||
+        (ae instanceof HTMLElement && ae.isContentEditable)
+      ) {
+        return;
+      }
+      const state = useUI.getState();
+      // Toggle: if already focused, exit. Otherwise enter Focus on the
+      // currently selected job (if any).
+      if (state.focusedJobId) {
+        e.preventDefault();
+        state.exitFocus();
+        return;
+      }
+      if (state.selectedJobId) {
+        e.preventDefault();
+        state.enterFocus(state.selectedJobId);
+      }
+    }
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  }, []);
+
   return (
     <div className="relative w-screen h-screen overflow-hidden">
       {/* 3D universe — primary navigation surface */}
@@ -106,6 +141,10 @@ export default function App() {
 
       {/* Hyperspace warp overlay between universe and map */}
       <HyperspaceTransition />
+
+      {/* Job Focus Mode — fullscreen overlay locked to a single job.
+          Mounted last so it sits at the top of the z-stack. */}
+      <JobFocusMode />
 
       {/* Editorial pillar watermark — bright neon cyan crisp glow */}
       <div className="pointer-events-none fixed top-5 left-6 z-20 select-none">

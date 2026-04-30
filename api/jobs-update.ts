@@ -1,45 +1,116 @@
 import type { VercelRequest, VercelResponse } from "@vercel/node";
 
 /**
- * PUT /api/jobs-update
+ * PUT/POST /api/jobs-update
  *
- * Updates editable cells on a Smartsheet row.
+ * Updates editable cells on a Smartsheet row. Generalized so the focus-mode
+ * job card can patch any editable field (or several) in a single round-trip.
  *
- * Currently supports:
- *   - notes            -> "NSC Project Notes" column
- *   - secondaryStatus  -> "Secondary Job Status" column (PICKLIST)
+ * Request body:
+ *   { rowId: string, fields: Record<EditableFieldKey, string | null> }
  *
- * Body:  { rowId: string, notes?: string, secondaryStatus?: string }
- * Auth:  server-side SMARTSHEET_TOKEN (never exposed to browser)
+ *   - Each value is the desired cell text. `null` clears the cell.
+ *   - Date fields must be sent as `YYYY-MM-DD` (Smartsheet's wire format
+ *     for DATE columns). The client converts MM/DD/YY → YYYY-MM-DD.
  *
- * Either notes or secondaryStatus (or both) must be provided. Each updates
- * its own cell in the same row in a single PUT — Smartsheet supports many
- * cells per row update.
+ * Auth: server-side SMARTSHEET_TOKEN (never exposed to browser).
  *
- * Returns: { ok: true } on success, or { ok: false, message } on failure.
+ * Returns: { ok: true, updated: string[] } on success
+ *          { ok: false, message } on failure
  *
- * NOTE: We resolve the column ID by title at request time. Smartsheet column
- * IDs are stable per-sheet but we don't hard-code them here so a sheet rename
- * or column reorder doesn't silently break writes.
+ * Notes on column resolution:
+ *   We resolve column IDs by title at request time. Smartsheet column IDs
+ *   are stable per-sheet but we don't hard-code them here so a sheet
+ *   rename or column reorder doesn't silently break writes.
  */
 
 const SHEET_ID = "1833739362822020";
+
+/**
+ * Whitelist of fields the client is allowed to patch, mapped to the
+ * Smartsheet column title and a "kind" hint that controls how we send
+ * the value to Smartsheet. Anything not in this list is rejected.
+ *
+ * `kind`:
+ *   - "text"     -> string passthrough
+ *   - "picklist" -> strict:true on the cell so Smartsheet rejects values
+ *                   that aren't in the column's defined options
+ *   - "date"     -> objectValue: { objectType: "DATE", value: YYYY-MM-DD }
+ *   - "currency" -> string passthrough; Smartsheet stores as text
+ */
+const EDITABLE_FIELDS: Record<
+  string,
+  { title: string; kind: "text" | "picklist" | "date" | "currency" }
+> = {
+  notes:           { title: "NSC Project Notes",      kind: "text" },
+  splicingNotes:   { title: "Splicing Notes",         kind: "text" },
+  secondaryStatus: { title: "Secondary Job Status",   kind: "picklist" },
+  jobStatus:       { title: "Job Status",             kind: "text" },
+  address:         { title: "Address",                kind: "text" },
+  city:            { title: "City",                   kind: "text" },
+  zip:             { title: "Zip Code",               kind: "text" },
+  scheduleDate:    { title: "Schedule Date",          kind: "date" },
+  endDate:         { title: "End Date",               kind: "date" },
+  dueDate:         { title: "Due Date",               kind: "date" },
+  crew:            { title: "Construction Crew/Forman", kind: "text" },
+  permitNumber:    { title: "Permit #",               kind: "text" },
+  workType:        { title: "Work Type",              kind: "text" },
+  base:            { title: "Construction Base",      kind: "text" },
+  bidValue:        { title: "BidMaster Value",        kind: "currency" },
+};
 
 interface SmartsheetColumn {
   id: number;
   title: string;
 }
 
-async function resolveColumnId(token: string, title: string): Promise<number | null> {
-  // /columns lists all columns with id + title in one shot — much cheaper
-  // than pulling the whole sheet just to grab two columns.
-  const r = await fetch(`https://api.smartsheet.com/2.0/sheets/${SHEET_ID}/columns?pageSize=200`, {
-    headers: { Authorization: `Bearer ${token}` },
-  });
-  if (!r.ok) return null;
+let columnCache: { byTitle: Map<string, number>; ts: number } | null = null;
+const COLUMN_CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes
+
+async function getColumnsByTitle(token: string): Promise<Map<string, number>> {
+  if (columnCache && Date.now() - columnCache.ts < COLUMN_CACHE_TTL_MS) {
+    return columnCache.byTitle;
+  }
+  const r = await fetch(
+    `https://api.smartsheet.com/2.0/sheets/${SHEET_ID}/columns?pageSize=200`,
+    { headers: { Authorization: `Bearer ${token}` } },
+  );
+  if (!r.ok) throw new Error(`Smartsheet columns fetch failed: ${r.status}`);
   const data = (await r.json()) as { data: SmartsheetColumn[] };
-  const match = data.data.find((c) => c.title === title);
-  return match ? match.id : null;
+  const byTitle = new Map<string, number>();
+  for (const c of data.data) byTitle.set(c.title, c.id);
+  columnCache = { byTitle, ts: Date.now() };
+  return byTitle;
+}
+
+interface CellWrite {
+  columnId: number;
+  value?: string | number | null;
+  strict?: boolean;
+  objectValue?: { objectType: "DATE"; value: string };
+}
+
+/** Backwards-compat: support legacy { notes, secondaryStatus } shape too. */
+function normalizeBody(
+  raw: Record<string, unknown>,
+): { rowId?: string; fields: Record<string, string | null> } {
+  const rowId = typeof raw.rowId === "string" ? raw.rowId : undefined;
+  // New shape: { rowId, fields: {...} }
+  if (raw.fields && typeof raw.fields === "object") {
+    const fields = raw.fields as Record<string, unknown>;
+    const out: Record<string, string | null> = {};
+    for (const [k, v] of Object.entries(fields)) {
+      if (v === null) out[k] = null;
+      else if (typeof v === "string") out[k] = v;
+    }
+    return { rowId, fields: out };
+  }
+  // Legacy shape: top-level notes / secondaryStatus
+  const out: Record<string, string | null> = {};
+  if (typeof raw.notes === "string") out.notes = raw.notes;
+  if (typeof raw.secondaryStatus === "string")
+    out.secondaryStatus = raw.secondaryStatus;
+  return { rowId, fields: out };
 }
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
@@ -49,65 +120,84 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   }
   const token = process.env.SMARTSHEET_TOKEN;
   if (!token) {
-    res.status(500).json({ ok: false, message: "Smartsheet token not configured on server." });
+    res
+      .status(500)
+      .json({ ok: false, message: "Smartsheet token not configured on server." });
     return;
   }
 
-  const { rowId, notes, secondaryStatus } = (req.body ?? {}) as {
-    rowId?: string;
-    notes?: string;
-    secondaryStatus?: string;
-  };
+  const body = (req.body ?? {}) as Record<string, unknown>;
+  const { rowId, fields } = normalizeBody(body);
   if (!rowId) {
     res.status(400).json({ ok: false, message: "rowId is required" });
     return;
   }
-  const hasNotes = typeof notes === "string";
-  const hasStatus = typeof secondaryStatus === "string";
-  if (!hasNotes && !hasStatus) {
-    res
-      .status(400)
-      .json({ ok: false, message: "Provide notes and/or secondaryStatus" });
+  const fieldKeys = Object.keys(fields);
+  if (fieldKeys.length === 0) {
+    res.status(400).json({ ok: false, message: "No fields to update" });
     return;
   }
 
+  // Validate all keys against the whitelist before doing any work.
+  for (const k of fieldKeys) {
+    if (!EDITABLE_FIELDS[k]) {
+      res.status(400).json({ ok: false, message: `Field not editable: ${k}` });
+      return;
+    }
+  }
+
   try {
-    // Resolve the column IDs we need in parallel — only the ones we'll write.
-    const [notesColId, statusColId] = await Promise.all([
-      hasNotes ? resolveColumnId(token, "NSC Project Notes") : Promise.resolve(null),
-      hasStatus ? resolveColumnId(token, "Secondary Job Status") : Promise.resolve(null),
-    ]);
+    const columns = await getColumnsByTitle(token);
+    const cells: CellWrite[] = [];
+    const updated: string[] = [];
 
-    if (hasNotes && !notesColId) {
-      res.status(502).json({
-        ok: false,
-        message: "Could not resolve 'NSC Project Notes' column on the sheet.",
-      });
-      return;
-    }
-    if (hasStatus && !statusColId) {
-      res.status(502).json({
-        ok: false,
-        message: "Could not resolve 'Secondary Job Status' column on the sheet.",
-      });
-      return;
+    for (const [key, value] of Object.entries(fields)) {
+      const meta = EDITABLE_FIELDS[key];
+      const colId = columns.get(meta.title);
+      if (!colId) {
+        res.status(502).json({
+          ok: false,
+          message: `Could not resolve "${meta.title}" column on the sheet.`,
+        });
+        return;
+      }
+      // Clearing a cell: send empty string for text/picklist/currency,
+      // or omit objectValue for dates (Smartsheet treats empty value as clear).
+      if (value === null || value === "") {
+        cells.push({ columnId: colId, value: "" });
+        updated.push(key);
+        continue;
+      }
+      switch (meta.kind) {
+        case "picklist":
+          // strict:true so Smartsheet rejects non-picklist values rather
+          // than silently writing free text into a constrained column.
+          cells.push({ columnId: colId, value, strict: true });
+          break;
+        case "date":
+          // Validate YYYY-MM-DD shape before sending; Smartsheet will reject
+          // anything else with a generic 400.
+          if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) {
+            res.status(400).json({
+              ok: false,
+              message: `Invalid date for ${key} — expected YYYY-MM-DD, got "${value}"`,
+            });
+            return;
+          }
+          cells.push({
+            columnId: colId,
+            objectValue: { objectType: "DATE", value },
+          });
+          break;
+        case "currency":
+        case "text":
+        default:
+          cells.push({ columnId: colId, value });
+          break;
+      }
+      updated.push(key);
     }
 
-    const cells: Array<{ columnId: number; value: string; strict: boolean }> = [];
-    if (hasNotes && notesColId) {
-      cells.push({ columnId: notesColId, value: notes as string, strict: false });
-    }
-    if (hasStatus && statusColId) {
-      // strict:true on the picklist — we want Smartsheet to reject unknown
-      // values rather than silently writing free text into a constrained col.
-      cells.push({
-        columnId: statusColId,
-        value: secondaryStatus as string,
-        strict: true,
-      });
-    }
-
-    // Smartsheet update-rows: PUT /sheets/{id}/rows with array of row updates.
     const updateRes = await fetch(
       `https://api.smartsheet.com/2.0/sheets/${SHEET_ID}/rows`,
       {
@@ -119,19 +209,17 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         body: JSON.stringify([{ id: Number(rowId), cells }]),
       },
     );
-
     if (!updateRes.ok) {
       const errBody = await updateRes.text();
       res.status(502).json({
         ok: false,
         message: `Smartsheet update failed (${updateRes.status})`,
-        detail: errBody,
+        detail: errBody.slice(0, 500),
       });
       return;
     }
-
     res.setHeader("Cache-Control", "no-store");
-    res.status(200).json({ ok: true });
+    res.status(200).json({ ok: true, updated });
   } catch (err) {
     const message = err instanceof Error ? err.message : "Unknown error";
     res.status(500).json({ ok: false, message });

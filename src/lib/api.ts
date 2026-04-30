@@ -106,11 +106,44 @@ export async function updateJobSecondaryStatus(
   rowId: string,
   secondaryStatus: string,
 ): Promise<{ ok: true } | { ok: false; message: string }> {
+  return updateJobFields(rowId, { secondaryStatus });
+}
+
+/**
+ * The single source of truth for any editable Smartsheet field. The server
+ * validates that each key is in its EDITABLE_FIELDS whitelist and writes
+ * everything in one PUT. Pass `null` to clear a cell.
+ *
+ * Date fields must be sent as `YYYY-MM-DD` (Smartsheet's wire format for
+ * DATE columns). Use `mmddyyToISO` to convert from the MM/DD/YY display
+ * format used in the UI.
+ */
+export type EditableJobField =
+  | "notes"
+  | "splicingNotes"
+  | "secondaryStatus"
+  | "jobStatus"
+  | "address"
+  | "city"
+  | "zip"
+  | "scheduleDate"
+  | "endDate"
+  | "dueDate"
+  | "crew"
+  | "permitNumber"
+  | "workType"
+  | "base"
+  | "bidValue";
+
+export async function updateJobFields(
+  rowId: string,
+  fields: Partial<Record<EditableJobField, string | null>>,
+): Promise<{ ok: true } | { ok: false; message: string }> {
   try {
     const r = await fetch("/api/jobs-update", {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ rowId, secondaryStatus }),
+      body: JSON.stringify({ rowId, fields }),
     });
     const data = await r.json().catch(() => ({}));
     if (!r.ok || !data?.ok) {
@@ -126,6 +159,55 @@ export async function updateJobSecondaryStatus(
       message: err instanceof Error ? err.message : "Network error.",
     };
   }
+}
+
+/**
+ * Convert a MM/DD/YY (or MM/DD/YYYY) display value to YYYY-MM-DD for the
+ * Smartsheet wire format. Returns null if the input doesn't parse cleanly
+ * — callers should treat null as "don't send" and surface a validation
+ * error to the user.
+ *
+ * 2-digit years are interpreted as 2000-2099 since this app didn't exist
+ * in the 1900s and there's no construction job from 2099 yet.
+ */
+export function mmddyyToISO(input: string): string | null {
+  const trimmed = input.trim();
+  if (!trimmed) return null;
+  const m = trimmed.match(/^(\d{1,2})\/(\d{1,2})\/(\d{2}|\d{4})$/);
+  if (!m) return null;
+  let [, mm, dd, yy] = m;
+  const month = Number(mm);
+  const day = Number(dd);
+  let year = Number(yy);
+  if (yy.length === 2) year = 2000 + year;
+  if (month < 1 || month > 12 || day < 1 || day > 31) return null;
+  return `${year.toString().padStart(4, "0")}-${month
+    .toString()
+    .padStart(2, "0")}-${day.toString().padStart(2, "0")}`;
+}
+
+/**
+ * Convert ISO YYYY-MM-DD (or any Date-parseable string) back to MM/DD/YY
+ * for display. Returns the input unchanged if it doesn't parse.
+ */
+export function isoToMMDDYY(input: string | undefined): string {
+  if (!input) return "";
+  // Smartsheet returns dates as either "2025-04-15" (object value) or already
+  // formatted display strings. If it parses as a date, format it; otherwise
+  // pass through unchanged so we never lose user-visible data.
+  const m = input.trim().match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if (m) {
+    const [, yyyy, mm, dd] = m;
+    return `${mm}/${dd}/${yyyy.slice(2)}`;
+  }
+  // Display strings come back as MM/DD/YY already in many cases. If it's
+  // MM/DD/YYYY, shorten it; otherwise leave alone.
+  const m2 = input.trim().match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+  if (m2) {
+    const [, mm, dd, yyyy] = m2;
+    return `${mm.padStart(2, "0")}/${dd.padStart(2, "0")}/${yyyy.slice(2)}`;
+  }
+  return input;
 }
 
 /**

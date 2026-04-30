@@ -1,6 +1,7 @@
 import { create } from "zustand";
 import { sfx } from "@/lib/audio";
 import { mapStatusToGalaxy } from "@/lib/statusMap";
+import { updateJobFields, type EditableJobField } from "@/lib/api";
 import type {
   Galaxy,
   HudMode,
@@ -14,6 +15,29 @@ import type {
   Satellite,
   ViewMode,
 } from "@/types";
+
+/**
+ *  The subset of `Job` fields the operator can edit through the UI.
+ *  Mirrors `EditableJobField` keys in src/lib/api.ts (kept tight on purpose
+ *  — receivedDate is read-only because the user said so).
+ */
+export type JobFieldPatch = Partial<Pick<Job,
+  | "notes"
+  | "splicingNotes"
+  | "rawSecondaryStatus"
+  | "jobStatus"
+  | "address"
+  | "city"
+  | "zip"
+  | "scheduleDate"
+  | "endDate"
+  | "dueDate"
+  | "crew"
+  | "permitNumber"
+  | "workType"
+  | "base"
+  | "bidValue"
+>>;
 
 /**
  * Canonical UI store. All state lives here per bible's State Model doctrine.
@@ -66,6 +90,15 @@ export interface UIState {
 
   // Map open state (tactical map is a surface, not the home)
   isMapOpen: boolean;
+
+  /**
+   *  Job Focus Mode — fullscreen 50/50 overlay locked to a single job.
+   *  When set, the universe and tactical map step aside and the operator
+   *  works on this one work order with every Smartsheet field editable
+   *  on the left and an isolated map (with optional Street View) on the
+   *  right.
+   */
+  focusedJobId: string | null;
 
   // Map-only filters — toggled via the HUD galaxy widgets while the map is
   // open. Galaxies in `hiddenGalaxies` are excluded from the map only
@@ -126,6 +159,22 @@ export interface UIState {
   addSatellite: (jobId: string, sat: Satellite) => void;
   /** Remove a satellite by id (after Smartsheet delete). */
   removeSatellite: (jobId: string, satelliteId: string) => void;
+
+  /** Enter Job Focus Mode for the given job (or exit if null). */
+  enterFocus: (jobId: string) => void;
+  exitFocus: () => void;
+  /**
+   *  Optimistically patch one or more fields on a job and persist to
+   *  Smartsheet. Returns ok/false; on failure the local state is rolled
+   *  back so the UI never lies about what's saved.
+   *
+   *  Date fields should be passed in YYYY-MM-DD wire format (helpers in
+   *  src/lib/api.ts convert from MM/DD/YY display).
+   */
+  setJobFields: (
+    jobId: string,
+    patch: JobFieldPatch,
+  ) => Promise<{ ok: true } | { ok: false; message: string }>;
 }
 
 export const useUI = create<UIState>((set, get) => ({
@@ -164,6 +213,8 @@ export const useUI = create<UIState>((set, get) => ({
   // stays consistent (one source of truth for whether a galaxy renders).
   hiddenGalaxies: ["Complete"],
   showHistoryOnMap: false,
+
+  focusedJobId: null,
 
   setJobs: (jobs) => set({ jobs }),
   setLoading: (loading) => set({ loading }),
@@ -395,6 +446,84 @@ export const useUI = create<UIState>((set, get) => ({
           : j,
       ),
     })),
+
+  enterFocus: (jobId) => {
+    const job = get().jobs.find((j) => j.id === jobId);
+    if (!job) return;
+    sfx.select();
+    // Make sure the panel knows about this job too — Focus is a superset
+    // of "selected" so the rest of the app (galaxy / planet view)
+    // stays in sync if the user later exits focus.
+    set({
+      focusedJobId: jobId,
+      selectedJobId: jobId,
+      selectedJobNumber: job.workOrder,
+      viewMode: "planet",
+      focusedGalaxy: job.status,
+      activeStatus: job.status,
+      isChatOpen: false,
+    });
+  },
+
+  exitFocus: () => {
+    sfx.select();
+    set({ focusedJobId: null });
+  },
+
+  setJobFields: async (jobId, patch) => {
+    const before = get().jobs.find((j) => j.id === jobId);
+    if (!before) return { ok: false, message: "Job not found in local state." };
+
+    // Build the wire payload for /api/jobs-update. Map Job-shaped keys to
+    // EditableJobField keys (the only difference is rawSecondaryStatus →
+    // secondaryStatus).
+    const wire: Partial<Record<EditableJobField, string | null>> = {};
+    if (patch.notes !== undefined) wire.notes = patch.notes ?? null;
+    if (patch.splicingNotes !== undefined) wire.splicingNotes = patch.splicingNotes ?? null;
+    if (patch.rawSecondaryStatus !== undefined) wire.secondaryStatus = patch.rawSecondaryStatus ?? null;
+    if (patch.jobStatus !== undefined) wire.jobStatus = patch.jobStatus ?? null;
+    if (patch.address !== undefined) wire.address = patch.address ?? null;
+    if (patch.city !== undefined) wire.city = patch.city ?? null;
+    if (patch.zip !== undefined) wire.zip = patch.zip ?? null;
+    if (patch.scheduleDate !== undefined) wire.scheduleDate = patch.scheduleDate ?? null;
+    if (patch.endDate !== undefined) wire.endDate = patch.endDate ?? null;
+    if (patch.dueDate !== undefined) wire.dueDate = patch.dueDate ?? null;
+    if (patch.crew !== undefined) wire.crew = patch.crew ?? null;
+    if (patch.permitNumber !== undefined) wire.permitNumber = patch.permitNumber ?? null;
+    if (patch.workType !== undefined) wire.workType = patch.workType ?? null;
+    if (patch.base !== undefined) wire.base = patch.base ?? null;
+    if (patch.bidValue !== undefined) wire.bidValue = patch.bidValue ?? null;
+
+    if (Object.keys(wire).length === 0) {
+      return { ok: true };
+    }
+
+    // Optimistic local update — and recompute galaxy if secondary status
+    // changed (mirrors the legacy setJobSecondaryStatus behavior).
+    set((s) => ({
+      jobs: s.jobs.map((j) => {
+        if (j.id !== jobId) return j;
+        const next: Job = { ...j, ...patch };
+        if (patch.rawSecondaryStatus !== undefined) {
+          const nextGalaxy = mapStatusToGalaxy(patch.rawSecondaryStatus ?? "");
+          if (nextGalaxy) next.status = nextGalaxy;
+        }
+        return next;
+      }),
+    }));
+
+    const result = await updateJobFields(before.rowId, wire);
+    if (!result.ok) {
+      // Roll back to the pre-edit copy so the UI never lies.
+      set((s) => ({
+        jobs: s.jobs.map((j) => (j.id === jobId ? before : j)),
+      }));
+      sfx.error();
+      return result;
+    }
+    sfx.confirm();
+    return { ok: true };
+  },
 }));
 
 if (import.meta.env.DEV) {

@@ -95,7 +95,24 @@ export function JobPanel() {
 
         {/* Header */}
         <header className="relative px-6 pt-5 pb-4">
-          <div className="flex items-center justify-end mb-3">
+          <div className="flex items-center justify-end gap-1.5 mb-3">
+            <button
+              type="button"
+              onMouseEnter={() => sfx.hover()}
+              onClick={() => {
+                useUI.getState().enterFocus(job.id);
+              }}
+              className="font-mono uppercase tracking-[0.22em] text-[9px] font-semibold px-2.5 py-1 rounded-sm border transition-colors"
+              style={{
+                color,
+                borderColor: `${color}88`,
+                background: `${color}14`,
+                textShadow: `0 0 8px ${color}66`,
+              }}
+              title="Focus mode — fullscreen edit + map (F)"
+            >
+              FOCUS · F
+            </button>
             <button
               type="button"
               onMouseEnter={() => sfx.hover()}
