@@ -1,10 +1,13 @@
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { useUI } from "@/store/uiStore";
 import { GALAXY_COLORS } from "@/lib/statusMap";
-import { SECONDARY_STATUS_OPTIONS } from "@/lib/api";
+import { SECONDARY_STATUS_OPTIONS, listJobAttachments } from "@/lib/api";
 import { sfx } from "@/lib/audio";
 import { EditableField } from "./EditableField";
 import { JobFocusMap } from "./JobFocusMap";
+import { JobFocusAttachmentViewer } from "./JobFocusAttachmentViewer";
+import { JobFocusAttachmentList } from "./JobFocusAttachmentList";
+import type { Satellite } from "@/types";
 
 /**
  * JobFocusMode — fullscreen, top-of-stack overlay locked to a single job.
@@ -24,32 +27,55 @@ import { JobFocusMap } from "./JobFocusMap";
 export function JobFocusMode() {
   const focusedJobId = useUI((s) => s.focusedJobId);
   const exitFocus = useUI((s) => s.exitFocus);
+  const attachSatellites = useUI((s) => s.attachSatellites);
   const job = useUI((s) =>
     focusedJobId ? s.jobs.find((j) => j.id === focusedJobId) : undefined,
   );
 
-  // ESC closes focus mode. We bind globally so the user can hit ESC even
-  // when no field has focus.
+  // The attachment currently "taking over" the right pane. Null = show the map.
+  const [openSat, setOpenSat] = useState<Satellite | null>(null);
+
+  // When the focused job changes (or focus is closed), drop any open
+  // attachment so we always re-enter through the map.
+  useEffect(() => {
+    setOpenSat(null);
+  }, [focusedJobId]);
+
+  // Lazy-load satellites if focus is opened from a context where they
+  // weren't fetched yet (e.g. F hotkey on a planet from the universe view
+  // without first opening the JobPanel).
+  useEffect(() => {
+    if (!job) return;
+    if (job.satellitesLoaded) return;
+    listJobAttachments(job.rowId).then((result) => {
+      if (result.ok) attachSatellites(job.id, result.satellites);
+      else attachSatellites(job.id, []);
+    });
+  }, [job, attachSatellites]);
+
+  // ESC: if an attachment is open, close it first (return to map). Otherwise
+  // exit focus mode entirely. We ignore ESC when the user is editing a
+  // field — EditableField handles that locally to revert the edit.
   useEffect(() => {
     if (!focusedJobId) return;
     function onKey(e: KeyboardEvent) {
-      if (e.key === "Escape") {
-        // Don't fight an active dropdown / textarea — if the user is editing
-        // a field, ESC reverts that edit (handled inside EditableField) and
-        // we let it bubble to us only when the active element is the body.
-        const ae = document.activeElement;
-        const isEditingField =
-          ae instanceof HTMLInputElement ||
-          ae instanceof HTMLTextAreaElement ||
-          ae instanceof HTMLSelectElement;
-        if (isEditingField) return;
-        e.preventDefault();
-        exitFocus();
+      if (e.key !== "Escape") return;
+      const ae = document.activeElement;
+      const isEditingField =
+        ae instanceof HTMLInputElement ||
+        ae instanceof HTMLTextAreaElement ||
+        ae instanceof HTMLSelectElement;
+      if (isEditingField) return;
+      e.preventDefault();
+      if (openSat) {
+        setOpenSat(null);
+        return;
       }
+      exitFocus();
     }
     document.addEventListener("keydown", onKey);
     return () => document.removeEventListener("keydown", onKey);
-  }, [focusedJobId, exitFocus]);
+  }, [focusedJobId, exitFocus, openSat]);
 
   if (!focusedJobId || !job) return null;
 
@@ -162,7 +188,7 @@ export function JobFocusMode() {
           {/* Body — the editable grid */}
           <div className="flex-1 overflow-y-auto px-8 py-6 space-y-6">
             {/* Status block */}
-            <Section title="status">
+            <Section title="status" accent={accent}>
               <div className="grid grid-cols-2 gap-x-5 gap-y-4">
                 <EditableField
                   jobId={job.id}
@@ -184,7 +210,7 @@ export function JobFocusMode() {
             </Section>
 
             {/* Address block */}
-            <Section title="location">
+            <Section title="location" accent={accent}>
               <div className="grid grid-cols-2 gap-x-5 gap-y-4">
                 <EditableField
                   jobId={job.id}
@@ -212,7 +238,7 @@ export function JobFocusMode() {
             </Section>
 
             {/* Schedule block */}
-            <Section title="schedule">
+            <Section title="schedule" accent={accent}>
               <div className="grid grid-cols-3 gap-x-4 gap-y-4">
                 <EditableField
                   jobId={job.id}
@@ -242,7 +268,7 @@ export function JobFocusMode() {
             </Section>
 
             {/* Crew + permit + work type */}
-            <Section title="operations">
+            <Section title="operations" accent={accent}>
               <div className="grid grid-cols-2 gap-x-5 gap-y-4">
                 <EditableField
                   jobId={job.id}
@@ -276,7 +302,7 @@ export function JobFocusMode() {
             </Section>
 
             {/* Money */}
-            <Section title="financial">
+            <Section title="financial" accent={accent}>
               <div className="grid grid-cols-2 gap-x-5 gap-y-4">
                 <EditableField
                   jobId={job.id}
@@ -290,7 +316,7 @@ export function JobFocusMode() {
             </Section>
 
             {/* Notes */}
-            <Section title="notes">
+            <Section title="notes" accent={accent}>
               <div className="grid grid-cols-2 gap-x-5 gap-y-4">
                 <EditableField
                   jobId={job.id}
@@ -314,24 +340,74 @@ export function JobFocusMode() {
                 />
               </div>
             </Section>
+
+            {/* Attachments — click to take over the right pane */}
+            <Section
+              title={`attachments · ${job.satellites.length}`}
+              accent={accent}
+            >
+              <JobFocusAttachmentList
+                job={job}
+                accent={accent}
+                openId={openSat?.id ?? null}
+                onOpen={(sat) => {
+                  sfx.select();
+                  setOpenSat(sat);
+                }}
+              />
+            </Section>
           </div>
         </div>
 
-        {/* RIGHT: isolated map / street view */}
+        {/* RIGHT: isolated map / street view OR attachment takeover */}
         <div className="flex-1 basis-1/2 h-full relative overflow-hidden bg-black/80">
           <JobFocusMap job={job} />
+          {openSat && (
+            <JobFocusAttachmentViewer
+              satellite={openSat}
+              accent={accent}
+              onClose={() => {
+                sfx.select();
+                setOpenSat(null);
+              }}
+            />
+          )}
         </div>
       </div>
     </div>
   );
 }
 
-function Section({ title, children }: { title: string; children: React.ReactNode }) {
+function Section({
+  title,
+  accent,
+  children,
+}: {
+  title: string;
+  accent: string;
+  children: React.ReactNode;
+}) {
   return (
     <section>
-      <h3 className="font-display uppercase tracking-tactical text-[10px] text-white/35 mb-2.5 pb-1 border-b border-white/5">
-        {title}
-      </h3>
+      <div
+        className="flex items-center gap-2 mb-3 pb-1.5"
+        style={{ borderBottom: `1px solid ${accent}33` }}
+      >
+        <span
+          className="inline-block w-1 h-1 rounded-full"
+          style={{ background: accent, boxShadow: `0 0 6px ${accent}` }}
+        />
+        <h3
+          className="font-display uppercase font-semibold text-[11px]"
+          style={{
+            color: accent,
+            letterSpacing: "0.24em",
+            textShadow: `0 0 10px ${accent}66`,
+          }}
+        >
+          {title}
+        </h3>
+      </div>
       {children}
     </section>
   );
