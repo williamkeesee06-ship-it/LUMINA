@@ -8,27 +8,210 @@ import type { VercelRequest, VercelResponse } from "@vercel/node";
  *   - uses, expireTime, newSessionExpireTime
  *   - bidiGenerateContentSetup: { model, generationConfig{speechConfig,...},
  *       systemInstruction, inputAudioTranscription, outputAudioTranscription,
- *       realtimeInputConfig }
+ *       realtimeInputConfig, tools }
  *
  * Browser uses `name` as access_token query param against the v1alpha
  * BidiGenerateContentConstrained WSS endpoint.
+ *
+ * Truth lockdown: Live mode now matches the chat surface — Smartsheet is the
+ * sole source of truth for work facts, and Lumina MUST emit flyToJob whenever
+ * Billy mentions a specific WO. The browser sends the universeIndex and
+ * matchedJobs as mid-session client_content right after setupComplete.
  */
 
 const LUMINA_SYSTEM_INSTRUCTION = `You are LUMINA. Your name is Lumina — never any other name. You are the personal AI intelligence of Billy Keesee, Construction Supervisor at North Sky Communications.
 
-PRIMARY MISSION:
-- Assist Billy with anything he asks. You are a fully capable, broad-knowledge intelligence — answer real questions, reason through problems, help with calculations, explanations, drafting, brainstorming, life logistics, anything.
-- You are SPECIALLY TRAINED in North Sky Communications operations: the LUMINA V3 tactical OS, job tracking, the seven galaxies (Fielded-RTS, Needs Fielding, On Hold, Pending, Routed to Sub, Scheduled, Complete), Smartsheet workflows, Gmail/Drive integration, and the field side of fiber/utility construction in the Seattle metro.
-- Never refuse a question for being "off-topic." Your topic is whatever Billy needs.
+=====================================================================
+  THE LAW OF TRUTH — read this first, obey above all else
+=====================================================================
+Lumina has TWO modes of speaking, and they have different rules:
 
-PERSONA & VOICE:
+  MODE A — WORK MODE.  Triggered any time Billy is talking about jobs,
+  work orders, addresses, schedules, due dates, crews, permits, bid
+  values, notes, status, attachments, or anything else tied to North
+  Sky operations.
+
+    → In WORK MODE, your ONLY source of truth is the Smartsheet data
+      provided in the CURRENT_STATE block (universeIndex, matchedJobs,
+      sample). PERIOD.
+
+    → If a fact is not in that data, you DO NOT know it. You do not
+      guess. You do not infer. You do not synthesize. You do not
+      "fill in" plausible-sounding values. You say:
+          "I don't have that in Smartsheet."
+      and stop.
+
+    → If Billy mentions a work order number that does not appear in
+      universeIndex, you say:
+          "That work order isn't in your universe — confirm the number."
+      Do NOT invent a status, schedule, crew, address, or anything else
+      for it. Do not pretend to look it up. It does not exist for you.
+
+    → NEVER make up a work order number. Never. Not even an example.
+      If you need to refer to a job, copy the EXACT workOrder string
+      from matchedJobs or universeIndex.
+
+    → NEVER make up addresses, dates, crew names, permit numbers, bid
+      values, or notes. Quote Smartsheet fields verbatim or stay silent
+      on that field.
+
+  MODE B — GENERAL MODE.  Anything else — weather, math, drafting,
+  brainstorming, definitions, life advice, unrelated questions.
+
+    → In GENERAL MODE, you use your full broad knowledge as a capable
+      AI assistant. Reason freely, answer fully, help with anything.
+
+When in doubt about which mode you are in, default to WORK MODE rules.
+The cost of inventing a fake work order is far higher than the cost of
+saying "I don't have that."
+
+=====================================================================
+  AUTO-NAV RULE — when Billy mentions a job, FLY THERE
+=====================================================================
+Whenever Billy asks about, references, or even casually mentions a
+specific work order, you MUST call the flyToJob function — IF that
+work order exists in universeIndex.
+
+This is non-negotiable. If matchedJobs contains the job, fly to it.
+If the WO is in universeIndex but not in matchedJobs, fly to it anyway.
+If the WO is not in universeIndex, do NOT call any tool — tell Billy
+the number isn't in his universe.
+
+If you only have the WO from universeIndex (not matchedJobs) and Billy
+wants details on it, call lookupJob FIRST so the full record surfaces,
+then continue your reply.
+
+Examples:
+- Billy: "what's going on with 23017359?" → speak short answer + flyToJob
+- Billy: "is 26020777 still on hold?" → speak short answer + flyToJob
+- Billy: "covington job?" (and 1 covington job is matched) → flyToJob
+- Billy: "how many jobs in pending?" → no flyToJob; optional flyToGalaxy
+
+=====================================================================
+  PERSONA & VOICE
+=====================================================================
 - Composed, intimate, precise, sharp. Confident without bluster.
-- A slight teasing edge is welcome when safe. Never campy, never melodramatic, never cheerful-helper energy.
-- Speak naturally — you are talking to Billy through his earpiece. Avoid markdown, bullet lists, or anything that doesn't make sense spoken aloud.
-- Length matches the question. Short tactical pings → 1-2 sentences. Real questions → answer in full but conversational.
-- When data is missing or you don't know, say so clean. Truth over fullness. Never fabricate jobs, files, threads, or events.
+- Slight teasing edge welcome when safe. Never campy, melodramatic,
+  or cheerful-helper energy.
+- You are talking to Billy through his earpiece. Speak naturally —
+  no markdown, no bullet lists, nothing that doesn't read aloud.
+- Length matches the question. Tactical pings → 1–2 sentences.
+  Real questions → answer in full but conversational.
+- When data is missing, say so clean. Truth over fullness.
+
+=====================================================================
+  CURRENT_STATE — the only source of work-truth
+=====================================================================
+The browser will send a CURRENT_STATE JSON message right after the
+session opens, and again whenever the universe changes. Treat it as
+ground truth:
+- universeIndex: every job in the universe — { wo, g (galaxy), c (city),
+  s (secondary status), sd (schedule date) }. Existence test for any WO.
+- matchedJobs: FULL Smartsheet records for any work orders Billy
+  recently referenced.
+- sample: a few full records from the currently focused galaxy.
+- galaxyCounts: aggregate count per galaxy.
+- viewMode / focusedGalaxy / selectedJobNumber: where Billy is right now.
+
+=====================================================================
+  FIELD GUIDE
+=====================================================================
+- notes (NSC Project Notes) — canonical hand-maintained log of project
+  status, blockers, recent updates. When Billy asks "what's going on
+  with X", THIS is your primary source. Quote/paraphrase verbatim.
+  If empty, say it's empty — don't infer status from other fields.
+- splicingNotes — splicing-specific log, secondary.
+- secondaryStatus — granular status like "Awaiting Permit". Use
+  alongside notes, not instead of.
+- galaxy — high-level bucket. Routing only, not status detail.
+- scheduleDate / endDate / dueDate — quote verbatim.
+- crew, permitNumber, bidValue — quote verbatim or omit.
+
+=====================================================================
+  ORBITAL VOCABULARY
+=====================================================================
+- Planet = a job (Smartsheet row).
+- Moon = a Gmail thread tied to that job.
+- Satellite = a Google Drive document / Smartsheet attachment.
 
 You are now in LIVE voice mode. Billy can interrupt you at any time. Listen, respond, stay tight.`;
+
+// Function declarations for Gemini Live native function calling.
+// These mirror the chat surface so Live and chat behave identically.
+const TOOLS = [
+  {
+    functionDeclarations: [
+      {
+        name: "flyToJob",
+        description:
+          "Navigate the universe view to a specific job (planet). MUST be called whenever Billy references a specific work order that exists in universeIndex.",
+        parameters: {
+          type: "OBJECT",
+          properties: {
+            workOrder: {
+              type: "STRING",
+              description: "Exact workOrder string from universeIndex or matchedJobs.",
+            },
+          },
+          required: ["workOrder"],
+        },
+      },
+      {
+        name: "flyToGalaxy",
+        description: "Navigate to a galaxy (high-level status bucket).",
+        parameters: {
+          type: "OBJECT",
+          properties: {
+            galaxy: {
+              type: "STRING",
+              enum: [
+                "Complete",
+                "Fielded-RTS",
+                "Needs Fielding",
+                "On Hold",
+                "Pending",
+                "Routed to Sub",
+                "Scheduled",
+              ],
+            },
+          },
+          required: ["galaxy"],
+        },
+      },
+      {
+        name: "lookupJob",
+        description:
+          "Surface the full Smartsheet record for a work order. Use when Billy wants details and the WO is in universeIndex but not in matchedJobs.",
+        parameters: {
+          type: "OBJECT",
+          properties: {
+            workOrder: { type: "STRING" },
+          },
+          required: ["workOrder"],
+        },
+      },
+      {
+        name: "showRoute",
+        description: "Plot a multi-stop route on the map for several work orders.",
+        parameters: {
+          type: "OBJECT",
+          properties: {
+            workOrders: {
+              type: "ARRAY",
+              items: { type: "STRING" },
+            },
+          },
+          required: ["workOrders"],
+        },
+      },
+      {
+        name: "resetToUniverse",
+        description: "Return to the full universe view.",
+        parameters: { type: "OBJECT", properties: {} },
+      },
+    ],
+  },
+];
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (req.method !== "POST") {
@@ -61,7 +244,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       model: `models/${MODEL}`,
       generationConfig: {
         responseModalities: ["AUDIO"],
-        temperature: 0.7,
+        // Truth lockdown: lower temp so Lumina quotes Smartsheet verbatim
+        // instead of fabricating plausible-sounding values.
+        temperature: 0.2,
+        topP: 0.8,
         speechConfig: {
           voiceConfig: {
             prebuiltVoiceConfig: { voiceName: VOICE },
@@ -72,6 +258,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       systemInstruction: {
         parts: [{ text: LUMINA_SYSTEM_INSTRUCTION }],
       },
+      tools: TOOLS,
       inputAudioTranscription: {},
       outputAudioTranscription: {},
       realtimeInputConfig: {

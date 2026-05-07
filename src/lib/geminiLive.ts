@@ -22,12 +22,32 @@ export type LuminaLiveStatus =
   | "error"
   | "closed";
 
+export interface LuminaLiveToolCall {
+  id: string;
+  name: string;
+  args: Record<string, unknown>;
+}
+
+export interface LuminaLiveToolResult {
+  ok: boolean;
+  message?: string;
+  data?: Record<string, unknown>;
+}
+
 export interface LuminaLiveCallbacks {
   onStatus?: (status: LuminaLiveStatus) => void;
   onUserTranscript?: (text: string, isFinal: boolean) => void;
   onModelTranscript?: (text: string, isFinal: boolean) => void;
   onError?: (message: string) => void;
   onClose?: () => void;
+  /** Called when Gemini Live invokes a tool. Return a result object that
+   *  will be sent back as a toolResponse. If undefined, a default "not
+   *  available" response is returned. */
+  onToolCall?: (call: LuminaLiveToolCall) => Promise<LuminaLiveToolResult> | LuminaLiveToolResult;
+  /** Called once after setupComplete so the panel can return the current
+   *  Smartsheet context. Lumina will receive it as a user-role clientContent
+   *  message before any voice input. */
+  getInitialContext?: () => Record<string, unknown> | null;
 }
 
 interface TokenResponse {
@@ -53,6 +73,7 @@ export class LuminaLiveSession {
   private playbackQueue: AudioBufferSourceNode[] = [];
   private nextPlaybackTime = 0;
   private setupSent = false;
+  private contextSent = false;
   private cb: LuminaLiveCallbacks;
   private inputTranscriptBuffer = "";
   private outputTranscriptBuffer = "";
@@ -261,7 +282,9 @@ export class LuminaLiveSession {
     const data = payload as LiveServerMessage;
 
     if (data.setupComplete) {
-      // Already in listening state — nothing extra to do.
+      // Send Smartsheet context as the first user-role clientContent so
+      // Lumina has the universe truth before Billy says anything.
+      this.sendInitialContext();
       return;
     }
 
@@ -313,14 +336,7 @@ export class LuminaLiveSession {
     }
 
     if (data.toolCall) {
-      // No tools wired through Live for now — acknowledge so the session continues.
-      const responses =
-        data.toolCall.functionCalls?.map((fc) => ({
-          id: fc.id,
-          name: fc.name,
-          response: { result: { ok: false, message: "Tool not available in live mode." } },
-        })) ?? [];
-      this.ws?.send(JSON.stringify({ toolResponse: { functionResponses: responses } }));
+      this.dispatchToolCalls(data.toolCall.functionCalls ?? []);
     }
 
     if (data.goAway) {
@@ -358,6 +374,77 @@ export class LuminaLiveSession {
     node.onended = () => {
       this.playbackQueue = this.playbackQueue.filter((n) => n !== node);
     };
+  }
+
+  private sendInitialContext(): void {
+    if (this.contextSent) return;
+    this.contextSent = true;
+    const ctx = this.cb.getInitialContext?.() ?? null;
+    if (!ctx || !this.ws || this.ws.readyState !== WebSocket.OPEN) return;
+    const text =
+      "CURRENT_STATE — this is your only source of work-truth. Read silently, do NOT speak about it unless asked. Stay quiet until I talk.\n\n" +
+      JSON.stringify(ctx);
+    const msg = {
+      clientContent: {
+        turns: [{ role: "user", parts: [{ text }] }],
+        turnComplete: false,
+      },
+    };
+    try {
+      this.ws.send(JSON.stringify(msg));
+    } catch {
+      /* socket may have closed */
+    }
+  }
+
+  /** Push a fresh Smartsheet context mid-session (e.g. after data refresh). */
+  pushContext(ctx: Record<string, unknown>): void {
+    if (!this.ws || this.ws.readyState !== WebSocket.OPEN) return;
+    const text =
+      "CURRENT_STATE update — replaces any prior universe context. Read silently.\n\n" +
+      JSON.stringify(ctx);
+    const msg = {
+      clientContent: {
+        turns: [{ role: "user", parts: [{ text }] }],
+        turnComplete: false,
+      },
+    };
+    try {
+      this.ws.send(JSON.stringify(msg));
+    } catch {
+      /* noop */
+    }
+  }
+
+  private async dispatchToolCalls(calls: LiveFunctionCall[]): Promise<void> {
+    if (!this.ws) return;
+    const responses = await Promise.all(
+      calls.map(async (fc) => {
+        let result: LuminaLiveToolResult = {
+          ok: false,
+          message: "Tool not available in live mode.",
+        };
+        if (this.cb.onToolCall) {
+          try {
+            result = await this.cb.onToolCall({
+              id: fc.id,
+              name: fc.name,
+              args: fc.args ?? {},
+            });
+          } catch (err) {
+            result = { ok: false, message: (err as Error).message };
+          }
+        }
+        return {
+          id: fc.id,
+          name: fc.name,
+          response: { result },
+        };
+      }),
+    );
+    if (this.ws?.readyState === WebSocket.OPEN) {
+      this.ws.send(JSON.stringify({ toolResponse: { functionResponses: responses } }));
+    }
   }
 
   private cancelPlayback(): void {

@@ -22,7 +22,7 @@ import {
   speak,
   cancelSpeak,
 } from "@/lib/voice";
-import { LuminaLiveSession, type LuminaLiveStatus } from "@/lib/geminiLive";
+import { LuminaLiveSession, type LuminaLiveStatus, type LuminaLiveToolResult } from "@/lib/geminiLive";
 
 interface ToolCall {
   name:
@@ -130,6 +130,91 @@ export function LuminaPanel({
       behavior: "smooth",
     });
   }, [messages, interim]);
+
+  // Build the universe-wide Smartsheet context payload. Used both by chat
+  // (per-message) and by Live (sent once at session start as clientContent).
+  // Centralizing it ensures both surfaces have the SAME truth lockdown data.
+  const buildLuminaContext = (userText?: string) => {
+    let matchedJobs: typeof jobs = [];
+    if (userText) {
+      const woPatterns = [
+        /\bP\.?\d{5,8}\b/gi,
+        /\bWO[\s\-_]*\d{5,10}\b/gi,
+        /\b\d{7,9}\b/g,
+      ];
+      const matchedTokens = new Set<string>();
+      for (const re of woPatterns) {
+        const found = userText.match(re) ?? [];
+        for (const m of found) matchedTokens.add(m.replace(/[\s\-_]/g, "").toUpperCase());
+      }
+      const norm = (s: string) => s.replace(/[\s\-_.]/g, "").toUpperCase();
+      matchedJobs = jobs.filter((j) => {
+        const wo = norm(j.workOrder ?? "");
+        for (const t of matchedTokens) {
+          const tn = norm(t);
+          if (wo === tn) return true;
+          if (tn.startsWith("P") && wo === tn.slice(1)) return true;
+          if (wo.startsWith("P") && wo.slice(1) === tn) return true;
+          if (tn.length >= 5 && wo.endsWith(tn)) return true;
+        }
+        return false;
+      });
+    }
+
+    const universeIndex = jobs.map((j) => ({
+      wo: j.workOrder,
+      g: j.status,
+      c: j.city ?? null,
+      s: j.rawSecondaryStatus ?? null,
+      sd: j.scheduleDate ?? null,
+    }));
+
+    return {
+      operator: "Billy Keesee",
+      role: "Construction Supervisor",
+      company: "North Sky Communications",
+      now: new Date().toISOString(),
+      timezone: "America/Los_Angeles",
+      viewMode,
+      focusedGalaxy,
+      selectedJobNumber,
+      googleConnected: Boolean(googleToken),
+      galaxyCounts: counts,
+      totalJobs: jobs.length,
+      universeIndex,
+      matchedJobs: matchedJobs.map((j) => ({
+        workOrder: j.workOrder,
+        galaxy: j.status,
+        secondaryStatus: j.rawSecondaryStatus,
+        jobStatus: j.jobStatus,
+        address: j.fullAddress,
+        city: j.city,
+        zip: j.zip,
+        workType: j.workType,
+        base: j.base,
+        crew: j.crew,
+        permitNumber: j.permitNumber,
+        scheduleDate: j.scheduleDate,
+        endDate: j.endDate,
+        dueDate: j.dueDate,
+        receivedDate: j.receivedDate,
+        bidValue: j.bidValue,
+        notes: j.notes,
+        splicingNotes: j.splicingNotes,
+      })),
+      sample: focusedGalaxy
+        ? jobs
+            .filter((j) => j.status === focusedGalaxy)
+            .slice(0, 12)
+            .map((j) => ({
+              workOrder: j.workOrder,
+              address: j.fullAddress,
+              status: j.rawSecondaryStatus,
+              scheduleDate: j.scheduleDate,
+            }))
+        : null,
+    };
+  };
 
   const executeTool = async (call: ToolCall) => {
     if (call.name === "resetToUniverse") {
@@ -313,95 +398,8 @@ export function LuminaPanel({
       )
       .map((m) => ({ role: m.role, text: m.text }));
 
-    // ---- Build context with FULL job awareness ----
-    // Detect any work-order references in Billy's message and pull their full
-    // records. Patterns: "P.018509", "WO 23017359", "23017359", "WO-12345".
-    const woPatterns = [
-      /\bP\.?\d{5,8}\b/gi,                    // P.018509 / P018509
-      /\bWO[\s\-_]*\d{5,10}\b/gi,              // WO 23017359 / WO-23017359
-      /\b\d{7,9}\b/g,                          // bare 7–9 digit work order
-    ];
-    const matchedTokens = new Set<string>();
-    for (const re of woPatterns) {
-      const found = text.match(re) ?? [];
-      for (const m of found) matchedTokens.add(m.replace(/[\s\-_]/g, "").toUpperCase());
-    }
-    // Match against the loaded job set. Use loose comparison so "WO 23017359"
-    // matches a stored workOrder of "23017359" or "WO-23017359".
-    const norm = (s: string) => s.replace(/[\s\-_.]/g, "").toUpperCase();
-    const matchedJobs = jobs.filter((j) => {
-      const wo = norm(j.workOrder ?? "");
-      for (const t of matchedTokens) {
-        const tn = norm(t);
-        if (wo === tn) return true;
-        // P.018509 vs stored "018509" — strip the P prefix
-        if (tn.startsWith("P") && wo === tn.slice(1)) return true;
-        if (wo.startsWith("P") && wo.slice(1) === tn) return true;
-        // partial: stored work order ends with the queried digits
-        if (tn.length >= 5 && wo.endsWith(tn)) return true;
-      }
-      return false;
-    });
-
-    // Compact universe index — every job in a tight one-line shape so Lumina
-    // can answer existence / galaxy / city questions without round-trips.
-    const universeIndex = jobs.map((j) => ({
-      wo: j.workOrder,
-      g: j.status,
-      c: j.city ?? null,
-      s: j.rawSecondaryStatus ?? null,
-      sd: j.scheduleDate ?? null,
-    }));
-
-    const context = {
-      operator: "Billy Keesee",
-      role: "Construction Supervisor",
-      company: "North Sky Communications",
-      now: new Date().toISOString(),
-      timezone: "America/Los_Angeles",
-      viewMode,
-      focusedGalaxy,
-      selectedJobNumber,
-      googleConnected: Boolean(googleToken),
-      galaxyCounts: counts,
-      totalJobs: jobs.length,
-      // Full job index of the entire universe (~50 bytes/job). Lumina can use
-      // this to confirm whether any work order exists and which galaxy it's in.
-      universeIndex,
-      // FULL records for any work orders Billy referenced in this message.
-      // This is the ground-truth data she should cite from — never fabricate.
-      matchedJobs: matchedJobs.map((j) => ({
-        workOrder: j.workOrder,
-        galaxy: j.status,
-        secondaryStatus: j.rawSecondaryStatus,
-        jobStatus: j.jobStatus,
-        address: j.fullAddress,
-        city: j.city,
-        zip: j.zip,
-        workType: j.workType,
-        base: j.base,
-        crew: j.crew,
-        permitNumber: j.permitNumber,
-        scheduleDate: j.scheduleDate,
-        endDate: j.endDate,
-        dueDate: j.dueDate,
-        receivedDate: j.receivedDate,
-        bidValue: j.bidValue,
-        notes: j.notes,
-        splicingNotes: j.splicingNotes,
-      })),
-      sample: focusedGalaxy
-        ? jobs
-            .filter((j) => j.status === focusedGalaxy)
-            .slice(0, 12)
-            .map((j) => ({
-              workOrder: j.workOrder,
-              address: j.fullAddress,
-              status: j.rawSecondaryStatus,
-              scheduleDate: j.scheduleDate,
-            }))
-        : null,
-    };
+    // Build context with FULL job awareness — universeIndex + matchedJobs.
+    const context = buildLuminaContext(text);
 
     const mem = loadMemory();
     const result = await sendToLumina(history, context, {
@@ -555,6 +553,10 @@ export function LuminaPanel({
           setMessages((m) => [...m, { role: "user", text: text.trim(), spokenInput: true }]);
           memAddTurn("user", text.trim());
           setLiveCaption("");
+          // When Billy says a WO out loud, push a fresh context with that WO
+          // matched so Lumina has the full Smartsheet record on the next turn.
+          const fresh = buildLuminaContext(text.trim());
+          liveSessionRef.current?.pushContext(fresh);
         }
       },
       onModelTranscript: (text, isFinal) => {
@@ -573,6 +575,106 @@ export function LuminaPanel({
           liveModeRef.current = false;
           setLiveMode(false);
           setLiveStatus("closed");
+        }
+      },
+      // Initial Smartsheet truth payload — sent right after setupComplete so
+      // Lumina has universe context before Billy speaks. Same shape as chat.
+      getInitialContext: () => buildLuminaContext(),
+      // Native Gemini Live function calling — dispatch to the same handlers
+      // that power chat-side tools so the two surfaces behave identically.
+      onToolCall: async (call): Promise<LuminaLiveToolResult> => {
+        try {
+          if (call.name === "flyToJob") {
+            const wo = String(call.args.workOrder ?? "");
+            const norm = (s: string) => s.replace(/[\s\-_.]/g, "").toUpperCase();
+            const target = norm(wo);
+            const j = jobs.find((x) => {
+              const w = norm(x.workOrder ?? "");
+              if (w === target) return true;
+              if (target.startsWith("P") && w === target.slice(1)) return true;
+              if (w.startsWith("P") && w.slice(1) === target) return true;
+              if (target.length >= 5 && w.endsWith(target)) return true;
+              return false;
+            });
+            if (!j) {
+              return { ok: false, message: `Work order ${wo} not in universe.` };
+            }
+            selectJob(j.id);
+            sfx.confirm();
+            return {
+              ok: true,
+              message: `Flew to ${j.workOrder} in ${j.status}.`,
+              data: {
+                workOrder: j.workOrder,
+                galaxy: j.status,
+                secondaryStatus: j.rawSecondaryStatus ?? null,
+                address: j.fullAddress ?? null,
+                scheduleDate: j.scheduleDate ?? null,
+                notes: j.notes ?? null,
+              },
+            };
+          }
+          if (call.name === "flyToGalaxy") {
+            const g = String(call.args.galaxy ?? "") as Galaxy;
+            if ((GALAXIES as readonly string[]).includes(g)) {
+              enterGalaxy(g);
+              sfx.confirm();
+              return { ok: true, message: `Entered ${g} galaxy.` };
+            }
+            return { ok: false, message: `Unknown galaxy: ${g}` };
+          }
+          if (call.name === "lookupJob") {
+            const wo = String(call.args.workOrder ?? "");
+            const norm = (s: string) => s.replace(/[\s\-_.]/g, "").toUpperCase();
+            const target = norm(wo);
+            const j = jobs.find((x) => {
+              const w = norm(x.workOrder ?? "");
+              if (w === target) return true;
+              if (target.startsWith("P") && w === target.slice(1)) return true;
+              if (w.startsWith("P") && w.slice(1) === target) return true;
+              if (target.length >= 5 && w.endsWith(target)) return true;
+              return false;
+            });
+            if (!j) {
+              return { ok: false, message: `Work order ${wo} not in universe.` };
+            }
+            return {
+              ok: true,
+              data: {
+                workOrder: j.workOrder,
+                galaxy: j.status,
+                secondaryStatus: j.rawSecondaryStatus ?? null,
+                jobStatus: j.jobStatus ?? null,
+                address: j.fullAddress ?? null,
+                city: j.city ?? null,
+                workType: j.workType ?? null,
+                crew: j.crew ?? null,
+                permitNumber: j.permitNumber ?? null,
+                scheduleDate: j.scheduleDate ?? null,
+                endDate: j.endDate ?? null,
+                dueDate: j.dueDate ?? null,
+                bidValue: j.bidValue ?? null,
+                notes: j.notes ?? null,
+                splicingNotes: j.splicingNotes ?? null,
+              },
+            };
+          }
+          if (call.name === "showRoute") {
+            const wos = (call.args.workOrders as string[]) ?? [];
+            const ids = jobs.filter((j) => wos.includes(j.workOrder)).map((j) => j.id);
+            setRouteJobIds(ids);
+            setMapOpen(true);
+            sfx.confirm();
+            return { ok: true, message: `Plotted ${ids.length} stops.` };
+          }
+          if (call.name === "resetToUniverse") {
+            resetToUniverse();
+            sfx.confirm();
+            return { ok: true, message: "Returned to universe view." };
+          }
+          return { ok: false, message: `Unknown tool: ${call.name}` };
+        } catch (err) {
+          return { ok: false, message: (err as Error).message };
         }
       },
     });
