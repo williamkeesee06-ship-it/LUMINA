@@ -87,12 +87,14 @@ export function CameraRig() {
       targetPos.current.set(p[0] + 0, p[1] + 4, p[2] + 14);
       targetLook.current.set(p[0], p[1], p[2]);
     } else if (viewMode === "planet" && selectedJobId && focusedGalaxy) {
-      // Hero close-up. PlanetField repositions the selected planet to the
-      // galaxy origin in focus mode, so we frame the camera tight on that
-      // origin point. ~3.5 units back, slightly above, gives a beauty shot
-      // that fills the canvas and lets the ring read in 3D.
+      // Isolated planet shot — keep the planet centered and alone in view,
+      // but framed at standoff distance so it reads as a body in space
+      // rather than a close-up. PlanetField hides other planets in this
+      // mode, so we only need to size the camera back. ~9 units gives
+      // a clean medium shot — planet anchors the frame, ring is legible,
+      // surrounding void breathes.
       const p = GALAXY_POSITIONS[focusedGalaxy];
-      targetPos.current.set(p[0] + 1.6, p[1] + 1.0, p[2] + 3.5);
+      targetPos.current.set(p[0] + 4.0, p[1] + 2.6, p[2] + 9.0);
       targetLook.current.set(p[0], p[1], p[2]);
     }
   }, [viewMode, focusedGalaxy, selectedJobId]);
