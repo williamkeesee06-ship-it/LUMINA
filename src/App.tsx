@@ -10,8 +10,18 @@ import { Boot } from "@/components/effects/Boot";
 import { FailureOverlay } from "@/components/effects/FailureOverlay";
 import { HyperspaceTransition } from "@/components/effects/HyperspaceTransition";
 import { JobFocusMode } from "@/components/focus/JobFocusMode";
+import { hydrateMemory } from "@/lib/luminaMemory";
 
 export default function App() {
+  // Boot-time memory hydration. Local cache primes synchronously inside
+  // luminaMemory; the network call (if /api/memory is configured) merges
+  // remote-side facts in the background. We don't block render on it.
+  useEffect(() => {
+    hydrateMemory().catch(() => {
+      /* offline / no remote — local-only is fine */
+    });
+  }, []);
+
   const setJobs = useUI((s) => s.setJobs);
   const setLoading = useUI((s) => s.setLoading);
   const setError = useUI((s) => s.setError);

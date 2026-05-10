@@ -13,8 +13,13 @@ import {
   loadMemory,
   addTurn as memAddTurn,
   rememberFact,
-  forgetFact,
+  forgetFactById,
+  updateFact,
   clearAllMemory,
+  maybeAutoRemember,
+  updateSettings as updateMemorySettings,
+  subscribeMemory,
+  type MemoryFact,
 } from "@/lib/luminaMemory";
 import {
   isSpeechSupported,
@@ -107,6 +112,9 @@ export function LuminaPanel({
   const [interim, setInterim] = useState("");
   const [showMemory, setShowMemory] = useState(false);
   const [memTick, setMemTick] = useState(0); // re-render facts list
+  const [editingFactId, setEditingFactId] = useState<string | null>(null);
+  const [editingFactText, setEditingFactText] = useState("");
+  const [showSettings, setShowSettings] = useState(false);
   const [liveMode, setLiveMode] = useState(false);
   const liveModeRef = useRef(false);
   const lastSpokenInputRef = useRef(false);
@@ -119,6 +127,31 @@ export function LuminaPanel({
   const liveSessionRef = useRef<LuminaLiveSession | null>(null);
 
   const memory = useMemo(() => loadMemory(), [memTick, isChatOpen]);
+
+  // Record a turn AND let the auto-save heuristics scan it for commitments,
+  // status changes, and explicit "remember that ___" patterns. Centralizing
+  // this here so both chat and Live flows share identical extraction logic.
+  const recordTurn = (role: "user" | "model", text: string): void => {
+    memAddTurn(role, text);
+    maybeAutoRemember(role, text);
+  };
+
+  // Live subscription — the Memory Inspector updates instantly when
+  // auto-save heuristics fire or when Lumina commits a fact via tool call.
+  // We also forward the latest memory snapshot to an active Live session
+  // so voice mode stays in lockstep with chat — closes the loop on the
+  // "Live forgets" complaint mid-conversation, not just at session start.
+  useEffect(() => {
+    return subscribeMemory((rec) => {
+      setMemTick((t) => t + 1);
+      if (liveSessionRef.current?.isActive()) {
+        liveSessionRef.current.pushMemory({
+          facts: rec.facts.map((f) => f.text),
+          summary: rec.summary,
+        });
+      }
+    });
+  }, []);
 
   useEffect(() => {
     if (isChatOpen) inputRef.current?.focus();
@@ -240,7 +273,7 @@ export function LuminaPanel({
       if (!j) {
         const msg = `No work order matching \`${wo}\` exists in the universe. Confirm the number with me.`;
         setMessages((m) => [...m, { role: "model", text: msg }]);
-        memAddTurn("model", msg);
+        recordTurn("model", msg);
         if (lastSpokenInputRef.current || liveModeRef.current) {
           speak(msg, { onEnd: () => maybeRelisten() });
         }
@@ -262,7 +295,7 @@ export function LuminaPanel({
       if (j.splicingNotes) lines.push(`Splicing Notes: ${j.splicingNotes}`);
       const detail = lines.join("\n");
       setMessages((m) => [...m, { role: "model", text: detail }]);
-      memAddTurn("model", detail);
+      recordTurn("model", detail);
       // If voice/live, speak a tighter summary instead of the full block.
       if (lastSpokenInputRef.current || liveModeRef.current) {
         const spoken = `${j.workOrder} is in ${j.status}${
@@ -301,7 +334,7 @@ export function LuminaPanel({
     if (call.name === "rememberFact") {
       const fact = String(call.args.fact ?? "");
       if (fact) {
-        rememberFact(fact);
+        rememberFact(fact, "explicit");
         setMemTick((t) => t + 1);
         sfx.confirm();
       }
@@ -323,7 +356,7 @@ export function LuminaPanel({
       const events = await listCalendarEvents(googleToken, days);
       const formatted = formatEvents(events);
       setMessages((m) => [...m, { role: "model", text: formatted }]);
-      memAddTurn("model", formatted);
+      recordTurn("model", formatted);
       if (lastSpokenInputRef.current || liveModeRef.current) {
         speak(formatted, { onEnd: () => maybeRelisten() });
       }
@@ -371,7 +404,7 @@ export function LuminaPanel({
       }
       const confirmation = `Booked: ${summary} — ${formatTime(startISO)}.`;
       setMessages((m) => [...m, { role: "model", text: confirmation }]);
-      memAddTurn("model", confirmation);
+      recordTurn("model", confirmation);
       if (lastSpokenInputRef.current || liveModeRef.current) {
         speak(confirmation, { onEnd: () => maybeRelisten() });
       }
@@ -388,7 +421,7 @@ export function LuminaPanel({
 
     const userMsg: DisplayMessage = { role: "user", text, spokenInput: spoken };
     setMessages((m) => [...m, userMsg]);
-    memAddTurn("user", text);
+    recordTurn("user", text);
     setBusy(true);
     setOrbMode("thinking");
 
@@ -403,7 +436,7 @@ export function LuminaPanel({
 
     const mem = loadMemory();
     const result = await sendToLumina(history, context, {
-      facts: mem.facts,
+      facts: mem.facts.map((f) => f.text),
       summary: mem.summary,
     });
     if (!result.ok) {
@@ -419,7 +452,7 @@ export function LuminaPanel({
       ...m,
       { role: "model", text: replyText, toolCall: toolCall ?? undefined },
     ]);
-    if (replyText) memAddTurn("model", replyText);
+    if (replyText) recordTurn("model", replyText);
 
     // Speak when input was voice OR live mode is on
     if (replyText && (spoken || liveModeRef.current)) {
@@ -551,7 +584,7 @@ export function LuminaPanel({
         setLiveCaption(text);
         if (isFinal && text.trim()) {
           setMessages((m) => [...m, { role: "user", text: text.trim(), spokenInput: true }]);
-          memAddTurn("user", text.trim());
+          recordTurn("user", text.trim());
           setLiveCaption("");
           // When Billy says a WO out loud, push a fresh context with that WO
           // matched so Lumina has the full Smartsheet record on the next turn.
@@ -562,7 +595,7 @@ export function LuminaPanel({
       onModelTranscript: (text, isFinal) => {
         if (isFinal && text.trim()) {
           setMessages((m) => [...m, { role: "model", text: text.trim() }]);
-          memAddTurn("model", text.trim());
+          recordTurn("model", text.trim());
         }
       },
       onError: (msg) => {
@@ -580,6 +613,16 @@ export function LuminaPanel({
       // Initial Smartsheet truth payload — sent right after setupComplete so
       // Lumina has universe context before Billy speaks. Same shape as chat.
       getInitialContext: () => buildLuminaContext(),
+      // Initial MEMORY payload — facts + summary from prior sessions.
+      // Without this Live mode was amnesiac and fabricated identifiers from
+      // training-data priors. Now Live and chat share identical memory state.
+      getInitialMemory: () => {
+        const mem = loadMemory();
+        return {
+          facts: mem.facts.map((f) => f.text),
+          summary: mem.summary,
+        };
+      },
       // Native Gemini Live function calling — dispatch to the same handlers
       // that power chat-side tools so the two surfaces behave identically.
       onToolCall: async (call): Promise<LuminaLiveToolResult> => {
@@ -671,6 +714,19 @@ export function LuminaPanel({
             resetToUniverse();
             sfx.confirm();
             return { ok: true, message: "Returned to universe view." };
+          }
+          if (call.name === "rememberFact") {
+            const fact = String(call.args.fact ?? "");
+            if (!fact.trim()) {
+              return { ok: false, message: "Fact text is empty." };
+            }
+            const { factId } = rememberFact(fact, "explicit");
+            sfx.confirm();
+            return {
+              ok: true,
+              message: `Memory committed.`,
+              data: { factId: factId ?? null },
+            };
           }
           return { ok: false, message: `Unknown tool: ${call.name}` };
         } catch (err) {
@@ -800,14 +856,17 @@ export function LuminaPanel({
           </div>
         </div>
 
-        {/* Memory drawer */}
+        {/* Memory Inspector — facts list with source / timestamp / edit / delete,
+            plus a Settings sub-panel for retention, auto-save, sync, and the
+            "forget all" emergency button. Persistence happens immediately and
+            propagates to remote sync if configured. */}
         {showMemory && (
           <div
             className="px-4 py-3 text-[11px] font-mono"
             style={{
               background: "#000",
               borderBottom: `1px solid ${NEON_GREEN}22`,
-              maxHeight: 180,
+              maxHeight: 260,
               overflowY: "auto",
             }}
           >
@@ -815,43 +874,138 @@ export function LuminaPanel({
               <span className="uppercase tracking-tactical text-white/50">
                 memory · {memory.facts.length} facts
               </span>
-              {memory.facts.length > 0 && (
+              <div className="flex items-center gap-2">
                 <button
-                  onClick={() => {
-                    clearAllMemory();
-                    setMemTick((t) => t + 1);
-                  }}
-                  className="text-white/40 hover:text-red-300 uppercase"
+                  onClick={() => setShowSettings((v) => !v)}
+                  className={`uppercase ${showSettings ? "text-white" : "text-white/40 hover:text-white/80"}`}
                 >
-                  clear
+                  settings
                 </button>
-              )}
+                {memory.facts.length > 0 && (
+                  <button
+                    onClick={() => {
+                      if (confirm("Forget every memory? This can't be undone.")) {
+                        clearAllMemory();
+                        setMemTick((t) => t + 1);
+                      }
+                    }}
+                    className="text-white/40 hover:text-red-300 uppercase"
+                  >
+                    forget all
+                  </button>
+                )}
+              </div>
             </div>
-            {memory.facts.length === 0 ? (
+
+            {showSettings ? (
+              <MemorySettingsPanel
+                settings={memory.settings}
+                onChange={(patch) => {
+                  updateMemorySettings(patch);
+                  setMemTick((t) => t + 1);
+                }}
+                neon={NEON_GREEN_BRIGHT}
+              />
+            ) : memory.facts.length === 0 ? (
               <div className="text-white/30 italic">
-                No persistent facts yet. Tell Lumina to remember something.
+                No persistent facts yet. Tell Lumina to remember something, or just talk —
+                auto-save will pick up commitments and status changes.
               </div>
             ) : (
-              <ul className="space-y-1">
-                {memory.facts.map((f, i) => (
-                  <li
-                    key={i}
-                    className="flex items-start justify-between gap-2 group"
-                    style={{ color: NEON_GREEN_BRIGHT }}
-                  >
-                    <span className="leading-snug">{f}</span>
-                    <button
-                      onClick={() => {
-                        forgetFact(i);
-                        setMemTick((t) => t + 1);
-                      }}
-                      className="opacity-0 group-hover:opacity-100 text-white/40 hover:text-white/80 px-1"
-                      aria-label="Forget"
-                    >
-                      ×
-                    </button>
-                  </li>
-                ))}
+              <ul className="space-y-1.5">
+                {[...memory.facts]
+                  .sort((a, b) => b.ts - a.ts)
+                  .map((f: MemoryFact) => {
+                    const isEditing = editingFactId === f.id;
+                    return (
+                      <li
+                        key={f.id}
+                        className="group rounded-sm px-2 py-1.5"
+                        style={{
+                          background: "rgba(57,255,122,0.04)",
+                          border: `1px solid ${NEON_GREEN}22`,
+                          color: NEON_GREEN_BRIGHT,
+                        }}
+                      >
+                        <div className="flex items-start justify-between gap-2">
+                          {isEditing ? (
+                            <textarea
+                              value={editingFactText}
+                              onChange={(e) => setEditingFactText(e.target.value)}
+                              autoFocus
+                              rows={2}
+                              className="flex-1 bg-black text-white px-2 py-1 text-[11px] outline-none resize-none"
+                              style={{ border: `1px solid ${NEON_GREEN}88` }}
+                            />
+                          ) : (
+                            <span className="leading-snug flex-1">{f.text}</span>
+                          )}
+                          <div className="flex items-center gap-1 shrink-0 opacity-50 group-hover:opacity-100 transition-opacity">
+                            {isEditing ? (
+                              <>
+                                <button
+                                  onClick={() => {
+                                    updateFact(f.id, editingFactText);
+                                    setEditingFactId(null);
+                                    setEditingFactText("");
+                                  }}
+                                  className="px-1 text-white/80 hover:text-white"
+                                  aria-label="Save"
+                                >
+                                  ✓
+                                </button>
+                                <button
+                                  onClick={() => {
+                                    setEditingFactId(null);
+                                    setEditingFactText("");
+                                  }}
+                                  className="px-1 text-white/40 hover:text-white/80"
+                                  aria-label="Cancel"
+                                >
+                                  ✗
+                                </button>
+                              </>
+                            ) : (
+                              <>
+                                <button
+                                  onClick={() => {
+                                    setEditingFactId(f.id);
+                                    setEditingFactText(f.text);
+                                  }}
+                                  className="px-1 text-white/40 hover:text-white/80"
+                                  aria-label="Edit"
+                                >
+                                  ✎
+                                </button>
+                                <button
+                                  onClick={() => {
+                                    forgetFactById(f.id);
+                                    setMemTick((t) => t + 1);
+                                  }}
+                                  className="px-1 text-white/40 hover:text-red-300"
+                                  aria-label="Forget"
+                                >
+                                  ×
+                                </button>
+                              </>
+                            )}
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-2 mt-1 text-[9px] uppercase tracking-tactical text-white/35">
+                          <span
+                            className="px-1 rounded-sm"
+                            style={{
+                              color: f.source === "auto" ? "#5BF3FF" : f.source === "explicit" ? NEON_GREEN_BRIGHT : "#FFB36B",
+                              border: `1px solid ${f.source === "auto" ? "#5BF3FF55" : f.source === "explicit" ? NEON_GREEN + "55" : "#FFB36B55"}`,
+                            }}
+                          >
+                            {f.source}
+                          </span>
+                          <span>{formatRelativeTime(f.ts)}</span>
+                        </div>
+                      </li>
+                    );
+                  })}
               </ul>
             )}
           </div>
@@ -1087,4 +1241,88 @@ function formatTime(iso: string): string {
   } catch {
     return iso;
   }
+}
+
+function formatRelativeTime(ts: number): string {
+  const diff = Date.now() - ts;
+  if (diff < 0) return "just now";
+  const s = Math.floor(diff / 1000);
+  if (s < 60) return `${s}s ago`;
+  const m = Math.floor(s / 60);
+  if (m < 60) return `${m}m ago`;
+  const h = Math.floor(m / 60);
+  if (h < 24) return `${h}h ago`;
+  const d = Math.floor(h / 24);
+  if (d < 14) return `${d}d ago`;
+  return new Date(ts).toLocaleDateString("en-US", { month: "short", day: "numeric" });
+}
+
+/**
+ *  Memory Settings sub-panel. Operator can tune retention, toggle auto-save
+ *  heuristics, and turn remote sync on/off. Writes go through
+ *  updateMemorySettings so they propagate to localStorage + remote.
+ */
+function MemorySettingsPanel({
+  settings,
+  onChange,
+  neon,
+}: {
+  settings: import("@/lib/luminaMemory").MemorySettings;
+  onChange: (patch: Partial<import("@/lib/luminaMemory").MemorySettings>) => void;
+  neon: string;
+}) {
+  return (
+    <div className="space-y-2.5 text-[11px]">
+      <div className="flex items-center justify-between">
+        <label className="text-white/60 uppercase tracking-tactical">
+          retention (days, 0 = forever)
+        </label>
+        <input
+          type="number"
+          min={0}
+          max={3650}
+          value={settings.retentionDays}
+          onChange={(e) => onChange({ retentionDays: Math.max(0, Number(e.target.value || 0)) })}
+          className="w-16 bg-black text-white px-2 py-0.5 outline-none text-right"
+          style={{ border: `1px solid ${neon}66` }}
+        />
+      </div>
+      <div className="flex items-center justify-between">
+        <label className="text-white/60 uppercase tracking-tactical">
+          auto-save commitments
+        </label>
+        <button
+          onClick={() => onChange({ autoSave: !settings.autoSave })}
+          className="px-2 py-0.5 uppercase tracking-tactical"
+          style={{
+            color: settings.autoSave ? "#000" : neon,
+            background: settings.autoSave ? neon : "transparent",
+            border: `1px solid ${neon}66`,
+          }}
+        >
+          {settings.autoSave ? "on" : "off"}
+        </button>
+      </div>
+      <div className="flex items-center justify-between">
+        <label className="text-white/60 uppercase tracking-tactical">
+          remote sync (cross-device)
+        </label>
+        <button
+          onClick={() => onChange({ remoteSync: !settings.remoteSync })}
+          className="px-2 py-0.5 uppercase tracking-tactical"
+          style={{
+            color: settings.remoteSync ? "#000" : neon,
+            background: settings.remoteSync ? neon : "transparent",
+            border: `1px solid ${neon}66`,
+          }}
+        >
+          {settings.remoteSync ? "on" : "off"}
+        </button>
+      </div>
+      <div className="text-white/35 leading-snug pt-1 border-t border-white/10">
+        Memory persists in this browser. Cross-device sync requires the server
+        to have FIRESTORE_PROJECT_ID + FIRESTORE_API_KEY configured.
+      </div>
+    </div>
+  );
 }
