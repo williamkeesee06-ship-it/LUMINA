@@ -143,12 +143,30 @@ export function useSystemTelemetry(): Telemetry {
     };
 
     tick();
-    const interval = setInterval(tick, 1200);
+    let interval: ReturnType<typeof setInterval> | null = setInterval(tick, 1200);
+
+    // Audit fix #9: pause the 1.2s telemetry loop when the tab is hidden.
+    // The gauges are purely cosmetic — no reason to burn timer callbacks +
+    // navigator.storage.estimate() calls in the background. Resumes on
+    // visibilitychange with a fresh tick so the gauges aren't stale.
+    const onVisibility = () => {
+      if (document.visibilityState === "hidden") {
+        if (interval !== null) {
+          clearInterval(interval);
+          interval = null;
+        }
+      } else if (interval === null) {
+        tick();
+        interval = setInterval(tick, 1200);
+      }
+    };
+    document.addEventListener("visibilitychange", onVisibility);
 
     return () => {
       stopped = true;
       cancelAnimationFrame(raf);
-      clearInterval(interval);
+      if (interval !== null) clearInterval(interval);
+      document.removeEventListener("visibilitychange", onVisibility);
     };
   }, []);
 

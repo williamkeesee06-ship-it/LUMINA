@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useUI, selectGalaxyCounts } from "@/store/uiStore";
 import {
   sendToLumina,
@@ -86,6 +86,15 @@ interface DisplayMessage {
 }
 
 const TOOL_REGEX = /<<TOOL>>([\s\S]*?)<<END>>/;
+
+// Work-order token patterns, hoisted to module scope so we don't recompile
+// the regex objects on every chat send. Audit fix #1.
+const WO_TOKEN_PATTERNS: readonly RegExp[] = [
+  /\bP\.?\d{5,8}\b/gi,
+  /\bWO[\s\-_]*\d{5,10}\b/gi,
+  /\b\d{7,9}\b/g,
+];
+const normalizeWo = (s: string): string => s.replace(/[\s\-_.]/g, "").toUpperCase();
 
 function parseToolCall(text: string): { clean: string; toolCall: ToolCall | null } {
   const match = text.match(TOOL_REGEX);
@@ -262,33 +271,13 @@ export function LuminaPanel({
   // Build the universe-wide Smartsheet context payload. Used both by chat
   // (per-message) and by Live (sent once at session start as clientContent).
   // Centralizing it ensures both surfaces have the SAME truth lockdown data.
-  const buildLuminaContext = (userText?: string) => {
-    let matchedJobs: typeof jobs = [];
-    if (userText) {
-      const woPatterns = [
-        /\bP\.?\d{5,8}\b/gi,
-        /\bWO[\s\-_]*\d{5,10}\b/gi,
-        /\b\d{7,9}\b/g,
-      ];
-      const matchedTokens = new Set<string>();
-      for (const re of woPatterns) {
-        const found = userText.match(re) ?? [];
-        for (const m of found) matchedTokens.add(m.replace(/[\s\-_]/g, "").toUpperCase());
-      }
-      const norm = (s: string) => s.replace(/[\s\-_.]/g, "").toUpperCase();
-      matchedJobs = jobs.filter((j) => {
-        const wo = norm(j.workOrder ?? "");
-        for (const t of matchedTokens) {
-          const tn = norm(t);
-          if (wo === tn) return true;
-          if (tn.startsWith("P") && wo === tn.slice(1)) return true;
-          if (wo.startsWith("P") && wo.slice(1) === tn) return true;
-          if (tn.length >= 5 && wo.endsWith(tn)) return true;
-        }
-        return false;
-      });
-    }
-
+  //
+  // Audit fix #1: the universe-wide pieces (universeIndex, sample, counts,
+  // operator metadata) don't depend on the user's typed text, so we memoize
+  // them keyed on the inputs that actually change. The WO-matching path stays
+  // lazy because it depends on `userText`. Output is byte-identical to the
+  // pre-fix version for any given (jobs, viewMode, focusedGalaxy, ...) tuple.
+  const universeContext = useMemo(() => {
     const universeIndex = jobs.map((j) => ({
       wo: j.workOrder,
       g: j.status,
@@ -296,12 +285,21 @@ export function LuminaPanel({
       s: j.rawSecondaryStatus ?? null,
       sd: j.scheduleDate ?? null,
     }));
-
+    const sample = focusedGalaxy
+      ? jobs
+          .filter((j) => j.status === focusedGalaxy)
+          .slice(0, 12)
+          .map((j) => ({
+            workOrder: j.workOrder,
+            address: j.fullAddress,
+            status: j.rawSecondaryStatus,
+            scheduleDate: j.scheduleDate,
+          }))
+      : null;
     return {
       operator: "Billy Keesee",
       role: "Construction Supervisor",
       company: "North Sky Communications",
-      now: new Date().toISOString(),
       timezone: "America/Los_Angeles",
       viewMode,
       focusedGalaxy,
@@ -310,39 +308,61 @@ export function LuminaPanel({
       galaxyCounts: counts,
       totalJobs: jobs.length,
       universeIndex,
-      matchedJobs: matchedJobs.map((j) => ({
-        workOrder: j.workOrder,
-        galaxy: j.status,
-        secondaryStatus: j.rawSecondaryStatus,
-        jobStatus: j.jobStatus,
-        address: j.fullAddress,
-        city: j.city,
-        zip: j.zip,
-        workType: j.workType,
-        base: j.base,
-        crew: j.crew,
-        permitNumber: j.permitNumber,
-        scheduleDate: j.scheduleDate,
-        endDate: j.endDate,
-        dueDate: j.dueDate,
-        receivedDate: j.receivedDate,
-        bidValue: j.bidValue,
-        notes: j.notes,
-        splicingNotes: j.splicingNotes,
-      })),
-      sample: focusedGalaxy
-        ? jobs
-            .filter((j) => j.status === focusedGalaxy)
-            .slice(0, 12)
-            .map((j) => ({
-              workOrder: j.workOrder,
-              address: j.fullAddress,
-              status: j.rawSecondaryStatus,
-              scheduleDate: j.scheduleDate,
-            }))
-        : null,
+      sample,
     };
-  };
+  }, [jobs, viewMode, focusedGalaxy, selectedJobNumber, googleToken, counts]);
+
+  const buildLuminaContext = useCallback(
+    (userText?: string) => {
+      let matchedJobs: typeof jobs = [];
+      if (userText) {
+        const matchedTokens = new Set<string>();
+        for (const re of WO_TOKEN_PATTERNS) {
+          const found = userText.match(re) ?? [];
+          for (const m of found) matchedTokens.add(m.replace(/[\s\-_]/g, "").toUpperCase());
+        }
+        if (matchedTokens.size > 0) {
+          matchedJobs = jobs.filter((j) => {
+            const wo = normalizeWo(j.workOrder ?? "");
+            for (const t of matchedTokens) {
+              const tn = normalizeWo(t);
+              if (wo === tn) return true;
+              if (tn.startsWith("P") && wo === tn.slice(1)) return true;
+              if (wo.startsWith("P") && wo.slice(1) === tn) return true;
+              if (tn.length >= 5 && wo.endsWith(tn)) return true;
+            }
+            return false;
+          });
+        }
+      }
+
+      return {
+        ...universeContext,
+        now: new Date().toISOString(),
+        matchedJobs: matchedJobs.map((j) => ({
+          workOrder: j.workOrder,
+          galaxy: j.status,
+          secondaryStatus: j.rawSecondaryStatus,
+          jobStatus: j.jobStatus,
+          address: j.fullAddress,
+          city: j.city,
+          zip: j.zip,
+          workType: j.workType,
+          base: j.base,
+          crew: j.crew,
+          permitNumber: j.permitNumber,
+          scheduleDate: j.scheduleDate,
+          endDate: j.endDate,
+          dueDate: j.dueDate,
+          receivedDate: j.receivedDate,
+          bidValue: j.bidValue,
+          notes: j.notes,
+          splicingNotes: j.splicingNotes,
+        })),
+      };
+    },
+    [jobs, universeContext],
+  );
 
   const executeTool = async (call: ToolCall) => {
     if (call.name === "resetToUniverse") {

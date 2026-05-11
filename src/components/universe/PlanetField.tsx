@@ -282,6 +282,11 @@ function Planet({
   const heroTargetScale = hero ? 3.4 : 1.0;
   const currentScale = useRef(1.0);
 
+  // Audit fix #2: scratch Vector3 reused every frame for the label-distance
+  // calculation. Previously we allocated `new THREE.Vector3()` inside
+  // useFrame, which produced N planets × 60 fps of GC pressure.
+  const _worldPosScratch = useRef(new THREE.Vector3());
+
   useFrame((state, delta) => {
     const t = state.clock.elapsedTime + phase;
     // Interpolate group scale toward hero/non-hero target.
@@ -313,7 +318,7 @@ function Planet({
     // scale up as distance grows (and down when very close).
     if (labelRef.current && groupRef.current) {
       const dist = state.camera.position.distanceTo(
-        groupRef.current.getWorldPosition(new THREE.Vector3())
+        groupRef.current.getWorldPosition(_worldPosScratch.current)
       );
       const s = THREE.MathUtils.clamp(dist / 18, 0.35, 2.6);
       labelRef.current.scale.setScalar(s);

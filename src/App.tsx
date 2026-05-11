@@ -45,27 +45,39 @@ export default function App() {
         if (!alive) return;
         setJobs(fetched);
         setLoading(false);
-        // Geocode in background; merge as results arrive.
+        // Geocode in background; merge results in ONE setState at the end.
+        // Audit fix #8/#11: the previous version did one `setState` per
+        // 60-address chunk, each remapping the full jobs array — 5+ universe-wide
+        // re-renders for a typical load. Now we await all chunks (Promise.allSettled
+        // so one chunk failure doesn't kill the rest) then do a single merge.
         const addresses = fetched
           .map((j) => j.fullAddress)
           .filter((a): a is string => Boolean(a));
         const unique = [...new Set(addresses)];
         if (unique.length > 0) {
-          // Chunk to avoid one giant request
           const CHUNK = 60;
+          const chunkPromises: Promise<Record<string, { lat: number; lng: number } | null>>[] = [];
           for (let i = 0; i < unique.length; i += CHUNK) {
-            const slice = unique.slice(i, i + CHUNK);
-            geocodeAddresses(slice).then((results) => {
-              if (!alive) return;
-              useUI.setState((s) => ({
-                jobs: s.jobs.map((j) => {
-                  if (!j.fullAddress) return j;
-                  const c = results[j.fullAddress];
-                  if (!c) return j;
-                  return { ...j, coords: c };
-                }),
-              }));
-            });
+            chunkPromises.push(geocodeAddresses(unique.slice(i, i + CHUNK)));
+          }
+          const settled = await Promise.allSettled(chunkPromises);
+          if (!alive) return;
+          const merged: Record<string, { lat: number; lng: number }> = {};
+          for (const r of settled) {
+            if (r.status !== "fulfilled") continue;
+            for (const [addr, coords] of Object.entries(r.value)) {
+              if (coords) merged[addr] = coords;
+            }
+          }
+          if (Object.keys(merged).length > 0) {
+            useUI.setState((s) => ({
+              jobs: s.jobs.map((j) => {
+                if (!j.fullAddress) return j;
+                const c = merged[j.fullAddress];
+                if (!c) return j;
+                return { ...j, coords: c };
+              }),
+            }));
           }
         }
       } catch (e) {

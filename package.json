@@ -7,7 +7,10 @@
     "dev": "vite",
     "dev:api": "node --import tsx scripts/local-api.mjs",
     "dev:all": "npm-run-all -p dev dev:api",
-    "build": "tsc -b && vite build",
+    "build": "run-p build:types build:vite",
+    "build:types": "tsc -b",
+    "build:vite": "vite build",
+    "build:serial": "tsc -b && vite build",
     "preview": "vite preview",
     "lint": "tsc -b --noEmit"
   },
