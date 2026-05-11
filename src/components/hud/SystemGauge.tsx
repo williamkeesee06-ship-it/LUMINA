@@ -197,12 +197,16 @@ export function SystemGauge({
             the needle is visible, push the number down slightly so the
             needle reads above. */}
         <div
-          className="absolute font-mono font-bold tabular-nums leading-none pointer-events-none"
+          className="absolute font-mono tabular-nums leading-none pointer-events-none"
           style={{
             fontSize: valueSize,
-            color: "#FFFFFF",
-            // Crisp value text — tighter halo, smaller bleed for sharper edges
-            textShadow: `0 0 1px #FFFFFF, 0 0 3px #FFFFFF, 0 0 6px ${color}`,
+            // PR #6 follow-up: high-contrast off-white at weight 800 with a
+            // dark drop-shadow so the readout lifts cleanly off the colored
+            // arc behind it (was previously fighting its accent halo).
+            color: "#F0F8FF",
+            fontWeight: 800,
+            textShadow:
+              "0 0 6px rgba(0,0,0,0.85), 0 1px 2px rgba(0,0,0,0.95), 0 0 14px rgba(0,0,0,0.55)",
             transform: showNeedle ? "translateY(2px)" : "translateY(0)",
             letterSpacing: "0.01em",
           }}

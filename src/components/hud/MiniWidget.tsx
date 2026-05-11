@@ -90,15 +90,17 @@ export function MiniWidget({
         }}
       >
         <div
-          className="font-mono font-semibold tabular-nums leading-none"
+          className="font-mono tabular-nums leading-none"
           style={{
             fontSize: valueSize,
-            // Use the galaxy color for a crisp, bright readout instead of
-            // pure white — white was bleeding through the soft halo and
-            // looking fuzzy. A 1px white core inside a tight color halo
-            // gives the number a sharp neon-tube feel.
-            color: "#ffffff",
-            textShadow: `0 0 1px #ffffff, 0 0 3px ${color}, 0 0 6px ${color}aa`,
+            // PR #6 follow-up: force high-contrast off-white and lift it off
+            // the colored arc with a dark text-shadow. The arc/ring already
+            // carries the accent-color signal; the number doesn't need to be
+            // the accent too — it just needs to be legible.
+            color: "#F0F8FF",
+            fontWeight: 800,
+            textShadow:
+              "0 0 6px rgba(0,0,0,0.85), 0 1px 2px rgba(0,0,0,0.95), 0 0 12px rgba(0,0,0,0.55)",
             WebkitFontSmoothing: "antialiased",
           }}
         >
