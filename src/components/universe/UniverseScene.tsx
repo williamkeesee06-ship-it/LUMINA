@@ -139,7 +139,7 @@ export function UniverseScene() {
         <GalaxyStarCluster
           key={g + "-stars"}
           center={GALAXY_POSITIONS[g]}
-          count={200}
+          count={80}
           radius={28}
           dim={isPlanetView}
         />
@@ -205,10 +205,13 @@ export function UniverseScene() {
       )}
 
       <EffectComposer multisampling={0}>
+        {/* PR #11: bloom dialed back — intensity 0.85→0.45, threshold raised
+            so only true highlights bloom, smaller blur kernel. This was the
+            primary cause of the saturated white galaxy cores. */}
         <Bloom
-          intensity={0.85}
-          luminanceThreshold={0.20}
-          luminanceSmoothing={0.55}
+          intensity={0.45}
+          luminanceThreshold={0.55}
+          luminanceSmoothing={0.35}
           mipmapBlur
         />
         <Vignette eskil={false} offset={0.25} darkness={0.92} />

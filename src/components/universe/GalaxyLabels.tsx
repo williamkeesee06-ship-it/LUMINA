@@ -51,6 +51,28 @@ export function GalaxyLabels() {
 
         return (
           <Billboard key={g} position={[pos[0], pos[1] + yOffset, pos[2]]}>
+            {/* Layer 0 — dark contrast halo (PR #11). Non-additive black
+                outline drawn first so the label stays readable against
+                bright nebula cores. Without this the additive layers below
+                wash out to pure white over a saturated core. */}
+            <Text
+              fontSize={0.95}
+              color="#000000"
+              anchorX="center"
+              anchorY="middle"
+              letterSpacing={0.22}
+              fillOpacity={0.0}
+              outlineWidth={0.18}
+              outlineColor="#000000"
+              outlineOpacity={0.75 * opMul}
+              outlineBlur={0.16}
+              material-toneMapped={false}
+              material-depthWrite={false}
+              material-transparent={true}
+            >
+              {g.toUpperCase()}
+            </Text>
+
             {/* Layer 1 — wide soft halo (the outer LED bloom). Drawn first
                 so subsequent passes sit on top. Big outlineWidth in the
                 galaxy color makes the entire glyph radiate. */}

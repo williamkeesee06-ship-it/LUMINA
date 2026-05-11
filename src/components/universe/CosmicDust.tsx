@@ -12,13 +12,10 @@ interface Props {
 }
 
 /**
- *  Per-galaxy plasma stack. Replaces the old point-particle haze with a stack
- *  of 7 billboarded ShaderMaterial planes. Fragment shader uses 6-octave fbm
- *  + 7-octave ridged fbm so the cloud reads as torn-filament gas (matching
- *  the reflection-nebula reference + V9 mockup), not bokeh balls.
- *
- *  Stack scales [140, 110, 85, 65, 48, 34, 24] keep each galaxy compact so
- *  the outer haze does not bleed past its 120u-distant neighbor.
+ *  Per-galaxy plasma stack. 3 billboarded ShaderMaterial planes per galaxy
+ *  (PR #11: reduced from 7 to tame the saturated white core that was
+ *  swallowing labels + planets). Fragment shader uses 4-octave fbm + 5-octave
+ *  ridged fbm and a hard core mask so the very center stays darker.
  */
 const SHARED_NOISE_GLSL = `
   float hash(vec2 p){ return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
@@ -33,12 +30,12 @@ const SHARED_NOISE_GLSL = `
   }
   float fbm(vec2 p){
     float v = 0.0; float amp = 0.5;
-    for (int i = 0; i < 6; i++){ v += amp * vnoise(p); p *= 2.07; amp *= 0.52; }
+    for (int i = 0; i < 4; i++){ v += amp * vnoise(p); p *= 2.07; amp *= 0.52; }
     return v;
   }
   float fbmRidged(vec2 p){
     float v = 0.0; float amp = 0.5;
-    for (int i = 0; i < 7; i++){
+    for (int i = 0; i < 5; i++){
       v += amp * (1.0 - abs(vnoise(p) * 2.0 - 1.0));
       p *= 2.13; amp *= 0.50;
     }
@@ -76,6 +73,9 @@ const HAZE_FRAGMENT_SHADER = `
       + pow(wisp1, 1.8) * 0.70
       + pow(wisp2, 2.2) * 0.55;
     density += 0.55 * smoothstep(0.45, 0.85, wisp1) * smoothstep(0.30, 0.70, body);
+    // Hard core mask — keep the very center darker so labels + planets
+    // remain readable against the nebula instead of being swallowed.
+    density *= smoothstep(0.0, 0.18, r);
     density *= fall * uIntensity;
     vec3 col = mix(uColorA, uColorB, body);
     col = mix(col, vec3(1.0), pow(wisp2, 2.5) * 0.35);
@@ -106,7 +106,7 @@ export function buildHazeMaterial(
   });
 }
 
-const STACK_SCALES = [140, 110, 85, 65, 48, 34, 24];
+const STACK_SCALES = [85, 55, 32];
 
 interface GalaxyPlasmaStackProps {
   galaxy: Galaxy;
@@ -131,7 +131,7 @@ function GalaxyPlasmaStack({ galaxy, position, dim }: GalaxyPlasmaStackProps) {
         GALAXY_COLORS[galaxy],
         accentHex,
         galaxyIndex * 1.3 + si * 0.41,
-        0.40 + (STACK_SCALES.length - 1 - si) * 0.08,
+        0.22 + (STACK_SCALES.length - 1 - si) * 0.06,
       );
       return { scale, material, tiltSeed: galaxyIndex * 0.5 + si };
     });
@@ -161,7 +161,7 @@ function GalaxyPlasmaStack({ galaxy, position, dim }: GalaxyPlasmaStackProps) {
       const mat = child.material as THREE.ShaderMaterial;
       mat.uniforms.uTime.value = t;
       // Per-plane base intensity is set on the material; modulate by dim.
-      const baseI = 0.40 + (STACK_SCALES.length - 1 - i) * 0.08;
+      const baseI = 0.22 + (STACK_SCALES.length - 1 - i) * 0.06;
       mat.uniforms.uIntensity.value = baseI * intensityMul;
     }
   });

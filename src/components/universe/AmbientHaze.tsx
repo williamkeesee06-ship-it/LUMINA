@@ -4,13 +4,10 @@ import * as THREE from "three";
 import { buildHazeMaterial } from "./CosmicDust";
 
 /**
- *  Universe-wide ambient haze patches. 7 large billboarded plasma panels
- *  positioned BETWEEN the 120u-radius galaxy ring so they fill the void
- *  with color washes — never sitting directly over a galaxy center.
- *
- *  Scales here are HALF the V9 mockup values because LUMINA galaxies sit
- *  at 120u (mockup spread them to ~240u+). If a panel ever reads as
- *  competing with a galaxy center, drop its intensity here.
+ *  Universe-wide ambient haze patches. 3 large billboarded plasma panels
+ *  (PR #11: cut from 7 + halved intensity) positioned in the void between
+ *  galaxies — all panel centers are well over 60u from any galaxy center
+ *  (galaxies sit on a 120u ring).
  */
 interface HazePanel {
   pos: [number, number, number];
@@ -21,13 +18,9 @@ interface HazePanel {
 }
 
 const HAZE_PANELS: HazePanel[] = [
-  { pos: [-50, 0, -30], scale: 160, a: 0x6a1e8a, b: 0x1e2e6a, i: 0.18 },
-  { pos: [50, 0, 50], scale: 160, a: 0x1a4080, b: 0x5e1880, i: 0.16 },
-  { pos: [-90, 10, 70], scale: 170, a: 0x8a1e5e, b: 0x2a1060, i: 0.16 },
-  { pos: [90, -10, 70], scale: 160, a: 0x10605e, b: 0x301078, i: 0.15 },
-  { pos: [-20, 20, -100], scale: 170, a: 0x3e1880, b: 0x102050, i: 0.17 },
-  { pos: [100, -20, -45], scale: 150, a: 0x501880, b: 0x1a3a6a, i: 0.14 },
-  { pos: [-110, 10, -45], scale: 150, a: 0x2a2080, b: 0x60148a, i: 0.14 },
+  { pos: [0, 0, 0], scale: 140, a: 0x6a1e8a, b: 0x1e2e6a, i: 0.09 },
+  { pos: [30, 10, 30], scale: 130, a: 0x1a4080, b: 0x5e1880, i: 0.08 },
+  { pos: [-30, -10, -30], scale: 130, a: 0x3e1880, b: 0x102050, i: 0.08 },
 ];
 
 interface Props {
