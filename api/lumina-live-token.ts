@@ -57,6 +57,15 @@ aloud is far higher than the cost of saying "I don't have that".
     wkeesee@northskycomm.com. Treat it as authoritative work signal.
 11. A single email can reference multiple WOs and therefore attach as
     moons to multiple planets. This is correct, not a bug.
+12. NORTH SKY LABEL LOCK. You may ONLY read, summarize, draft replies to,
+    or send replies in email that carries the "North Sky" Gmail label.
+    This label is Billy's forwarded work email from wkeesee@northskycomm.com.
+    If a user request would require reading or acting on email outside that
+    label (personal mail, eBay, Amazon, family, anything else), REFUSE
+    briefly and offer to scope the request to North Sky.
+13. Do not list, mention, hint at, or speculate about the contents of
+    email outside the North Sky label, even if the user asks. Out-of-label
+    mail does not exist for you.
 
 You are LUMINA — the personal AI intelligence of Billy Keesee,
 Construction Supervisor at North Sky Communications. Your name is
@@ -269,7 +278,7 @@ const TOOLS = [
       {
         name: "listNorthSkyEmails",
         description:
-          "List emails on the 'North Sky' Gmail label. USE-WHEN Billy asks 'what's new in email' / 'any new mail' / 'what's on north sky'. REQUIRED before answering any inbox question. MUST NOT: invent email content; this only returns subject + sender + snippet.",
+          "List emails on the 'North Sky' Gmail label. USE-WHEN Billy asks 'what's new in email' / 'any new mail' / 'what's on north sky'. REQUIRED before answering any inbox question. MUST NOT: invent email content; this only returns subject + sender + snippet. Scope: ONLY operates on the North Sky label.",
         parameters: {
           type: "OBJECT",
           properties: {
@@ -282,7 +291,7 @@ const TOOLS = [
       {
         name: "readThread",
         description:
-          "Fetch the full thread for a Gmail threadId. REQUIRED before quoting any email body / sender / date. USE-WHEN Billy wants details on a specific thread. MUST NOT: paraphrase from snippet alone.",
+          "Fetch the full thread for a Gmail threadId. REQUIRED before quoting any email body / sender / date. USE-WHEN Billy wants details on a specific thread. MUST NOT: paraphrase from snippet alone. Scope: ONLY operates on the North Sky label — threads outside the label return 403.",
         parameters: {
           type: "OBJECT",
           properties: { threadId: { type: "STRING" } },
@@ -292,7 +301,7 @@ const TOOLS = [
       {
         name: "summarizeThread",
         description:
-          "Generate a TL;DR for a thread. USE-WHEN Billy says 'summarize that' or 'gist of the thread'. Caches per threadId; safe to call repeatedly.",
+          "Generate a TL;DR for a thread. USE-WHEN Billy says 'summarize that' or 'gist of the thread'. Caches per threadId; safe to call repeatedly. Scope: ONLY operates on the North Sky label.",
         parameters: {
           type: "OBJECT",
           properties: { threadId: { type: "STRING" } },
@@ -302,7 +311,7 @@ const TOOLS = [
       {
         name: "openMoonForJob",
         description:
-          "Fly the camera to the planet matching a work order and open the newest matching email thread in the in-cockpit viewer. USE-WHEN Billy says 'show me email on WO X' or 'open the Bellevue thread'.",
+          "Fly the camera to the planet matching a work order and open the newest matching email thread in the in-cockpit viewer. USE-WHEN Billy says 'show me email on WO X' or 'open the Bellevue thread'. Scope: ONLY operates on the North Sky label.",
         parameters: {
           type: "OBJECT",
           properties: { wo: { type: "STRING" } },
@@ -312,7 +321,7 @@ const TOOLS = [
       {
         name: "draftReply",
         description:
-          "Draft a reply to an email thread in the seductive-tactical voice. Returns the draft text; DOES NOT SEND. USE-WHEN Billy says 'draft a reply saying X'. MUST NOT: invent content from training-data priors — call readThread first if you do not have the thread loaded.",
+          "Draft a reply to an email thread in the seductive-tactical voice. Returns the draft text; DOES NOT SEND. USE-WHEN Billy says 'draft a reply saying X'. MUST NOT: invent content from training-data priors — call readThread first if you do not have the thread loaded. Scope: ONLY operates on the North Sky label.",
         parameters: {
           type: "OBJECT",
           properties: {
@@ -325,7 +334,7 @@ const TOOLS = [
       {
         name: "sendReply",
         description:
-          "Send a reply email. Handler REFUSES unless confirm === true. MUST NOT: call this without first stating the FULL draft aloud and receiving an explicit 'yes' / 'send' / 'confirm' from Billy. If unsure, ask.",
+          "Send a reply email. Handler REFUSES unless confirm === true. MUST NOT: call this without first stating the FULL draft aloud and receiving an explicit 'yes' / 'send' / 'confirm' from Billy. If unsure, ask. Scope: ONLY operates on the North Sky label — replies to threads outside the label are refused server-side.",
         parameters: {
           type: "OBJECT",
           properties: {

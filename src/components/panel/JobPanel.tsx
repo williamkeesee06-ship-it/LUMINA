@@ -61,7 +61,10 @@ export function JobPanel() {
       });
     }
     if (googleToken && !job.moonsLoaded) {
-      const q = `(${job.workOrder}${job.address ? ` OR \"${job.address}\"` : ""})`;
+      // Always scope to the North Sky label — the server enforces this too,
+      // but prepending here keeps the UI free of personal email even if the
+      // server check ever regresses.
+      const q = `label:"North Sky" (${job.workOrder}${job.address ? ` OR \"${job.address}\"` : ""})`;
       searchGmail(googleToken, q).then((moons) => attachMoons(job.id, moons));
     }
   }, [job, googleToken, attachSatellites, attachMoons]);
