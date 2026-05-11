@@ -1,12 +1,13 @@
 import { useEffect, useState } from "react";
 import { useUI } from "@/store/uiStore";
 import { GALAXY_COLORS } from "@/lib/statusMap";
-import { SECONDARY_STATUS_OPTIONS, listJobAttachments } from "@/lib/api";
+import { SECONDARY_STATUS_OPTIONS, listJobAttachments, searchGmail } from "@/lib/api";
 import { sfx } from "@/lib/audio";
 import { EditableField } from "./EditableField";
 import { JobFocusMap } from "./JobFocusMap";
 import { JobFocusAttachmentViewer } from "./JobFocusAttachmentViewer";
 import { JobFocusAttachmentList } from "./JobFocusAttachmentList";
+import { EmailThreadView } from "@/components/lumina/EmailThreadView";
 import type { Satellite } from "@/types";
 
 /**
@@ -28,17 +29,25 @@ export function JobFocusMode() {
   const focusedJobId = useUI((s) => s.focusedJobId);
   const exitFocus = useUI((s) => s.exitFocus);
   const attachSatellites = useUI((s) => s.attachSatellites);
+  const attachMoons = useUI((s) => s.attachMoons);
+  const openThread = useUI((s) => s.openThread);
+  const openThreadId = useUI((s) => s.openThreadId);
+  const googleToken = useUI((s) => s.googleToken);
   const job = useUI((s) =>
     focusedJobId ? s.jobs.find((j) => j.id === focusedJobId) : undefined,
   );
 
   // The attachment currently "taking over" the right pane. Null = show the map.
   const [openSat, setOpenSat] = useState<Satellite | null>(null);
+  // Right-pane view: default to email (the new operator surface). The
+  // neon-blue pill flips between "EMAIL" (current view) and "MAP".
+  const [rightPane, setRightPane] = useState<"email" | "map">("email");
 
   // When the focused job changes (or focus is closed), drop any open
-  // attachment so we always re-enter through the map.
+  // attachment and reset the right pane to email.
   useEffect(() => {
     setOpenSat(null);
+    setRightPane("email");
   }, [focusedJobId]);
 
   // Lazy-load satellites if focus is opened from a context where they
@@ -52,6 +61,27 @@ export function JobFocusMode() {
       else attachSatellites(job.id, []);
     });
   }, [job, attachSatellites]);
+
+  // Lazy-load moons (North Sky-scoped Gmail threads) — mirrors JobPanel's
+  // load so Focus Mode shows the inbox even when entered via the F hotkey
+  // without opening the panel first. Scope guard from PR #4 is preserved
+  // (server enforces label:"North Sky").
+  useEffect(() => {
+    if (!job || !googleToken || job.moonsLoaded) return;
+    const q = `label:"North Sky" (${job.workOrder}${job.address ? ` OR \"${job.address}\"` : ""})`;
+    searchGmail(googleToken, q).then((moons) => attachMoons(job.id, moons));
+  }, [job, googleToken, attachMoons]);
+
+  // Auto-open the most recent thread the first time Focus is entered for a
+  // job, so the right pane shows something useful rather than the empty
+  // "select a moon" hint. Pick unread first, fall back to first moon.
+  useEffect(() => {
+    if (!job) return;
+    if (!job.moonsLoaded || job.moons.length === 0) return;
+    if (openThreadId) return;
+    const pick = job.moons.find((m) => m.unread) ?? job.moons[0];
+    if (pick) openThread(pick.threadId, job.id);
+  }, [job, openThreadId, openThread]);
 
   // ESC: if an attachment is open, close it first (return to map). Otherwise
   // exit focus mode entirely. We ignore ESC when the user is editing a
@@ -359,9 +389,46 @@ export function JobFocusMode() {
           </div>
         </div>
 
-        {/* RIGHT: isolated map / street view OR attachment takeover */}
+        {/* RIGHT: email thread (default) / map toggle / attachment takeover.
+            The bright neon-blue pill in the top-right flips between the two
+            primary views; attachment clicks still take over the whole right
+            half (closing returns to whichever toggle was active). */}
         <div className="flex-1 basis-1/2 h-full relative overflow-hidden bg-black/80">
-          <JobFocusMap job={job} />
+          {rightPane === "email" ? (
+            <EmailThreadView variant="inline-large" />
+          ) : (
+            <JobFocusMap job={job} toggleAnchor="left" />
+          )}
+
+          {/* MAP / EMAIL toggle — bright neon-blue pill, anchored top-right.
+              Label shows the OTHER view (the destination), per the brief. */}
+          {!openSat && (
+            <button
+              type="button"
+              onMouseEnter={() => sfx.hover()}
+              onClick={() => {
+                sfx.select();
+                setRightPane((p) => (p === "email" ? "map" : "email"));
+              }}
+              className="absolute top-4 right-4 z-20 font-display uppercase tracking-[0.32em] text-[11px] font-semibold px-4 py-2 rounded-full transition-transform hover:scale-[1.03] active:scale-[0.98]"
+              style={{
+                color: "#001218",
+                background: "var(--accent-blue, #00E5FF)",
+                border: "1px solid var(--accent-blue, #00E5FF)",
+                boxShadow:
+                  "0 0 12px var(--accent-blue, #00E5FF), 0 0 28px rgba(0, 229, 255, 0.55), inset 0 0 6px rgba(255,255,255,0.35)",
+                textShadow: "0 0 6px rgba(255,255,255,0.4)",
+              }}
+              title={
+                rightPane === "email"
+                  ? "Show map of job address"
+                  : "Show email thread"
+              }
+            >
+              {rightPane === "email" ? "MAP" : "EMAIL"}
+            </button>
+          )}
+
           {openSat && (
             <JobFocusAttachmentViewer
               satellite={openSat}

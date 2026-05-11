@@ -19,7 +19,18 @@ const PIN_PATH =
  *   - "STREET VIEW" toggle switches to a Street View pano
  *   - Closing Street View returns to the map
  */
-export function JobFocusMap({ job }: { job: Job }) {
+export function JobFocusMap({
+  job,
+  toggleAnchor = "right",
+}: {
+  job: Job;
+  /**
+   *  Where to dock the MAP/STREET VIEW sub-toggle. Defaults to top-right
+   *  to preserve legacy callers; set to "left" inside Focus Mode so the
+   *  parent's neon-blue EMAIL/MAP pill owns the top-right corner.
+   */
+  toggleAnchor?: "right" | "left";
+}) {
   const [streetView, setStreetView] = useState(false);
   const color = GALAXY_COLORS[job.status];
 
@@ -73,7 +84,11 @@ export function JobFocusMap({ job }: { job: Job }) {
       )}
 
       {/* Map ↔ Street View toggle */}
-      <div className="absolute top-4 right-4 flex gap-1 pointer-events-auto z-10">
+      <div
+        className={`absolute top-4 ${
+          toggleAnchor === "left" ? "left-4" : "right-4"
+        } flex gap-1 pointer-events-auto z-10`}
+      >
         <ToggleBtn active={!streetView} accent={color} label="MAP" onClick={() => setStreetView(false)} />
         <ToggleBtn active={streetView} accent={color} label="STREET VIEW" onClick={() => setStreetView(true)} />
       </div>

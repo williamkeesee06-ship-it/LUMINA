@@ -38,7 +38,7 @@ export function CameraRig() {
   const warpFromFov = useRef(52);
 
   // Scripted target (used until the user takes control)
-  const targetPos = useRef(new THREE.Vector3(0, 22, 60));
+  const targetPos = useRef(new THREE.Vector3(0, 38, 110));
   const targetLook = useRef(new THREE.Vector3(0, 0, 0));
   const currentLook = useRef(new THREE.Vector3(0, 0, 0));
 
@@ -80,7 +80,10 @@ export function CameraRig() {
     // A new viewMode means: cancel free-fly, snap back to a scripted shot.
     freeFly.current = false;
     if (viewMode === "universe") {
-      targetPos.current.set(0, 22, 60);
+      // God view standoff bumped to match the wider galaxy ring (78u radius
+      // vs the previous 42). Camera pulled back so the whole spread fits in
+      // frame as a constellation of distinct clusters.
+      targetPos.current.set(0, 38, 110);
       targetLook.current.set(0, 0, 0);
     } else if (viewMode === "galaxy" && focusedGalaxy) {
       const p = GALAXY_POSITIONS[focusedGalaxy];

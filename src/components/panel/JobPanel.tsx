@@ -195,9 +195,12 @@ export function JobPanel() {
             </div>
           </Section>
 
-          {/* Moons — Gmail email threads (email = moon, closer orbit) */}
+          {/* Moons — Gmail email threads (email = moon, closer orbit).
+              PR #5: this section IS the "Email Thread" stacked below the job
+              card. Font sizes are bumped (subject 15-16px, snippet ~13px) so
+              the operator can actually read the inbox without leaning in. */}
           <Section
-            label="moons · gmail"
+            label="email thread · moons"
             count={job.moons.length || undefined}
             action={
               !googleToken ? (
@@ -223,32 +226,40 @@ export function JobPanel() {
             ) : job.moons.length === 0 ? (
               <Empty>No email threads found.</Empty>
             ) : (
-              <ul className="space-y-1.5">
+              <ul className="space-y-2">
                 {job.moons.map((m) => (
                   <li key={m.id}>
-                    <a
-                      href={`https://mail.google.com/mail/u/0/#inbox/${m.threadId}`}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="panel-row block px-3 py-2 flex flex-col gap-0.5"
+                    <button
+                      type="button"
+                      onMouseEnter={() => sfx.hover()}
+                      onClick={() => {
+                        // Clicking a moon opens the in-cockpit EmailThreadView
+                        // (which still hits /api/gmail with the North Sky
+                        // scope guard). Keeps the email-rendering path
+                        // single-sourced through the dispatch in api/gmail.ts.
+                        useUI.getState().openThread(m.threadId, job.id);
+                      }}
+                      className="panel-row w-full text-left block px-3 py-2.5 flex flex-col gap-1"
                     >
                       <div className="flex items-center gap-2">
                         <span
-                          className={`w-1.5 h-1.5 rounded-full shrink-0 ${
+                          className={`w-2 h-2 rounded-full shrink-0 ${
                             m.unread ? "bg-magenta-signal shadow-[0_0_8px_#FF3D9A]" : "bg-white/30"
                           }`}
                         />
-                        <span className="text-[13px] text-white/95 truncate flex-1 leading-tight">
+                        <span className="text-[15px] text-white/95 truncate flex-1 leading-snug font-medium">
                           {m.subject}
                         </span>
                       </div>
-                      <div className="text-[10px] font-mono uppercase tracking-wide text-white/45 truncate pl-3.5">
+                      <div className="text-[11px] font-mono uppercase tracking-wide text-white/55 truncate pl-4">
                         {m.from}
                       </div>
                       {m.snippet && (
-                        <div className="text-xs text-white/55 line-clamp-2 pl-3.5">{m.snippet}</div>
+                        <div className="text-[13px] text-white/70 line-clamp-2 pl-4 leading-relaxed">
+                          {m.snippet}
+                        </div>
                       )}
-                    </a>
+                    </button>
                   </li>
                 ))}
               </ul>

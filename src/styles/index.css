@@ -16,6 +16,10 @@
     --magenta-signal: #ff3d9a;
     --amber-warn: #ffb347;
     --red-alert: #ff5151;
+    /* Bright neon-blue used exclusively for the Focus Mode MAP/EMAIL pill
+       toggle. Distinct from --cyan-glow so the swap chip pops without
+       colliding with the rest of LUMINA's cyan/green palette. */
+    --accent-blue: #00e5ff;
   }
 
   /* Custom paper-plane neon-blue cursor (global). Hotspot at the tip = (1,1). */
