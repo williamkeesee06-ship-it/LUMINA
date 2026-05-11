@@ -131,9 +131,9 @@ function GalaxyDotCluster({
       const halo = haloRefs.current[i];
       if (!dot || !halo) continue;
       if (it.unread) {
-        // Pulse cadence — readable from across the universe view. Amplitude
-        // shrunk so the unread cue is a subtle brighten/grow, not a 1.8×
-        // bokeh swell that re-floods the screen with colored balls.
+        // Pulse cadence — readable from across the universe view. PR #9
+        // caps halo opacity at 0.25 max so dots no longer read as colored
+        // bokeh balls at god view.
         const pulse = 0.6 + Math.sin(t * 4.4 + it.phase) * 0.4; // 0.2..1.0
         const scale = 1.0 + pulse * 0.6; // 1.0..1.6
         dot.scale.setScalar(scale);
@@ -141,7 +141,7 @@ function GalaxyDotCluster({
         const dm = dot.material as THREE.MeshBasicMaterial;
         const hm = halo.material as THREE.MeshBasicMaterial;
         dm.opacity = 0.75 + pulse * 0.15;
-        hm.opacity = 0.18 + pulse * 0.18;
+        hm.opacity = Math.min(0.25, 0.12 + pulse * 0.13);
       } else {
         // Quiet planet — static muted dot.
         dot.scale.setScalar(0.65);
@@ -149,7 +149,7 @@ function GalaxyDotCluster({
         const dm = dot.material as THREE.MeshBasicMaterial;
         const hm = halo.material as THREE.MeshBasicMaterial;
         dm.opacity = 0.45;
-        hm.opacity = 0.08;
+        hm.opacity = 0.05;
       }
     }
     if (ambientRef.current) {
@@ -185,19 +185,19 @@ function GalaxyDotCluster({
 
       {layout.map((it, i) => (
         <group key={it.id} position={it.pos}>
-          {/* Halo — additive bloom bleed around the dot. Radius slashed from
-              0.12 → 0.028 (~77% smaller) so the halo bloom no longer reads as
-              a screen-filling colored bokeh ball at god view. */}
+          {/* Halo — PR #9 shrinks halo radius to 0.018 and caps opacity at
+              0.25 so the dot reads as a small bright pinpoint, never a
+              colored bokeh ball. */}
           <mesh
             ref={(m) => {
               haloRefs.current[i] = m;
             }}
           >
-            <sphereGeometry args={[0.028, 8, 8]} />
+            <sphereGeometry args={[0.018, 8, 8]} />
             <meshBasicMaterial
               color={it.color}
               transparent
-              opacity={0.18}
+              opacity={0.12}
               depthWrite={false}
               blending={THREE.AdditiveBlending}
               toneMapped={false}

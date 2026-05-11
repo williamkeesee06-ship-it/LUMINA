@@ -5,7 +5,7 @@ import * as THREE from "three";
 import { useUI, selectGalaxyCounts } from "@/store/uiStore";
 import { GALAXIES } from "@/types";
 import { CameraRig } from "./CameraRig";
-import { Stardust } from "./Stardust";
+import { Starfield } from "./Starfield";
 import { CosmicDust } from "./CosmicDust";
 import { GalaxyCluster } from "./GalaxyCluster";
 import { GalaxyLabels } from "./GalaxyLabels";
@@ -80,44 +80,36 @@ export function UniverseScene() {
       <Suspense fallback={null}>
         <NebulaClouds />
       </Suspense>
-      {/* Far layer — dense field of tiny crisp pinpoint white stars filling
-          the whole sky. PR #8: count pushed 2400 → 4500 so the background
-          reads as a heavily-populated star field, with planet dots being a
-          quiet sprinkle within. Size kept small so they remain pinpoints,
-          not bokeh. Radius keeps the field wrapping the wider galaxy ring
-          (radius 120). */}
-      <Stardust
-        count={4500}
+      {/* PR #9 — three hard-pinpoint starfield layers. Non-attenuated points
+          so each star is a sharp pixel of light at any distance, never a soft
+          glow that swells on close approach. Brightest ~5% per layer also get
+          a cross-flare sprite for variety. Rendered BEFORE the nebula so the
+          gas filaments layer over the starfield correctly. */}
+      <Starfield
+        count={6000}
         radius={240}
-        size={0.09}
-        baseOpacity={0.78}
-        twinkleFraction={0.02}
-        spin={0.005}
+        size={0.06}
+        baseOpacity={0.92}
         flatten={1}
+        flareFraction={0.04}
         dim={isPlanetView}
       />
-      {/* Mid layer — medium-bright stars at conversational distance. Count
-          bumped 900 → 1300 to keep mid-depth density readable now that the
-          far layer dominates. */}
-      <Stardust
-        count={1300}
+      <Starfield
+        count={1800}
         radius={85}
-        size={0.13}
-        baseOpacity={0.88}
-        twinkleFraction={0.035}
-        spin={0.01}
+        size={0.07}
+        baseOpacity={0.96}
         flatten={0.7}
+        flareFraction={0.06}
         dim={isPlanetView}
       />
-      {/* Near layer — slightly larger, drift past camera, occasional twinkle */}
-      <Stardust
-        count={320}
+      <Starfield
+        count={400}
         radius={32}
-        size={0.20}
-        baseOpacity={0.95}
-        twinkleFraction={0.08}
-        spin={0.02}
+        size={0.08}
+        baseOpacity={1.0}
         flatten={0.5}
+        flareFraction={0.1}
         dim={isPlanetView}
       />
       {/* Shooting stars — tapered streaks every ~10s, no squares */}
