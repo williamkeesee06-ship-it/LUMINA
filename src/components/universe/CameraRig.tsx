@@ -17,6 +17,7 @@ import { GALAXY_POSITIONS } from "./galaxyLayout";
  *
  * Controls:
  *  - Left-drag (or touch-drag): rotate view (yaw/pitch)
+ *  - Right-drag: pan camera on the horizontal plane
  *  - WASD: strafe / forward+back
  *  - Q / E: down / up
  *  - Shift: 3x speed boost
@@ -156,15 +157,15 @@ export function CameraRig() {
       } catch {
         /* no-op */
       }
-      if (dragButton.current === "right") {
-        // RMB drag → rotate (yaw / pitch).
+      if (dragButton.current === "left") {
+        // LMB drag → rotate (yaw / pitch). Conventional 3D-app mapping.
         const sens = 0.0035;
         yaw.current += dx * sens;
         pitch.current += dy * sens;
         const lim = Math.PI / 2 - 0.05;
         pitch.current = Math.max(-lim, Math.min(lim, pitch.current));
       } else {
-        // LMB drag → pan. Horizontal = camera local X (strafe). Vertical =
+        // RMB drag → pan. Horizontal = camera local X (strafe). Vertical =
         // camera forward/back, projected onto the horizontal (XZ) plane so
         // the scene slides forward instead of dipping below the floor.
         // Scale by distance to focus so panning at standoff doesn't crawl
