@@ -11,6 +11,10 @@ interface Props {
   disabled?: boolean;
   onClick?: () => void;
   onMouseEnter?: () => void;
+  /** PR #13 — optional double-click hook. Gmail widget uses this to pop the
+   *  North Sky inbox in a real browser tab without disturbing the existing
+   *  single-click behaviour (which still toggles the in-app inbox view). */
+  onDoubleClick?: () => void;
   /** PR #6 — render a pulsating ring signalling a recent change for this widget. */
   pulse?: boolean;
 }
@@ -30,12 +34,14 @@ export function CircleWidget({
   disabled = false,
   onClick,
   onMouseEnter,
+  onDoubleClick,
   pulse = false,
 }: Props) {
   return (
     <button
       type="button"
       onClick={onClick}
+      onDoubleClick={onDoubleClick}
       onMouseEnter={onMouseEnter}
       className="group relative flex flex-col items-center select-none cursor-pointer"
       style={{

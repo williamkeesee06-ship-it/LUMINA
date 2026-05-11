@@ -309,6 +309,12 @@ propose the closest thing you can do.
     Engage 50/50 focus mode. If workOrder supplied, focus that job.
 - exitFocusMode {}
     Back to default 70/30 layout (or universe view if not already in focus).
+- openGmail {}
+    Pops Billy's actual Gmail in a new browser tab, scoped to the North Sky
+    label. USE-WHEN Billy says "open gmail", "open my email", "open my inbox",
+    "show me my inbox", "open north sky", "take me to gmail". Do NOT use this
+    for in-app reads (listNorthSkyEmails / readThread); this is for when he
+    wants to leave the cockpit and land on his real inbox.
 
 The text portion BEFORE the tool call should be a tight tactical line,
 e.g. "Pulling 23017359 — still awaiting permit." or "Diverting to Pending."

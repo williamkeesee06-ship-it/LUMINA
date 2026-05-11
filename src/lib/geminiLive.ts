@@ -67,6 +67,15 @@ const INPUT_RATE = 16000;
 const OUTPUT_RATE = 24000;
 const FRAME_SIZE = 2048; // ~128ms at 16kHz — good real-time tradeoff
 
+/**
+ *  PR #13 — thinking-loop guard. Live previously had no ceiling on the number
+ *  of toolCall round-trips per user turn; if the model fell into a "call X,
+ *  see result, call X again" pattern we'd spin forever, the user heard nothing
+ *  back, and the UI sat on "thinking…". Anything past this many calls in a
+ *  single turn is treated as a stall and short-circuited with a fallback line.
+ */
+const MAX_TOOL_ITERATIONS_PER_TURN = 6;
+
 export class LuminaLiveSession {
   private ws: WebSocket | null = null;
   private inputCtx: AudioContext | null = null;
@@ -82,6 +91,11 @@ export class LuminaLiveSession {
   private inputTranscriptBuffer = "";
   private outputTranscriptBuffer = "";
   private modelSpeaking = false;
+  // Tool-call loop guards (PR #13).
+  private toolCallsThisTurn = 0;
+  private lastToolSignature: string | null = null;
+  private lastToolResultCache: LuminaLiveToolResult | null = null;
+  private stallNoticeSent = false;
 
   constructor(callbacks: LuminaLiveCallbacks = {}) {
     this.cb = callbacks;
@@ -331,6 +345,12 @@ export class LuminaLiveSession {
           this.inputTranscriptBuffer = "";
         }
         this.modelSpeaking = false;
+        // PR #13 — reset tool-loop guards every turn so a previously stuck
+        // call doesn't haunt the next user prompt.
+        this.toolCallsThisTurn = 0;
+        this.lastToolSignature = null;
+        this.lastToolResultCache = null;
+        this.stallNoticeSent = false;
         this.emitStatus("listening");
       }
 
@@ -493,13 +513,36 @@ export class LuminaLiveSession {
 
   private async dispatchToolCalls(calls: LiveFunctionCall[]): Promise<void> {
     if (!this.ws) return;
+    // PR #13 — increment AFTER the model emits each toolCall batch. Past
+    // MAX_TOOL_ITERATIONS_PER_TURN we short-circuit so the model can't keep
+    // round-tripping forever (root cause of the "Lumina stuck thinking" bug).
+    this.toolCallsThisTurn += calls.length;
+
+    const overLimit = this.toolCallsThisTurn > MAX_TOOL_ITERATIONS_PER_TURN;
+
     const responses = await Promise.all(
       calls.map(async (fc) => {
+        // Duplicate suppression — if the model calls the SAME tool with the
+        // SAME args twice in a row, feed the cached result back instead of
+        // re-executing. Prevents idempotent reads (listNorthSkyEmails,
+        // lookupJob) from looping.
+        const signature = `${fc.name}::${JSON.stringify(fc.args ?? {})}`;
+        const isDuplicate =
+          this.lastToolSignature === signature && this.lastToolResultCache;
+
         let result: LuminaLiveToolResult = {
           ok: false,
           message: "Tool not available in live mode.",
         };
-        if (this.cb.onToolCall) {
+        if (overLimit) {
+          result = {
+            ok: false,
+            message:
+              "Max tool iterations reached for this turn. Stop calling tools, give the operator a one-line answer, and ask for a rephrase.",
+          };
+        } else if (isDuplicate) {
+          result = this.lastToolResultCache!;
+        } else if (this.cb.onToolCall) {
           try {
             result = await this.cb.onToolCall({
               id: fc.id,
@@ -510,6 +553,10 @@ export class LuminaLiveSession {
             result = { ok: false, message: (err as Error).message };
           }
         }
+
+        this.lastToolSignature = signature;
+        this.lastToolResultCache = result;
+
         return {
           id: fc.id,
           name: fc.name,
@@ -517,8 +564,46 @@ export class LuminaLiveSession {
         };
       }),
     );
-    if (this.ws?.readyState === WebSocket.OPEN) {
-      this.ws.send(JSON.stringify({ toolResponse: { functionResponses: responses } }));
+
+    if (this.ws?.readyState !== WebSocket.OPEN) return;
+
+    // Send the tool responses back. Two notes:
+    //  1) `toolResponse` is the per-spec field name and was correct already.
+    //  2) PR #13 — if we just blew the iteration ceiling, additionally close
+    //     the turn from the client side. The model can't keep "thinking" if
+    //     there's no further tool result expected, so the audio reply lands.
+    this.ws.send(JSON.stringify({ toolResponse: { functionResponses: responses } }));
+
+    if (overLimit && !this.stallNoticeSent) {
+      this.stallNoticeSent = true;
+      // Surface the stall to whoever is wired up (LuminaPanel shows a chat row).
+      this.cb.onError?.(
+        "Hit max tool-call iterations — Lumina was looping. Try rephrasing.",
+      );
+      // Force the model out of tool-call territory: send an empty user turn
+      // marker so the server flushes a final audio reply rather than waiting
+      // for yet another tool round-trip.
+      try {
+        this.ws.send(
+          JSON.stringify({
+            clientContent: {
+              turns: [
+                {
+                  role: "user",
+                  parts: [
+                    {
+                      text: "Stop. You hit the tool-call cap. Speak ONE short sentence acknowledging the loop and ask me to rephrase.",
+                    },
+                  ],
+                },
+              ],
+              turnComplete: true,
+            },
+          }),
+        );
+      } catch {
+        /* socket closed mid-flush */
+      }
     }
   }
 

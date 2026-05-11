@@ -581,6 +581,12 @@ const TOOLS = [
         description: "Back to default 70/30 layout (or universe view).",
         parameters: { type: "OBJECT", properties: {} },
       },
+      {
+        name: "openGmail",
+        description:
+          "Open Billy's Gmail in a new browser tab, scoped to the 'North Sky' label. USE-WHEN Billy says 'open gmail', 'open my email', 'open my inbox', 'show me my inbox', 'open north sky', 'take me to gmail'. Do NOT use for in-app actions (listNorthSkyEmails / readThread handle those). This is the only way to escape the cockpit and land directly on the operator's real inbox.",
+        parameters: { type: "OBJECT", properties: {} },
+      },
     ],
   },
 ];

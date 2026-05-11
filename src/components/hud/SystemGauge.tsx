@@ -26,6 +26,8 @@ interface Props {
   /** Show pulsing flicker when intensity is high or pulse=true. */
   pulse?: boolean;
   onClick?: () => void;
+  /** PR #13 — optional double-click hook (Gmail gauge pops North Sky inbox). */
+  onDoubleClick?: () => void;
   size?: number;
   /**
    * Hide the rotating needle for headline-only counters (e.g. TOTAL, GMAIL)
@@ -41,6 +43,7 @@ export function SystemGauge({
   color,
   pulse = false,
   onClick,
+  onDoubleClick,
   size = 56,
   showNeedle = true,
 }: Props) {
@@ -70,7 +73,8 @@ export function SystemGauge({
   const ringStroke = 1.6 + i * 1.4; // 1.6..3.0
   const arcOpacity = 0.45 + i * 0.55; // 0.45..1.0
 
-  const Tag = onClick ? "button" : "div";
+  const Tag = onClick || onDoubleClick ? "button" : "div";
+  const isInteractive = Boolean(onClick || onDoubleClick);
 
   // Value font scales with disc size and string length so a hero-sized
   // gauge (96px) gets a big readable numeral instead of the legacy 12px.
@@ -84,11 +88,12 @@ export function SystemGauge({
 
   return (
     <Tag
-      type={onClick ? "button" : undefined}
+      type={isInteractive ? "button" : undefined}
       onClick={onClick}
+      onDoubleClick={onDoubleClick}
       className={clsx(
         "relative flex flex-col items-center select-none",
-        onClick && "cursor-pointer transition-transform active:scale-[0.95] hover:scale-[1.06]",
+        isInteractive && "cursor-pointer transition-transform active:scale-[0.95] hover:scale-[1.06]",
         livingPulse && "gauge-living",
       )}
       style={{ width: size + 8 } as CSSProperties}
