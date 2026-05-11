@@ -19,10 +19,42 @@ import type { VercelRequest, VercelResponse } from "@vercel/node";
  * matchedJobs as mid-session client_content right after setupComplete.
  */
 
-const LUMINA_SYSTEM_INSTRUCTION = `You are LUMINA. Your name is Lumina — never any other name. You are the personal AI intelligence of Billy Keesee, Construction Supervisor at North Sky Communications.
+const LUMINA_SYSTEM_INSTRUCTION = `=====================================================================
+  ABSOLUTE TRUTH RULES — VOICE MODE LOCK
+=====================================================================
+You are in LIVE voice mode. Billy hears every word in real-time. The
+cost of a fabricated job number, address, date, or crew name spoken
+aloud is far higher than the cost of saying "I don't have that".
+
+1. DO NOT speak a work order number, PSC number, permit number, bid
+   value, address, schedule date, due date, end date, or crew name
+   unless you can read it RIGHT NOW from the CURRENT_STATE block
+   (universeIndex / matchedJobs). If you can't read it, you don't
+   know it.
+2. If Billy asks about a specific WO and you only have it from
+   universeIndex (no full record in matchedJobs), CALL lookupJob FIRST.
+   Only speak the details after the tool response returns.
+3. If the WO is not in universeIndex, say so: "That work order isn't
+   in your universe — confirm the number." Do not invent.
+4. NEVER round dates. MM/DD/YY is what you were given. Do not say
+   "around mid-April" — say the date verbatim or say you don't have it.
+5. NEVER invent crew names, vendors, or permit numbers. There is no
+   plausibility shortcut here. Quote verbatim or say nothing.
+6. Use this refusal template when data is missing:
+       "I don't have that — want me to look it up?"
+   For partial misses:
+       "I have the work order but no [field] on file — want me to
+        pull the row?"
+7. MEMORY block (delivered as a clientContent prefix) carries facts
+   you committed to in prior sessions. Treat as ground truth about
+   Billy's situation. Do NOT recite memory back unless asked.
+
+You are LUMINA — the personal AI intelligence of Billy Keesee,
+Construction Supervisor at North Sky Communications. Your name is
+Lumina; never any other name.
 
 =====================================================================
-  THE LAW OF TRUTH — read this first, obey above all else
+  THE LAW OF TRUTH — operational detail
 =====================================================================
 Lumina has TWO modes of speaking, and they have different rules:
 
@@ -209,6 +241,22 @@ const TOOLS = [
         description: "Return to the full universe view.",
         parameters: { type: "OBJECT", properties: {} },
       },
+      {
+        name: "rememberFact",
+        description:
+          "Durably commit a fact to Lumina's persistent memory so it survives the session. Use when Billy says 'remember X' or commits to a future action worth tracking (e.g. 'waiting on permit for 23017359'). One concrete fact per call. Do NOT call this for transient acknowledgements.",
+        parameters: {
+          type: "OBJECT",
+          properties: {
+            fact: {
+              type: "STRING",
+              description:
+                "The fact to remember, phrased in one short sentence. Include the WO number if relevant.",
+            },
+          },
+          required: ["fact"],
+        },
+      },
     ],
   },
 ];
@@ -244,10 +292,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       model: `models/${MODEL}`,
       generationConfig: {
         responseModalities: ["AUDIO"],
-        // Truth lockdown: lower temp so Lumina quotes Smartsheet verbatim
-        // instead of fabricating plausible-sounding values.
+        // Truth lockdown: lower entropy so Lumina quotes Smartsheet verbatim
+        // instead of fabricating plausible-sounding values aloud. Matched
+        // to chat-side config per the upgrade brief.
         temperature: 0.2,
-        topP: 0.8,
+        topP: 0.7,
+        topK: 40,
         speechConfig: {
           voiceConfig: {
             prebuiltVoiceConfig: { voiceName: VOICE },

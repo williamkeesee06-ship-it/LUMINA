@@ -48,6 +48,10 @@ export interface LuminaLiveCallbacks {
    *  Smartsheet context. Lumina will receive it as a user-role clientContent
    *  message before any voice input. */
   getInitialContext?: () => Record<string, unknown> | null;
+  /** Called once after setupComplete to return Lumina's persistent memory
+   *  (facts + summary). Live mode previously had NO access to memory, which
+   *  is why she invented PSC numbers in voice. This wires it in. */
+  getInitialMemory?: () => { facts?: string[]; summary?: string } | null;
 }
 
 interface TokenResponse {
@@ -282,8 +286,11 @@ export class LuminaLiveSession {
     const data = payload as LiveServerMessage;
 
     if (data.setupComplete) {
-      // Send Smartsheet context as the first user-role clientContent so
-      // Lumina has the universe truth before Billy says anything.
+      // Send MEMORY first so Lumina has continuity from prior sessions,
+      // THEN the Smartsheet truth payload so she has the universe data.
+      // Previously Live got NEITHER memory — root cause of the "she invents
+      // PSC numbers in voice" complaint.
+      this.sendInitialMemory();
       this.sendInitialContext();
       return;
     }
@@ -394,6 +401,74 @@ export class LuminaLiveSession {
       this.ws.send(JSON.stringify(msg));
     } catch {
       /* socket may have closed */
+    }
+  }
+
+  /**
+   *  Send Lumina's persistent memory at session start so Live mode has
+   *  continuity with the chat surface. Without this, voice mode is amnesiac
+   *  — root cause of the "she invents PSC numbers" hallucination report.
+   *
+   *  The block is sent as a user-role clientContent BEFORE the universe
+   *  state so the model treats it as preface, not as a turn awaiting reply.
+   */
+  private sendInitialMemory(): void {
+    const mem = this.cb.getInitialMemory?.() ?? null;
+    if (!mem || !this.ws || this.ws.readyState !== WebSocket.OPEN) return;
+    const factCount = mem.facts?.length ?? 0;
+    if (factCount === 0 && !mem.summary) return;
+
+    const lines: string[] = [
+      "MEMORY — durable facts you committed to across prior sessions. Treat as ground truth about Billy's situation. Reference naturally. Read silently, do NOT recite this back unless I ask.",
+    ];
+    if (mem.summary) lines.push(`SUMMARY: ${mem.summary}`);
+    if (factCount > 0) {
+      lines.push(
+        "FACTS:\n" + (mem.facts ?? []).map((f) => `- ${f}`).join("\n"),
+      );
+    }
+    const text = lines.join("\n\n");
+    const msg = {
+      clientContent: {
+        turns: [{ role: "user", parts: [{ text }] }],
+        turnComplete: false,
+      },
+    };
+    try {
+      this.ws.send(JSON.stringify(msg));
+    } catch {
+      /* noop */
+    }
+  }
+
+  /**
+   *  Push a memory delta mid-session — used after a new fact is committed
+   *  via rememberFact or the auto-save heuristics so Live stays in lockstep
+   *  with the chat surface. Cheap; we send the whole block (it's small).
+   */
+  pushMemory(mem: { facts?: string[]; summary?: string }): void {
+    if (!this.ws || this.ws.readyState !== WebSocket.OPEN) return;
+    const factCount = mem.facts?.length ?? 0;
+    if (factCount === 0 && !mem.summary) return;
+    const lines: string[] = [
+      "MEMORY update — replaces any prior memory block. Read silently.",
+    ];
+    if (mem.summary) lines.push(`SUMMARY: ${mem.summary}`);
+    if (factCount > 0) {
+      lines.push(
+        "FACTS:\n" + (mem.facts ?? []).map((f) => `- ${f}`).join("\n"),
+      );
+    }
+    const msg = {
+      clientContent: {
+        turns: [{ role: "user", parts: [{ text: lines.join("\n\n") }] }],
+        turnComplete: false,
+      },
+    };
+    try {
+      this.ws.send(JSON.stringify(msg));
+    } catch {
+      /* noop */
     }
   }
 
