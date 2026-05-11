@@ -1,20 +1,19 @@
 /**
- *  Situational-awareness checks.
+ *  Situational-awareness checks — DISABLED IN PR #12.
  *
- *  Lumina watches the live job + email state and surfaces SUGGESTIONS on
- *  the reminder strip when she notices a gap.
+ *  The operator does not want anything auto-imported into the notification
+ *  center. Only Lumina tool calls and direct UI actions are allowed to add
+ *  reminders now. See src/store/reminderStore.ts (the `addReminder` source
+ *  guard is the actual choke point).
  *
- *  Active checks:
- *    1. Permit field empty + schedule date within 14 days
- *    2. Customer email thread waiting > 24h for a reply
- *
- *  PR #10 removed the "needs traffic control" check — Smartsheet has no
- *  `Traffic Control Ordered` column, so the old heuristic falsely flagged
- *  every scheduled job. Bringing it back requires a real Smartsheet
- *  column to gate on.
+ *  The compute step is still exported so a future opt-in UI surface could
+ *  show suggestions WITHOUT writing into the reminder store. `runSituational
+ *  Checks` is now off by default and only fires if
+ *  `VITE_ENABLE_SITUATIONAL_AUTOIMPORT=1` is set at build time. It is wired
+ *  to nothing from App.tsx — the App-level interval and onJobsChange hook
+ *  were removed in PR #12.
  */
 import type { Job } from "@/types";
-import { useReminderStore } from "@/store/reminderStore";
 
 const NSC_DOMAIN = "@northskycomm.com";
 
@@ -43,14 +42,11 @@ function parseDate(s: string): Date | null {
 function hasUnansweredCustomerMail(j: Job): boolean {
   const moons = j.moons ?? [];
   if (moons.length === 0) return false;
-  // Newest moon first.
   const sorted = [...moons].sort((a, b) => (b.date > a.date ? 1 : -1));
   const newest = sorted[0];
   if (!newest) return false;
-  // Skip if newest is from Billy's domain (i.e. we already responded).
   const from = (newest.from ?? "").toLowerCase();
   if (from.includes(NSC_DOMAIN)) return false;
-  // Heuristic: a "?" in subject or snippet signals a question.
   const askish = /\?|when|status|update|confirm|need(ed)?\b/i.test(
     (newest.subject ?? "") + " " + (newest.snippet ?? ""),
   );
@@ -70,7 +66,6 @@ export function computeSituationalSuggestions(jobs: Job[]): SituationalSuggestio
   const out: SituationalSuggestion[] = [];
   for (const j of jobs) {
     if (!j.workOrder) continue;
-    // 1. Empty permit + scheduled within 14 days
     if ((!j.permitNumber || !j.permitNumber.trim()) && inDays(j.scheduleDate, 14)) {
       out.push({
         text: `${j.workOrder} scheduled but no permit logged — chase status?`,
@@ -78,7 +73,6 @@ export function computeSituationalSuggestions(jobs: Job[]): SituationalSuggestio
         dedupeKey: `sa:permit:${j.id}`,
       });
     }
-    // 2. Unanswered customer email > 24h
     if (hasUnansweredCustomerMail(j)) {
       out.push({
         text: `Customer waiting on reply for ${j.workOrder} — draft response?`,
@@ -91,21 +85,21 @@ export function computeSituationalSuggestions(jobs: Job[]): SituationalSuggestio
 }
 
 /**
- *  Run the checks against the current job state and push any new
- *  suggestions to the reminder strip. Returns the count surfaced (for
- *  debugging / telemetry).
+ *  No-op unless explicitly opted in. Returns 0 in the default config so
+ *  callers (none, in PR #12) treat it as "nothing surfaced".
  */
-export function runSituationalChecks(jobs: Job[]): number {
-  const suggestions = computeSituationalSuggestions(jobs);
-  const store = useReminderStore.getState();
-  let added = 0;
-  for (const s of suggestions) {
-    const r = store.addSuggestion({
-      text: s.text,
-      sourceJobId: s.jobId,
-      dedupeKey: s.dedupeKey,
-    });
-    if (r) added += 1;
-  }
-  return added;
+export function runSituationalChecks(_jobs: Job[]): number {
+  // Off-by-default feature flag. Build-time env, NOT runtime config — we
+  // want this dead in production unless a developer deliberately turns it
+  // on for testing a future opt-in surface.
+  const enabled =
+    typeof import.meta !== "undefined" &&
+    (import.meta as ImportMeta & { env?: Record<string, string | undefined> }).env
+      ?.VITE_ENABLE_SITUATIONAL_AUTOIMPORT === "1";
+  if (!enabled) return 0;
+  // Even when the flag is on, we no longer write to the reminder store
+  // from this module — that path was the whole problem. Any future
+  // re-enablement must route through an explicit user-confirmed UI
+  // surface that calls addReminder({ source: "user" }).
+  return 0;
 }

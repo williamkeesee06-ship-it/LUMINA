@@ -474,6 +474,7 @@ export function LuminaPanel({
       useReminderStore.getState().addReminder({
         text,
         type: "user",
+        source: "lumina",
         sourceJobId,
       });
       sfx.confirm();
@@ -909,6 +910,7 @@ export function LuminaPanel({
       useReminderStore.getState().addReminder({
         text: `Draft to ${to} · ${subject}\n${body.slice(0, 120)}…`,
         type: "draft_pending",
+        source: "lumina",
         dedupeKey: draftKey,
       });
       ackChat(`Draft saved (${draftKey}). Confirm to send.`);
@@ -1494,7 +1496,7 @@ export function LuminaPanel({
           if (call.name === "addReminder") {
             const text = String(call.args.text ?? "").trim();
             if (!text) return { ok: false, message: "Reminder text required." };
-            useReminderStore.getState().addReminder({ text, type: "user" });
+            useReminderStore.getState().addReminder({ text, type: "user", source: "lumina" });
             return { ok: true, message: `Locked in: ${text}` };
           }
           if (call.name === "clearReminders") {
@@ -1594,6 +1596,7 @@ export function LuminaPanel({
             useReminderStore.getState().addReminder({
               text: `Draft to ${to} · ${subject}\n${body.slice(0, 120)}…`,
               type: "draft_pending",
+              source: "lumina",
               dedupeKey: draftKey,
             });
             return { ok: true, message: `Draft saved (${draftKey}).`, data: { draftKey } };

@@ -1,15 +1,15 @@
 /**
- *  useReminderStore (PR #6) — Lumina's reminder strip / to-do queue.
+ *  useReminderStore — Lumina's reminder strip / to-do queue.
  *
- *  Sources of items:
- *    - User-directed reminders captured via Lumina chat ("remind me to ...")
- *    - Proactive situational-awareness suggestions from runSituationalChecks
- *    - Future: pending drafts, etc.
+ *  PR #12: manual-only policy. The ONLY supported insertion paths are
+ *    - Lumina tool calls (source: "lumina")  — Billy tells Lumina to add it
+ *    - Direct user UI actions (source: "user") — manual add buttons
+ *  All proactive / auto-import sources are removed or gated off. See
+ *  src/lib/situationalAwareness.ts for the legacy heuristics (now no-op
+ *  unless VITE_ENABLE_SITUATIONAL_AUTOIMPORT is explicitly set).
  *
  *  Persistence: localStorage is the hot path; the optional /api/memory
  *  endpoint (with ?kind=reminders) provides Firestore cross-device sync.
- *  Mirrors the same pattern as luminaMemory.ts so a fresh deploy without
- *  Firestore configured still works (local-only).
  */
 import { create } from "zustand";
 
@@ -21,6 +21,14 @@ export type ReminderType =
   | "new_jobs"
   | "galaxy_move";
 
+/**
+ *  Provenance of a reminder. Used by PR #12 cleanup migration to drop any
+ *  item that wasn't authored by Lumina or the user. Items missing this
+ *  field were created before PR #12 and are treated as "system-legacy"
+ *  (i.e. removed by the cleanup pass).
+ */
+export type ReminderSource = "lumina" | "user" | "system-legacy";
+
 export interface ReminderItem {
   id: string;
   type: ReminderType;
@@ -28,12 +36,13 @@ export interface ReminderItem {
   createdAt: number;
   completedAt?: number;
   dismissedAt?: number;
+  /** Provenance — see ReminderSource. Required for items added in PR #12+. */
+  source?: ReminderSource;
   /** Optional Smartsheet job id this reminder ties to (for context). */
   sourceJobId?: string;
   /**
-   *  Optional dedupe key used by the situational-awareness layer to avoid
-   *  resurfacing the same suggestion within 24h once dismissed. For user
-   *  reminders this is just the id.
+   *  Optional dedupe key used to avoid resurfacing the same item.
+   *  For user reminders this is derived from text+type if not supplied.
    */
   dedupeKey?: string;
 }
@@ -56,14 +65,9 @@ interface ReminderState {
   addReminder: (input: {
     text: string;
     type?: ReminderType;
+    source: ReminderSource;
     sourceJobId?: string;
     dedupeKey?: string;
-  }) => ReminderItem | null;
-  /** Add a situational suggestion if its dedupeKey isn't tombstoned or live. */
-  addSuggestion: (input: {
-    text: string;
-    sourceJobId?: string;
-    dedupeKey: string;
   }) => ReminderItem | null;
   completeReminder: (id: string) => void;
   dismissReminder: (id: string) => void;
@@ -76,7 +80,6 @@ interface ReminderState {
 }
 
 const LOCAL_KEY = "lumina:reminders:v1";
-const DISMISS_TTL_MS = 24 * 60 * 60 * 1000;
 const REMINDER_MAX = 200;
 
 function cryptoRandomId(): string {
@@ -147,9 +150,13 @@ export const useReminderStore = create<ReminderState>((set, get) => ({
   dismissed: [],
   hydrated: false,
 
-  addReminder: ({ text, type = "user", sourceJobId, dedupeKey }) => {
+  addReminder: ({ text, type = "user", source, sourceJobId, dedupeKey }) => {
     const cleaned = text.trim();
     if (!cleaned) return null;
+    // PR #12: hard-refuse anything that isn't Lumina- or user-authored.
+    // The store is the choke point — even if a future caller forgets to
+    // gate itself, nothing auto-import can land here.
+    if (source !== "lumina" && source !== "user") return null;
     // Dedupe by key (or by text+type if no key) on the live queue.
     const key = dedupeKey ?? `${type}:${cleaned.toLowerCase()}`;
     const exists = get().items.find(
@@ -162,6 +169,7 @@ export const useReminderStore = create<ReminderState>((set, get) => ({
       type,
       text: cleaned,
       createdAt: Date.now(),
+      source,
       sourceJobId,
       dedupeKey: key,
     };
@@ -172,19 +180,6 @@ export const useReminderStore = create<ReminderState>((set, get) => ({
       return next;
     });
     return item;
-  },
-
-  addSuggestion: ({ text, sourceJobId, dedupeKey }) => {
-    const now = Date.now();
-    // Skip if dismissed within the TTL window.
-    const tomb = get().dismissed.find((d) => d.dedupeKey === dedupeKey);
-    if (tomb && now - tomb.ts < DISMISS_TTL_MS) return null;
-    return get().addReminder({
-      text,
-      type: "lumina_suggestion",
-      sourceJobId,
-      dedupeKey,
-    });
   },
 
   completeReminder: (id) =>
@@ -271,40 +266,46 @@ export const useReminderStore = create<ReminderState>((set, get) => ({
 }));
 
 /**
- *  PR #10 one-shot cleanup: drop reminders that came from the old
- *  traffic-control heuristic (`sa:tc:<jobId>` dedupeKey) and the checklist
- *  items it spawned. The heuristic was removed because Smartsheet has no
- *  authoritative `Traffic Control Ordered` column, so it false-flagged
- *  every scheduled job. Runs once per browser via TC_CLEANUP_KEY.
+ *  PR #12 one-shot cleanup: wipe every reminder whose `source` is not
+ *  "lumina" or "user". Items written before PR #12 don't have a `source`
+ *  field at all — those are treated as "system-legacy" and removed.
+ *
+ *  Why: the operator explicitly does not want anything auto-imported into
+ *  the notification center. Existing auto-imported items (situational
+ *  suggestions, the old traffic-control heuristic, anything else without
+ *  provenance) are blown away on first load after this PR ships. Runs
+ *  exactly once per browser via NOTIF_AUTOIMPORT_CLEANUP_KEY.
  */
-const TC_CLEANUP_KEY = "tc_cleanup_v1";
+const NOTIF_AUTOIMPORT_CLEANUP_KEY = "notif_autoimport_cleanup_v1";
 
-function isTrafficControlReminder(item: ReminderItem): boolean {
-  if (item.dedupeKey?.startsWith("sa:tc:")) return true;
-  if (item.type === "lumina_suggestion" && /traffic\s*control/i.test(item.text)) return true;
-  return false;
+function isLuminaOrUser(item: ReminderItem): boolean {
+  return item.source === "lumina" || item.source === "user";
 }
 
-function runTrafficControlCleanup(snapshot: {
+function runAutoImportCleanup(snapshot: {
   items: ReminderItem[];
   dismissed: DismissedEntry[];
 }): { items: ReminderItem[]; dismissed: DismissedEntry[] } {
   try {
-    if (localStorage.getItem(TC_CLEANUP_KEY) === "done") return snapshot;
+    if (localStorage.getItem(NOTIF_AUTOIMPORT_CLEANUP_KEY) === "done") return snapshot;
   } catch {
     return snapshot;
   }
-  const filteredItems = snapshot.items.filter((i) => !isTrafficControlReminder(i));
-  const filteredDismissed = snapshot.dismissed.filter(
-    (d) => !d.dedupeKey.startsWith("sa:tc:"),
-  );
-  const next = { items: filteredItems, dismissed: filteredDismissed };
+  const filteredItems = snapshot.items.filter(isLuminaOrUser);
+  // Clear the dismissed tombstone ledger entirely — it only held keys
+  // for situational suggestions, which are no longer produced.
+  const next = { items: filteredItems, dismissed: [] };
   try {
-    localStorage.setItem(TC_CLEANUP_KEY, "done");
+    localStorage.setItem(NOTIF_AUTOIMPORT_CLEANUP_KEY, "done");
   } catch {
     /* quota / disabled — best effort */
   }
-  if (filteredItems.length !== snapshot.items.length) saveLocal(next);
+  if (
+    filteredItems.length !== snapshot.items.length ||
+    snapshot.dismissed.length > 0
+  ) {
+    saveLocal(next);
+  }
   return next;
 }
 
@@ -317,7 +318,7 @@ export function primeReminderStore(): void {
   primed = true;
   const local = loadLocal();
   if (local) {
-    const cleaned = runTrafficControlCleanup(local);
+    const cleaned = runAutoImportCleanup(local);
     useReminderStore.setState({
       items: cleaned.items,
       dismissed: cleaned.dismissed,
@@ -333,12 +334,13 @@ export function primeReminderStore(): void {
     .then((data: { record?: { items?: ReminderItem[]; dismissed?: DismissedEntry[] } | null } | null) => {
       const record = data?.record;
       if (!record) return;
+      // Remote may still hold legacy auto-imported items from older
+      // clients. Filter them out at the boundary so they never enter
+      // the local store.
       const items = (Array.isArray(record.items) ? record.items : []).filter(
-        (i) => !isTrafficControlReminder(i),
+        isLuminaOrUser,
       );
-      const dismissed = (Array.isArray(record.dismissed) ? record.dismissed : []).filter(
-        (d) => !d.dedupeKey.startsWith("sa:tc:"),
-      );
+      const dismissed = Array.isArray(record.dismissed) ? record.dismissed : [];
       useReminderStore.getState().hydrateFromRemote({ items, dismissed });
     })
     .catch(() => {
