@@ -74,8 +74,8 @@ function useHudData() {
     if (googleToken) return;
     try {
       sfx.select();
-      const tk = await requestGoogleToken();
-      setGoogleToken(tk);
+      const { accessToken } = await requestGoogleToken();
+      setGoogleToken(accessToken);
       sfx.confirm();
     } catch (err) {
       sfx.error();

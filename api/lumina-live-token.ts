@@ -48,6 +48,15 @@ aloud is far higher than the cost of saying "I don't have that".
 7. MEMORY block (delivered as a clientContent prefix) carries facts
    you committed to in prior sessions. Treat as ground truth about
    Billy's situation. Do NOT recite memory back unless asked.
+8. EMAIL TRUTH. Never invent the contents of an email. ALWAYS call
+   readThread before quoting body, sender, date, or any specific detail.
+9. EMAIL SEND. Never call sendReply without first stating the FULL draft
+   aloud and receiving an explicit "yes" / "send" / "confirm" from Billy.
+   If unsure, ask. Refuse if the user has not responded.
+10. The "North Sky" Gmail label is Billy's forwarded work mail from
+    wkeesee@northskycomm.com. Treat it as authoritative work signal.
+11. A single email can reference multiple WOs and therefore attach as
+    moons to multiple planets. This is correct, not a bug.
 
 You are LUMINA — the personal AI intelligence of Billy Keesee,
 Construction Supervisor at North Sky Communications. Your name is
@@ -255,6 +264,76 @@ const TOOLS = [
             },
           },
           required: ["fact"],
+        },
+      },
+      {
+        name: "listNorthSkyEmails",
+        description:
+          "List emails on the 'North Sky' Gmail label. USE-WHEN Billy asks 'what's new in email' / 'any new mail' / 'what's on north sky'. REQUIRED before answering any inbox question. MUST NOT: invent email content; this only returns subject + sender + snippet.",
+        parameters: {
+          type: "OBJECT",
+          properties: {
+            filter: { type: "STRING", description: "Optional Gmail-style query suffix, e.g. 'from:permits@city.gov'." },
+            unreadOnly: { type: "BOOLEAN" },
+            limit: { type: "NUMBER" },
+          },
+        },
+      },
+      {
+        name: "readThread",
+        description:
+          "Fetch the full thread for a Gmail threadId. REQUIRED before quoting any email body / sender / date. USE-WHEN Billy wants details on a specific thread. MUST NOT: paraphrase from snippet alone.",
+        parameters: {
+          type: "OBJECT",
+          properties: { threadId: { type: "STRING" } },
+          required: ["threadId"],
+        },
+      },
+      {
+        name: "summarizeThread",
+        description:
+          "Generate a TL;DR for a thread. USE-WHEN Billy says 'summarize that' or 'gist of the thread'. Caches per threadId; safe to call repeatedly.",
+        parameters: {
+          type: "OBJECT",
+          properties: { threadId: { type: "STRING" } },
+          required: ["threadId"],
+        },
+      },
+      {
+        name: "openMoonForJob",
+        description:
+          "Fly the camera to the planet matching a work order and open the newest matching email thread in the in-cockpit viewer. USE-WHEN Billy says 'show me email on WO X' or 'open the Bellevue thread'.",
+        parameters: {
+          type: "OBJECT",
+          properties: { wo: { type: "STRING" } },
+          required: ["wo"],
+        },
+      },
+      {
+        name: "draftReply",
+        description:
+          "Draft a reply to an email thread in the seductive-tactical voice. Returns the draft text; DOES NOT SEND. USE-WHEN Billy says 'draft a reply saying X'. MUST NOT: invent content from training-data priors — call readThread first if you do not have the thread loaded.",
+        parameters: {
+          type: "OBJECT",
+          properties: {
+            threadId: { type: "STRING" },
+            intent: { type: "STRING", description: "What Billy wants the reply to say, in his words." },
+          },
+          required: ["threadId", "intent"],
+        },
+      },
+      {
+        name: "sendReply",
+        description:
+          "Send a reply email. Handler REFUSES unless confirm === true. MUST NOT: call this without first stating the FULL draft aloud and receiving an explicit 'yes' / 'send' / 'confirm' from Billy. If unsure, ask.",
+        parameters: {
+          type: "OBJECT",
+          properties: {
+            threadId: { type: "STRING" },
+            body: { type: "STRING" },
+            confirm: { type: "BOOLEAN" },
+          },
+          required: ["threadId", "body", "confirm"],
         },
       },
     ],

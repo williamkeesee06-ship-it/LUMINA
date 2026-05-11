@@ -6,6 +6,8 @@ import { sfx } from "@/lib/audio";
 interface Props {
   size?: number;
   onActivate?: () => void;
+  /** Fires on double-click — used by LuminaDock to open the OrbAuthPanel. */
+  onDoubleActivate?: () => void;
 }
 
 /**
@@ -52,7 +54,7 @@ const PARTICLES = [
   { x: 50, y: 59, r: 0.35, d: 4.0 },
 ];
 
-export function Orb({ size = 44, onActivate }: Props) {
+export function Orb({ size = 44, onActivate, onDoubleActivate }: Props) {
   const orbMode = useUI((s) => s.orbMode);
   const isChatOpen = useUI((s) => s.isChatOpen);
   const setChatOpen = useUI((s) => s.setChatOpen);
@@ -70,6 +72,13 @@ export function Orb({ size = 44, onActivate }: Props) {
         sfx.wake();
         if (onActivate) onActivate();
         else setChatOpen(!isChatOpen);
+      }}
+      onDoubleClick={(e) => {
+        if (onDoubleActivate) {
+          e.preventDefault();
+          e.stopPropagation();
+          onDoubleActivate();
+        }
       }}
       className={clsx(
         "group relative flex items-center justify-center neon-focus rounded-full transition-transform duration-300",

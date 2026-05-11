@@ -5,17 +5,20 @@
  *
  *   1. The orb       — always visible, anchored bottom-left at 16px from
  *                      both edges. Click to open/close the chat panel.
+ *                      Double-click opens the OrbAuthPanel (sign-in,
+ *                      re-auth, scope review, account switch).
  *   2. The chat slab — slides out to the right of the orb when chat is
  *                      open. Sized 380×480 with a slight gap from the orb.
  *
- * The orb uses the existing <Orb> component. The chat content lives in
- * <LuminaPanel> which we render here positioned absolutely.
- *
- * Z-index sits above the HUD so the orb is never hidden behind anything.
+ * Also mounts the EmailThreadView so a clicked moon can slide its panel in
+ * over the cockpit regardless of which surface is currently active.
  */
+import { useState } from "react";
 import { useUI } from "@/store/uiStore";
 import { Orb } from "./Orb";
 import { LuminaPanel } from "./LuminaPanel";
+import { OrbAuthPanel } from "./OrbAuthPanel";
+import { EmailThreadView } from "./EmailThreadView";
 
 const ORB_SIZE = 80; // disc — outer halo box is +28 inside Orb
 const ORB_FRAME = ORB_SIZE + 28; // matches Orb.tsx frame calc
@@ -24,6 +27,7 @@ const ORB_OFFSET = 16; // px from screen edges
 export function LuminaDock() {
   const isChatOpen = useUI((s) => s.isChatOpen);
   const setChatOpen = useUI((s) => s.setChatOpen);
+  const [authOpen, setAuthOpen] = useState(false);
 
   return (
     <>
@@ -35,14 +39,32 @@ export function LuminaDock() {
         anchorLeft={ORB_OFFSET + ORB_FRAME + 12}
       />
 
+      {/* Orb Account Panel — opened via orb double-click. Anchored to sit
+          directly above the orb so it reads as belonging to it. */}
+      <OrbAuthPanel
+        open={authOpen}
+        onClose={() => setAuthOpen(false)}
+        anchorLeft={ORB_OFFSET}
+        anchorBottom={ORB_OFFSET + ORB_FRAME + 20}
+      />
+
+      {/* In-cockpit thread viewer — fixed right edge. Reads openThreadId
+          from the store; renders nothing until a moon is clicked. */}
+      <EmailThreadView />
+
       {/* Orb anchor — always visible. Bottom-left, fixed. */}
       <div
         className="pointer-events-none fixed z-[60] select-none"
         style={{ left: ORB_OFFSET, bottom: ORB_OFFSET }}
       >
         <div className="pointer-events-auto relative">
-          {/* The orb itself. Click toggles the chat. */}
-          <Orb size={ORB_SIZE} onActivate={() => setChatOpen(!isChatOpen)} />
+          {/* The orb itself. Click toggles the chat. Double-click opens
+              the OrbAuthPanel. */}
+          <Orb
+            size={ORB_SIZE}
+            onActivate={() => setChatOpen(!isChatOpen)}
+            onDoubleActivate={() => setAuthOpen((v) => !v)}
+          />
 
           {/* LUMINA wordmark beneath the orb so she always reads as a
               labeled presence, not an unidentified glow. Sized big enough
@@ -75,7 +97,7 @@ export function LuminaDock() {
                 textShadow: "0 0 4px rgba(91,243,255,0.5)",
               }}
             >
-              {isChatOpen ? "online · listening" : "tap to wake"}
+              {isChatOpen ? "online · listening" : "tap to wake · dbl-tap account"}
             </div>
           </div>
         </div>

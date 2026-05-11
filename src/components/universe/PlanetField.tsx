@@ -2,8 +2,9 @@ import { useMemo, useRef } from "react";
 import { useFrame } from "@react-three/fiber";
 import { Billboard, Text } from "@react-three/drei";
 import * as THREE from "three";
-import type { Job, Satellite } from "@/types";
+import type { Job, Moon, Satellite } from "@/types";
 import { GALAXY_COLORS } from "@/lib/statusMap";
+import { useUI } from "@/store/uiStore";
 
 /**
  * Per-category neon colors for orbiting satellites. Mirrors the chip
@@ -20,6 +21,47 @@ const SATELLITE_COLORS: Record<NonNullable<Satellite["category"]>, string> = {
   other: "#9CA3AF",      // neutral grey
 };
 const DEFAULT_SAT_COLOR = "#E5E7EB";
+
+/**
+ *  Sender-domain → moon color heuristic per the brief:
+ *    - @northskycomm.com → tactical white (work-internal)
+ *    - permit / govt-ish subject or sender → blue
+ *    - vendor heuristic (subcontractors, suppliers) → magenta
+ *    - everything else (customer) → amber
+ *    - unknown / empty → muted grey
+ */
+const MOON_COLORS = {
+  internal: "#F5F5F5",
+  permit: "#5BF3FF",
+  vendor: "#FF3D9A",
+  customer: "#FFC857",
+  unknown: "#9CA3AF",
+};
+
+function moonColor(moon: Moon): string {
+  const from = (moon.from ?? "").toLowerCase();
+  const subj = (moon.subject ?? "").toLowerCase();
+  if (!from && !subj) return MOON_COLORS.unknown;
+  if (from.includes("@northskycomm.com")) return MOON_COLORS.internal;
+  // Permit / govt heuristic — words that signal city / county / state mail.
+  if (
+    /\b(permit|cityof|county|gov|dot|township|municipal|usic|locate|811)\b/i.test(
+      from + " " + subj,
+    )
+  ) {
+    return MOON_COLORS.permit;
+  }
+  // Vendor heuristic — common subcontractor / supplier keywords. Loose on
+  // purpose, the worst case is amber vs magenta and the operator can tell.
+  if (
+    /\b(splicing|fiber|locate|crew|sub|underground|invoice|po\s*#|quote)\b/i.test(
+      from + " " + subj,
+    )
+  ) {
+    return MOON_COLORS.vendor;
+  }
+  return MOON_COLORS.customer;
+}
 
 interface Props {
   jobs: Job[];
@@ -132,6 +174,7 @@ export function PlanetField({ jobs, selectedJobId, onSelect, focusMode = false }
             hero={focusMode && selectedJobId === p.id}
             phase={i * 0.13}
             satellites={job?.satellites ?? []}
+            moons={job?.moons ?? []}
             onSelect={() => onSelect(p.id)}
           />
         );
@@ -150,6 +193,7 @@ function Planet({
   hero = false,
   phase,
   satellites,
+  moons,
   onSelect,
 }: {
   position: [number, number, number];
@@ -164,6 +208,7 @@ function Planet({
   hero?: boolean;
   phase: number;
   satellites: Satellite[];
+  moons: Moon[];
   onSelect: () => void;
 }) {
   const groupRef = useRef<THREE.Group>(null);
@@ -348,6 +393,150 @@ function Planet({
       {selected && satellites.length > 0 && (
         <SatelliteOrbit satellites={satellites} planetColor={color} />
       )}
+
+      {/* Moons — close-orbit email threads. Render at all zoom levels (not
+          just selected) so the operator sees mail-active planets across the
+          galaxy view; pulse if any is unread. Click → opens the in-cockpit
+          EmailThreadView. */}
+      {moons.length > 0 && (
+        <MoonOrbit moons={moons} planetColor={color} hero={hero} />
+      )}
+    </group>
+  );
+}
+
+/**
+ * MoonOrbit — close-orbit ring of email threads. Each moon is a small
+ * sphere with a halo, color-coded by sender domain. Unread moons emit a
+ * brighter pulse + bigger halo; read moons go matte. Click → openThread.
+ *
+ * Built off the SatelliteOrbit model but kept distinct because:
+ *   - Moons orbit closer than satellites (1.5× planet radius vs 3-5×)
+ *   - Color is sender-domain, not file-category
+ *   - Pulse intensity depends on unread state, not category
+ *   - Click semantics open the EmailThreadView, not the attachment viewer
+ */
+function MoonOrbit({
+  moons,
+  planetColor,
+  hero,
+}: {
+  moons: Moon[];
+  planetColor: string;
+  hero: boolean;
+}) {
+  const openThread = useUI((s) => s.openThread);
+  const layout = useMemo(() => {
+    const baseRadius = hero ? 0.92 : 0.78;
+    return moons.map((m, i) => {
+      const angle = (i / Math.max(1, moons.length)) * Math.PI * 2;
+      return {
+        moon: m,
+        baseAngle: angle,
+        radius: baseRadius,
+        tilt: 0.34,
+        speed: 0.22 + (i % 3) * 0.04,
+        color: moonColor(m),
+        phase: i * 0.41,
+      };
+    });
+  }, [moons, hero]);
+
+  const meshRefs = useRef<(THREE.Group | null)[]>([]);
+  const glowRefs = useRef<(THREE.Mesh | null)[]>([]);
+
+  useFrame((state) => {
+    const t = state.clock.elapsedTime;
+    layout.forEach((it, idx) => {
+      const m = meshRefs.current[idx];
+      if (!m) return;
+      const a = it.baseAngle + t * it.speed;
+      const x = Math.cos(a) * it.radius;
+      const yFlat = Math.sin(a) * it.radius;
+      const y = yFlat * Math.cos(it.tilt);
+      const z = yFlat * Math.sin(it.tilt);
+      m.position.set(x, y, z);
+      const g = glowRefs.current[idx];
+      if (g) {
+        const mat = g.material as THREE.MeshBasicMaterial;
+        // Unread moons pulse hard; read moons are nearly flat.
+        const tgt = it.moon.unread
+          ? 0.85 + Math.sin(t * 2.4 + it.phase) * 0.25
+          : 0.28;
+        mat.opacity += (tgt - mat.opacity) * 0.1;
+      }
+    });
+  });
+
+  // Faint orbital track — a single thin guide ring so the orbit reads as
+  // intentional, not chaotic. Color matches the parent planet.
+  const trackTilt = 0.34;
+  const trackRadius = hero ? 0.92 : 0.78;
+
+  return (
+    <group>
+      {/* Orbital guide ring */}
+      <group rotation={[trackTilt, 0, 0]}>
+        <mesh>
+          <ringGeometry args={[trackRadius - 0.004, trackRadius + 0.004, 96]} />
+          <meshBasicMaterial
+            color={planetColor}
+            transparent
+            opacity={0.08}
+            side={THREE.DoubleSide}
+            depthWrite={false}
+            blending={THREE.AdditiveBlending}
+            toneMapped={false}
+          />
+        </mesh>
+      </group>
+
+      {layout.map((it, i) => (
+        <group
+          key={it.moon.id}
+          ref={(g) => {
+            meshRefs.current[i] = g;
+          }}
+        >
+          {/* Halo — opacity animated per frame to pulse */}
+          <mesh
+            ref={(m) => {
+              glowRefs.current[i] = m;
+            }}
+            onClick={(e) => {
+              e.stopPropagation();
+              openThread(it.moon.threadId);
+            }}
+            onPointerOver={(e) => {
+              e.stopPropagation();
+              document.body.style.cursor = "url('/cursor-arrow-pointer.svg') 1 1, pointer";
+            }}
+            onPointerOut={() => {
+              document.body.style.cursor = "";
+            }}
+          >
+            <sphereGeometry args={[0.07, 12, 12]} />
+            <meshBasicMaterial
+              color={it.color}
+              transparent
+              opacity={0.7}
+              depthWrite={false}
+              blending={THREE.AdditiveBlending}
+              toneMapped={false}
+            />
+          </mesh>
+          {/* Bright core */}
+          <mesh
+            onClick={(e) => {
+              e.stopPropagation();
+              openThread(it.moon.threadId);
+            }}
+          >
+            <sphereGeometry args={[0.032, 12, 12]} />
+            <meshBasicMaterial color={it.color} toneMapped={false} />
+          </mesh>
+        </group>
+      ))}
     </group>
   );
 }

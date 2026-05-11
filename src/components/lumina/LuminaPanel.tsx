@@ -6,6 +6,9 @@ import {
   listCalendarEvents,
   createCalendarEvent,
   type CalEvent,
+  listGmail,
+  readGmailThread,
+  sendGmail,
 } from "@/lib/api";
 import { sfx } from "@/lib/audio";
 import { GALAXIES, type Galaxy } from "@/types";
@@ -38,7 +41,13 @@ interface ToolCall {
     | "lookupJob"
     | "listCalendar"
     | "createEvent"
-    | "rememberFact";
+    | "rememberFact"
+    | "listNorthSkyEmails"
+    | "readThread"
+    | "summarizeThread"
+    | "openMoonForJob"
+    | "draftReply"
+    | "sendReply";
   args: Record<string, unknown>;
 }
 
@@ -89,6 +98,9 @@ export function LuminaPanel({
   const selectedJobNumber = useUI((s) => s.selectedJobNumber);
   const viewMode = useUI((s) => s.viewMode);
   const googleToken = useUI((s) => s.googleToken);
+  const openThread = useUI((s) => s.openThread);
+  const setThreadSummary = useUI((s) => s.setThreadSummary);
+  const threadSummaries = useUI((s) => s.threadSummaries);
 
   // Initial greeting + persisted history replay
   const [messages, setMessages] = useState<DisplayMessage[]>(() => {
@@ -115,6 +127,13 @@ export function LuminaPanel({
   const [editingFactId, setEditingFactId] = useState<string | null>(null);
   const [editingFactText, setEditingFactText] = useState("");
   const [showSettings, setShowSettings] = useState(false);
+  /**
+   *  Memory inspector filter. "all" shows every fact; "email" shows only
+   *  auto-saved memories whose text begins with "Thread re:" (the format
+   *  written by EmailThreadView). Lets the operator audit what Lumina
+   *  picked up from her North Sky inbox.
+   */
+  const [memFilter, setMemFilter] = useState<"all" | "email">("all");
   const [liveMode, setLiveMode] = useState(false);
   const liveModeRef = useRef(false);
   const lastSpokenInputRef = useRef(false);
@@ -127,6 +146,33 @@ export function LuminaPanel({
   const liveSessionRef = useRef<LuminaLiveSession | null>(null);
 
   const memory = useMemo(() => loadMemory(), [memTick, isChatOpen]);
+
+  /**
+   *  Top 3 unread North Sky threads, derived from the jobs slice. Surfaced
+   *  to both chat and Live as a transient memory line so Lumina can answer
+   *  "what's new in email" without first hitting the API. Refreshes any
+   *  time jobs change (e.g. the watcher just attached a new moon).
+   */
+  const topUnreadEmailLines = useMemo(() => {
+    const flat: { wo: string; threadId: string; subject: string; from: string; date: string }[] = [];
+    for (const j of jobs) {
+      for (const m of j.moons ?? []) {
+        if (m.unread) {
+          flat.push({
+            wo: j.workOrder,
+            threadId: m.threadId,
+            subject: m.subject,
+            from: m.from,
+            date: m.date,
+          });
+        }
+      }
+    }
+    flat.sort((a, b) => (b.date > a.date ? 1 : -1));
+    return flat
+      .slice(0, 3)
+      .map((m) => `unread email · WO ${m.wo} · "${m.subject}" — ${m.from} (threadId ${m.threadId})`);
+  }, [jobs]);
 
   // Record a turn AND let the auto-save heuristics scan it for commitments,
   // status changes, and explicit "remember that ___" patterns. Centralizing
@@ -146,12 +192,26 @@ export function LuminaPanel({
       setMemTick((t) => t + 1);
       if (liveSessionRef.current?.isActive()) {
         liveSessionRef.current.pushMemory({
-          facts: rec.facts.map((f) => f.text),
+          facts: [...rec.facts.map((f) => f.text), ...topUnreadEmailLines],
           summary: rec.summary,
         });
       }
     });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // Push refreshed top-unread email lines into a live Live session whenever
+  // the jobs slice changes — keeps voice mode in lockstep with the watcher
+  // without waiting for the next chat turn.
+  useEffect(() => {
+    if (liveSessionRef.current?.isActive()) {
+      const mem = loadMemory();
+      liveSessionRef.current.pushMemory({
+        facts: [...mem.facts.map((f) => f.text), ...topUnreadEmailLines],
+        summary: mem.summary,
+      });
+    }
+  }, [topUnreadEmailLines]);
 
   useEffect(() => {
     if (isChatOpen) inputRef.current?.focus();
@@ -409,6 +469,168 @@ export function LuminaPanel({
         speak(confirmation, { onEnd: () => maybeRelisten() });
       }
       sfx.confirm();
+      return;
+    }
+    if (call.name === "listNorthSkyEmails") {
+      if (!googleToken) {
+        setMessages((m) => [
+          ...m,
+          {
+            role: "system",
+            text: "Email needs Google connect. Double-click the orb to sign in.",
+            failed: true,
+          },
+        ]);
+        return;
+      }
+      const filter = call.args.filter ? String(call.args.filter) : undefined;
+      const unreadOnly = Boolean(call.args.unreadOnly);
+      const limit = Math.min(Number(call.args.limit ?? 10) || 10, 25);
+      const res = await listGmail(googleToken, {
+        label: "North Sky",
+        query: filter,
+        unreadOnly,
+        limit,
+      });
+      if (!res.ok) {
+        setMessages((m) => [
+          ...m,
+          { role: "system", text: `Gmail: ${res.message}`, failed: true },
+        ]);
+        return;
+      }
+      if (res.messages.length === 0) {
+        const empty = "North Sky inbox is quiet — no new threads.";
+        setMessages((m) => [...m, { role: "model", text: empty }]);
+        recordTurn("model", empty);
+        return;
+      }
+      const lines = res.messages.slice(0, 8).map(
+        (m) => `• ${m.unread ? "● " : ""}${m.subject} — ${m.from}`,
+      );
+      const block = `North Sky — ${res.messages.length} thread${res.messages.length === 1 ? "" : "s"}:\n${lines.join("\n")}`;
+      setMessages((m) => [...m, { role: "model", text: block }]);
+      recordTurn("model", block);
+      return;
+    }
+    if (call.name === "readThread" || call.name === "summarizeThread") {
+      if (!googleToken) {
+        setMessages((m) => [
+          ...m,
+          { role: "system", text: "Email needs Google connect.", failed: true },
+        ]);
+        return;
+      }
+      const threadId = String(call.args.threadId ?? "");
+      if (!threadId) return;
+      const res = await readGmailThread(googleToken, threadId);
+      if (!res.ok) {
+        setMessages((m) => [
+          ...m,
+          { role: "system", text: `Gmail: ${res.message}`, failed: true },
+        ]);
+        return;
+      }
+      const last = res.messages[res.messages.length - 1];
+      if (!last) return;
+      if (call.name === "summarizeThread") {
+        const text = `${last.subject} — last: ${last.from} ${last.date}. ${(last.plainBody || last.snippet || "").slice(0, 220)}`;
+        setThreadSummary(threadId, text);
+        setMessages((m) => [...m, { role: "model", text }]);
+        recordTurn("model", text);
+      } else {
+        const detail = `${last.from} · ${last.date}\n${last.subject}\n\n${(last.plainBody || last.snippet || "").slice(0, 800)}`;
+        setMessages((m) => [...m, { role: "model", text: detail }]);
+        recordTurn("model", detail);
+      }
+      return;
+    }
+    if (call.name === "openMoonForJob") {
+      const wo = String(call.args.wo ?? "");
+      const norm = (s: string) => s.replace(/[\s\-_.]/g, "").toUpperCase();
+      const target = norm(wo);
+      const j = jobs.find((x) => norm(x.workOrder ?? "") === target);
+      if (!j) {
+        const msg = `No work order matching ${wo} in the universe.`;
+        setMessages((m) => [...m, { role: "model", text: msg }]);
+        recordTurn("model", msg);
+        return;
+      }
+      selectJob(j.id);
+      const newest = (j.moons ?? [])
+        .slice()
+        .sort((a, b) => (b.date > a.date ? 1 : -1))[0];
+      if (newest) {
+        openThread(newest.threadId, j.id);
+      } else {
+        const msg = `${j.workOrder}: no email threads attached yet.`;
+        setMessages((m) => [...m, { role: "model", text: msg }]);
+        recordTurn("model", msg);
+      }
+      return;
+    }
+    if (call.name === "draftReply") {
+      // Show the draft in the thread composer-ready text — surfaced as a
+      // chat message so the operator can copy/paste or open the thread.
+      const draft = String(call.args.intent ?? "");
+      const threadId = String(call.args.threadId ?? "");
+      const text = `Draft (${threadId}):\n${draft}`;
+      setMessages((m) => [...m, { role: "model", text }]);
+      recordTurn("model", text);
+      return;
+    }
+    if (call.name === "sendReply") {
+      const confirm = Boolean(call.args.confirm);
+      if (!confirm) {
+        const msg = "Refusing to send — no confirmation. State the draft and ask me first.";
+        setMessages((m) => [...m, { role: "system", text: msg, failed: true }]);
+        sfx.error();
+        return;
+      }
+      if (!googleToken) {
+        setMessages((m) => [
+          ...m,
+          { role: "system", text: "Send needs Google connect.", failed: true },
+        ]);
+        return;
+      }
+      const threadId = String(call.args.threadId ?? "");
+      const body = String(call.args.body ?? "");
+      if (!threadId || !body) return;
+      // Pull the last message in the thread so we can build a proper Reply.
+      const thread = await readGmailThread(googleToken, threadId);
+      if (!thread.ok) {
+        setMessages((m) => [
+          ...m,
+          { role: "system", text: `Gmail: ${thread.message}`, failed: true },
+        ]);
+        return;
+      }
+      const last = thread.messages[thread.messages.length - 1];
+      if (!last) return;
+      const toAddr = last.from.match(/<([^>]+)>/)?.[1] ?? last.from;
+      const res = await sendGmail(googleToken, {
+        threadId,
+        to: [toAddr],
+        subject: last.subject.startsWith("Re:") ? last.subject : `Re: ${last.subject}`,
+        body,
+        inReplyTo: last.messageId,
+        references: last.references
+          ? last.references.split(/\s+/).concat([last.messageId]).filter(Boolean)
+          : [last.messageId].filter(Boolean),
+      });
+      if (!res.ok) {
+        setMessages((m) => [
+          ...m,
+          { role: "system", text: `Send failed: ${res.message}`, failed: true },
+        ]);
+        sfx.error();
+        return;
+      }
+      const ack = "Reply sent.";
+      setMessages((m) => [...m, { role: "model", text: ack }]);
+      recordTurn("model", ack);
+      sfx.confirm();
     }
   };
 
@@ -436,7 +658,10 @@ export function LuminaPanel({
 
     const mem = loadMemory();
     const result = await sendToLumina(history, context, {
-      facts: mem.facts.map((f) => f.text),
+      // Persistent facts + top 3 unread North Sky threads. The transient
+      // email lines are merged in at request time, never written to durable
+      // memory — they refresh on every poll cycle.
+      facts: [...mem.facts.map((f) => f.text), ...topUnreadEmailLines],
       summary: mem.summary,
     });
     if (!result.ok) {
@@ -619,7 +844,7 @@ export function LuminaPanel({
       getInitialMemory: () => {
         const mem = loadMemory();
         return {
-          facts: mem.facts.map((f) => f.text),
+          facts: [...mem.facts.map((f) => f.text), ...topUnreadEmailLines],
           summary: mem.summary,
         };
       },
@@ -727,6 +952,124 @@ export function LuminaPanel({
               message: `Memory committed.`,
               data: { factId: factId ?? null },
             };
+          }
+          if (call.name === "listNorthSkyEmails") {
+            if (!googleToken) {
+              return { ok: false, message: "Not signed in to Google." };
+            }
+            const filter = call.args.filter ? String(call.args.filter) : undefined;
+            const unreadOnly = Boolean(call.args.unreadOnly);
+            const limit = Math.min(Number(call.args.limit ?? 10) || 10, 25);
+            const res = await listGmail(googleToken, {
+              label: "North Sky",
+              query: filter,
+              unreadOnly,
+              limit,
+            });
+            if (!res.ok) return { ok: false, message: res.message };
+            return {
+              ok: true,
+              data: {
+                count: res.messages.length,
+                messages: res.messages.slice(0, limit).map((m) => ({
+                  id: m.id,
+                  threadId: m.threadId,
+                  subject: m.subject,
+                  from: m.from,
+                  snippet: m.snippet,
+                  date: m.date,
+                  unread: m.unread,
+                })),
+              },
+            };
+          }
+          if (call.name === "readThread") {
+            if (!googleToken) return { ok: false, message: "Not signed in to Google." };
+            const threadId = String(call.args.threadId ?? "");
+            if (!threadId) return { ok: false, message: "Missing threadId." };
+            const res = await readGmailThread(googleToken, threadId);
+            if (!res.ok) return { ok: false, message: res.message };
+            return {
+              ok: true,
+              data: {
+                threadId: res.threadId,
+                messages: res.messages.map((m) => ({
+                  from: m.from,
+                  date: m.date,
+                  subject: m.subject,
+                  body: (m.plainBody || m.snippet || "").slice(0, 2000),
+                })),
+              },
+            };
+          }
+          if (call.name === "summarizeThread") {
+            if (!googleToken) return { ok: false, message: "Not signed in to Google." };
+            const threadId = String(call.args.threadId ?? "");
+            const cached = threadSummaries[threadId];
+            if (cached) return { ok: true, data: { summary: cached } };
+            const res = await readGmailThread(googleToken, threadId);
+            if (!res.ok) return { ok: false, message: res.message };
+            const last = res.messages[res.messages.length - 1];
+            if (!last) return { ok: false, message: "Empty thread." };
+            const summary = `${last.subject} — last: ${last.from} ${last.date}. ${(last.plainBody || last.snippet || "").slice(0, 220)}`;
+            setThreadSummary(threadId, summary);
+            return { ok: true, data: { summary } };
+          }
+          if (call.name === "openMoonForJob") {
+            const wo = String(call.args.wo ?? "");
+            const norm = (s: string) => s.replace(/[\s\-_.]/g, "").toUpperCase();
+            const target = norm(wo);
+            const j = jobs.find((x) => norm(x.workOrder ?? "") === target);
+            if (!j) return { ok: false, message: `Work order ${wo} not in universe.` };
+            selectJob(j.id);
+            const newest = (j.moons ?? [])
+              .slice()
+              .sort((a, b) => (b.date > a.date ? 1 : -1))[0];
+            if (newest) {
+              openThread(newest.threadId, j.id);
+              return {
+                ok: true,
+                message: `Opened newest moon on ${j.workOrder}.`,
+                data: { threadId: newest.threadId },
+              };
+            }
+            return { ok: true, message: `${j.workOrder} has no moons.`, data: { threadId: null } };
+          }
+          if (call.name === "draftReply") {
+            // Live mode keeps drafts in-conversation — return text for the
+            // model to speak, no UI side-effect.
+            const intent = String(call.args.intent ?? "");
+            return { ok: true, data: { draft: intent } };
+          }
+          if (call.name === "sendReply") {
+            const confirm = Boolean(call.args.confirm);
+            if (!confirm) {
+              return {
+                ok: false,
+                message: "Refusing to send — confirm flag is false. State the draft and get a yes first.",
+              };
+            }
+            if (!googleToken) return { ok: false, message: "Not signed in to Google." };
+            const threadId = String(call.args.threadId ?? "");
+            const body = String(call.args.body ?? "");
+            if (!threadId || !body) return { ok: false, message: "Missing threadId or body." };
+            const thread = await readGmailThread(googleToken, threadId);
+            if (!thread.ok) return { ok: false, message: thread.message };
+            const last = thread.messages[thread.messages.length - 1];
+            if (!last) return { ok: false, message: "Empty thread." };
+            const toAddr = last.from.match(/<([^>]+)>/)?.[1] ?? last.from;
+            const res = await sendGmail(googleToken, {
+              threadId,
+              to: [toAddr],
+              subject: last.subject.startsWith("Re:") ? last.subject : `Re: ${last.subject}`,
+              body,
+              inReplyTo: last.messageId,
+              references: last.references
+                ? last.references.split(/\s+/).concat([last.messageId]).filter(Boolean)
+                : [last.messageId].filter(Boolean),
+            });
+            if (!res.ok) return { ok: false, message: res.message };
+            return { ok: true, message: "Reply sent.", data: { messageId: res.messageId } };
           }
           return { ok: false, message: `Unknown tool: ${call.name}` };
         } catch (err) {
@@ -876,6 +1219,13 @@ export function LuminaPanel({
               </span>
               <div className="flex items-center gap-2">
                 <button
+                  onClick={() => setMemFilter((f) => (f === "all" ? "email" : "all"))}
+                  className={`uppercase ${memFilter === "email" ? "text-white" : "text-white/40 hover:text-white/80"}`}
+                  title="Filter to email-derived memories"
+                >
+                  {memFilter === "email" ? "email" : "all"}
+                </button>
+                <button
                   onClick={() => setShowSettings((v) => !v)}
                   className={`uppercase ${showSettings ? "text-white" : "text-white/40 hover:text-white/80"}`}
                 >
@@ -914,6 +1264,9 @@ export function LuminaPanel({
             ) : (
               <ul className="space-y-1.5">
                 {[...memory.facts]
+                  .filter((f) =>
+                    memFilter === "email" ? /^Thread re:/i.test(f.text) : true,
+                  )
                   .sort((a, b) => b.ts - a.ts)
                   .map((f: MemoryFact) => {
                     const isEditing = editingFactId === f.id;

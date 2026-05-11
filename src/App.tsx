@@ -11,6 +11,7 @@ import { FailureOverlay } from "@/components/effects/FailureOverlay";
 import { HyperspaceTransition } from "@/components/effects/HyperspaceTransition";
 import { JobFocusMode } from "@/components/focus/JobFocusMode";
 import { hydrateMemory } from "@/lib/luminaMemory";
+import { startWatcher, stopWatcher } from "@/lib/northSkyWatcher";
 
 export default function App() {
   // Boot-time memory hydration. Local cache primes synchronously inside
@@ -93,6 +94,18 @@ export default function App() {
       })
       .catch(() => {});
   }, [googleToken, setUnreadCount]);
+
+  // North Sky watcher — polls /api/gmail-list for moons every 60s while the
+  // user is signed in. Stops on sign-out. visibility-aware (handled inside
+  // the watcher), so a backgrounded tab doesn't burn quota.
+  useEffect(() => {
+    if (!googleToken) {
+      stopWatcher();
+      return;
+    }
+    startWatcher(googleToken);
+    return () => stopWatcher();
+  }, [googleToken]);
 
   // Global "F" hotkey — enter Focus mode for the currently selected job.
   // Bound at app level so the user can hit F from any view (universe,
