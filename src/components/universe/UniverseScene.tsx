@@ -118,10 +118,13 @@ export function UniverseScene() {
       {/* Shooting stars — tapered streaks every ~10s, no squares */}
       <Meteors intervalSec={11} poolSize={5} radius={95} dim={isPlanetView} />
       {/* Cosmic dust / swirl — blends galaxies into surrounding space */}
-      {/* Cosmic dust now elongates per galaxy into long stretched streaks
-          rotated to a unique angle each — fills the void between clusters
-          with drifting bands instead of concentric circles of bokeh. */}
-      <CosmicDust perGalaxy={220} ambient={1200} dim={isPlanetView} />
+      {/* PR #7: each galaxy is now a large volumetric nebula (~55u radius
+          footprint, ~3.9× the previous 14u) with power-law density falloff
+          and sin-noise filaments — bright dense core fading to long wispy
+          outer arms. Particle count quadrupled to keep the cloud dense as
+          it expands. Neighboring nebulae intentionally bleed into each
+          other in the middle of the field. */}
+      <CosmicDust perGalaxy={900} ambient={1400} dim={isPlanetView} />
 
       {/* Universe layer — always render, fade out when entering galaxy */}
       <Suspense fallback={null}>
