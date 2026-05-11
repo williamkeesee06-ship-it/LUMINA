@@ -2,6 +2,7 @@ import { useFrame, useThree } from "@react-three/fiber";
 import { useEffect, useRef } from "react";
 import * as THREE from "three";
 import { useUI } from "@/store/uiStore";
+import type { Galaxy } from "@/types";
 import { GALAXY_POSITIONS } from "./galaxyLayout";
 
 /**
@@ -15,9 +16,14 @@ import { GALAXY_POSITIONS } from "./galaxyLayout";
  *  - Any new viewMode change (entering a galaxy, selecting a planet) cancels
  *    free-fly and resumes scripted framing — feels intentional.
  *
- * Controls:
- *  - Left-drag (or touch-drag): rotate view (yaw/pitch)
- *  - Right-drag: pan camera on the horizontal plane
+ * Controls — drag-the-world convention (iPad / Google Maps / Figma): the
+ * world moves WITH the cursor when dragging. This is what most users
+ * intuitively expect on a canvas.
+ *  - Left-drag (or touch-drag): rotate view — drag right and the world
+ *    slides right (camera yaws left). Signs are inverted from a traditional
+ *    "orbit controls" rig on purpose.
+ *  - Right-drag: pan the world — drag right and the world pans right with
+ *    the cursor.
  *  - WASD: strafe / forward+back
  *  - Q / E: down / up
  *  - Shift: 3x speed boost
@@ -57,6 +63,13 @@ export function CameraRig() {
   const dragTravel = useRef(0);
   const keys = useRef<Record<string, boolean>>({});
   const wheelImpulse = useRef(0);
+
+  // Auto-enter-galaxy on close approach. Tracks last-frame distance to the
+  // nearest galaxy so we only auto-enter while CLOSING (don't trip when
+  // already inside a 45u sphere and drifting). Resets when viewMode flips
+  // back to "universe" or distance exceeds the release threshold.
+  const lastNearestDist = useRef<number>(Infinity);
+  const autoEnterArmed = useRef<boolean>(true);
 
   // ---- Hyperspace warp triggers ----
   useEffect(() => {
@@ -158,10 +171,12 @@ export function CameraRig() {
         /* no-op */
       }
       if (dragButton.current === "left") {
-        // LMB drag → rotate (yaw / pitch). Conventional 3D-app mapping.
+        // LMB drag → rotate (yaw / pitch), drag-the-world convention:
+        // pull the world WITH the cursor. Drag right and the world slides
+        // right (camera yaws left). Signs inverted from orbit-controls.
         const sens = 0.0035;
-        yaw.current += dx * sens;
-        pitch.current += dy * sens;
+        yaw.current -= dx * sens;
+        pitch.current -= dy * sens;
         const lim = Math.PI / 2 - 0.05;
         pitch.current = Math.max(-lim, Math.min(lim, pitch.current));
       } else {
@@ -188,9 +203,10 @@ export function CameraRig() {
         const rightFlat = new THREE.Vector3()
           .crossVectors(forwardFlat, new THREE.Vector3(0, 1, 0))
           .normalize();
-        // Drag right → pan left (push the world right). Drag down → pan back.
-        camera.position.addScaledVector(rightFlat, -dx * panScale);
-        camera.position.addScaledVector(forwardFlat, -dy * panScale);
+        // Drag-the-world pan (iPad / Maps / Figma): the world moves WITH
+        // the cursor. Signs match the brief — both axes positive.
+        camera.position.addScaledVector(rightFlat, dx * panScale);
+        camera.position.addScaledVector(forwardFlat, dy * panScale);
       }
     };
 
@@ -369,6 +385,47 @@ export function CameraRig() {
       const R = 500;
       const dist = camera.position.length();
       if (dist > R) camera.position.multiplyScalar(R / dist);
+
+      // Auto-enter galaxy on close approach. When in universe view, free-
+      // flying, and the camera gets within 45u of a galaxy center while
+      // CLOSING, silently flip to galaxy mode so PlanetField mounts. No
+      // hyperspace warp — the user is already physically there.
+      if (viewMode === "universe") {
+        let nearestG: string | null = null;
+        let nearestD = Infinity;
+        const galaxies = Object.entries(GALAXY_POSITIONS) as [string, [number, number, number]][];
+        for (const [name, p] of galaxies) {
+          const dx2 = camera.position.x - p[0];
+          const dy2 = camera.position.y - p[1];
+          const dz2 = camera.position.z - p[2];
+          const d = Math.sqrt(dx2 * dx2 + dy2 * dy2 + dz2 * dz2);
+          if (d < nearestD) {
+            nearestD = d;
+            nearestG = name;
+          }
+        }
+        // Release the trigger once the camera pulls well outside the
+        // entry sphere, so a slow drift through the bubble doesn't fire.
+        if (nearestD > 80) autoEnterArmed.current = true;
+        const closing = nearestD < lastNearestDist.current;
+        if (
+          autoEnterArmed.current &&
+          closing &&
+          nearestD < 45 &&
+          nearestG
+        ) {
+          autoEnterArmed.current = false;
+          // Silent entry — call enterGalaxy which sets both focusedGalaxy
+          // and viewMode="galaxy". This skips the hyperspace warp (which
+          // is wired through diveToMap / mapTransition, not enterGalaxy).
+          useUI.getState().enterGalaxy(nearestG as Galaxy);
+        }
+        lastNearestDist.current = nearestD;
+      } else {
+        // Reset tracker when not in universe view so re-entry works clean.
+        lastNearestDist.current = Infinity;
+        autoEnterArmed.current = true;
+      }
       return;
     }
 

@@ -15,136 +15,142 @@ interface Props {
 }
 
 /**
- * Soft cosmic-dust layer that swirls slowly and blends the galaxies into
- * surrounding space. Two contributions:
- *   1. Per-galaxy haze — particles tinted with each galaxy color, clustered
- *      around its position with a soft falloff so the nebulae feel like they
- *      "bleed" outward instead of sitting on a black void.
- *   2. Ambient sweep — neutral cyan/violet motes drifting through the whole
- *      ring, giving a sense of currents in interstellar dust.
- *
- * Uses a circular sprite + additive blending so points never look square.
+ * Real-nebula filaments. PR #9 throws out the PR #8 fuzzy-bokeh approach:
+ * size 1.9 + sizeAttenuation made every particle blow up to a screen-filling
+ * colored disk on close approach. Now:
+ *  - particles distributed along 2-3 logarithmic spiral arms per galaxy with
+ *    sin-noise perturbation so the cloud reads as wispy filaments, not a ball.
+ *  - tiny world-size points (0.35) with a procedural radial-alpha CanvasTexture
+ *    so each grain stays a soft mote rather than a hard disk.
+ *  - per-particle color brightness × 0.45 so they read as gas, not bulbs.
  */
 export function CosmicDust({ perGalaxy = 2200, ambient = 1200, dim = false }: Props) {
   const ref = useRef<THREE.Points>(null);
   const matRef = useRef<THREE.PointsMaterial>(null);
 
-  // Build a small circular soft-falloff sprite once.
+  // Soft radial-falloff alpha sprite. pow(1-r, 2.5) gives a long gentle tail so
+  // each particle dissolves into the next instead of clipping a hard disk edge.
   const sprite = useMemo(() => {
-    const size = 64;
+    const s = 64;
     const canvas = document.createElement("canvas");
-    canvas.width = canvas.height = size;
+    canvas.width = canvas.height = s;
     const ctx = canvas.getContext("2d")!;
-    const grad = ctx.createRadialGradient(size / 2, size / 2, 0, size / 2, size / 2, size / 2);
-    grad.addColorStop(0, "rgba(255,255,255,1)");
-    grad.addColorStop(0.35, "rgba(255,255,255,0.55)");
-    grad.addColorStop(1, "rgba(255,255,255,0)");
-    ctx.fillStyle = grad;
-    ctx.fillRect(0, 0, size, size);
+    const img = ctx.createImageData(s, s);
+    const cx = s / 2;
+    const cy = s / 2;
+    const maxR = s / 2;
+    for (let y = 0; y < s; y++) {
+      for (let x = 0; x < s; x++) {
+        const dx = (x - cx) / maxR;
+        const dy = (y - cy) / maxR;
+        const r = Math.min(1, Math.sqrt(dx * dx + dy * dy));
+        const a = Math.pow(1 - r, 2.5);
+        const i = (y * s + x) * 4;
+        img.data[i] = 255;
+        img.data[i + 1] = 255;
+        img.data[i + 2] = 255;
+        img.data[i + 3] = Math.max(0, Math.min(255, Math.floor(a * 255)));
+      }
+    }
+    ctx.putImageData(img, 0, 0);
     const tex = new THREE.CanvasTexture(canvas);
+    tex.minFilter = THREE.LinearFilter;
+    tex.magFilter = THREE.LinearFilter;
     tex.needsUpdate = true;
     return tex;
   }, []);
 
-  const { positions, colors, sizes } = useMemo(() => {
+  const { positions, colors } = useMemo(() => {
     const galaxyEntries = Object.entries(GALAXY_POSITIONS) as [Galaxy, [number, number, number]][];
     const total = galaxyEntries.length * perGalaxy + ambient;
     const pos = new Float32Array(total * 3);
     const col = new Float32Array(total * 3);
-    const siz = new Float32Array(total);
 
     let idx = 0;
 
-    // 1. Per-galaxy nebula — each cluster is a large volumetric structure
-    //    with a soft bright core that fades through diffuse outer haze
-    //    that spreads HALFWAY to its neighbors. PR #8: galaxies are 120u
-    //    apart, so footprint is pushed to 100u and density falloff softened
-    //    from pow(rand, 2.2) → pow(rand, 1.15) so the outer 70% of the
-    //    radius has real particle density instead of being a thin streak.
-    //    Particle count more than doubled (900 → 2200/galaxy) so density
-    //    reads all the way out.
     galaxyEntries.forEach(([g, p]) => {
       const c = new THREE.Color(GALAXY_COLORS[g]);
-      // Per-galaxy elongation parameters (deterministic per galaxy name).
+      // Deterministic per-galaxy seed → unique arm orientation + phase.
       const seed = (g.charCodeAt(0) * 13 + g.charCodeAt(g.length - 1) * 7) % 360;
       const rot = (seed / 360) * Math.PI * 2;
-      // Aspect ratio for the ellipsoid: long axis is ~3× short axis so each
-      // galaxy reads as elongated / sheet-like, not spherical.
-      const ax = 2.4 + ((seed % 40) / 40) * 1.6; // 2.4..4.0 long axis
-      const az = 0.65 + ((seed % 17) / 17) * 0.55; // 0.65..1.2 short axis
-      const ay = 0.6; // vertical squash so the cloud lays in a thick disk
       const cosR = Math.cos(rot);
       const sinR = Math.sin(rot);
-      // Phase offsets for cheap 3-octave sin-noise wisps (per-galaxy unique).
+
+      // 2-3 logarithmic spiral arms. Galaxy centers stay at 120u — DO NOT
+      // touch GALAXY_POSITIONS. Arm length is capped so adjacent clouds
+      // overlap softly without reaching the next galaxy center.
+      const armCount = 2 + (seed % 2); // 2 or 3 arms
+      // Logarithmic spiral: r(θ) = a * exp(b θ). b controls tightness.
+      const a = 2.2;
+      const b = 0.32 + ((seed % 11) / 11) * 0.12;
+      // Cap arm radius around 60u so cloud reach is ~half the gap to neighbor.
+      const maxR = 60;
+      // Per-galaxy noise phases
       const nPhaseA = (seed * 0.137) % (Math.PI * 2);
       const nPhaseB = (seed * 0.311) % (Math.PI * 2);
-      // Footprint controls overall nebula radius. PR #8 bumps to 100u — each
-      // galaxy's haze extends nearly halfway to its 120u-distant neighbor,
-      // and combined with the elongation factor (ax up to 4) the long-axis
-      // tip can reach ~400u. Adjacent galaxies' outer clouds visibly overlap
-      // and bleed together in the middle of the field — that overlap is
-      // intentional and the explicit user ask for the third correction round.
-      const footprint = 100;
+
       for (let i = 0; i < perGalaxy; i++) {
-        // Softer radial distribution: pow 1.15 (was 2.2) so the outer 70%
-        // of the radius has substantial particle density. Core brightness
-        // is preserved via the brightness/alpha shading below — particle
-        // COUNT is now much more uniformly spread.
-        const u = Math.pow(Math.random(), 1.15);
-        const theta = Math.random() * Math.PI * 2;
-        const phi = (Math.random() - 0.5) * 1.0;
-        // Local frame coords — long axis = local X.
-        let lx = Math.cos(theta) * u * ax;
-        let ly = Math.sin(phi) * u * ay;
-        let lz = Math.sin(theta) * u * az;
-        // Cheap 3-octave sin-based "noise" offset to introduce filamentary
-        // wisps. Amplitude grows with radius so the core stays clean and the
-        // outer reaches break into sheet-like structures.
-        const nAmp = 0.18 + u * 0.55;
-        const nx = Math.sin(lx * 1.7 + nPhaseA) * Math.cos(lz * 1.3 + nPhaseB);
-        const ny = Math.sin(lz * 2.1 + nPhaseA) * 0.4;
-        const nz = Math.cos(lx * 1.9 + nPhaseB) * Math.sin(ly * 2.4);
+        const armIdx = i % armCount;
+        const armOffset = (armIdx / armCount) * Math.PI * 2;
+        // θ along arm. Bias toward larger θ so density grows outward, then
+        // pow falloff thins the very tips.
+        const tParam = Math.pow(Math.random(), 0.85);
+        const theta = tParam * (Math.PI * 2.6) + armOffset;
+        let r = a * Math.exp(b * theta);
+        if (r > maxR) r = maxR * (0.9 + Math.random() * 0.1);
+
+        // Position on arm centerline.
+        let lx = Math.cos(theta) * r;
+        let lz = Math.sin(theta) * r;
+        // Vertical thickness — thin disk + slight bulge near core.
+        let ly = (Math.random() - 0.5) * (2.0 + r * 0.08);
+
+        // Cross-arm dispersion: jitter perpendicular to the arm direction so
+        // each arm is a thick wispy band, not a 1px line.
+        const tangentX = -Math.sin(theta);
+        const tangentZ = Math.cos(theta);
+        const normalX = Math.cos(theta);
+        const normalZ = Math.sin(theta);
+        const dispersion = (Math.random() - 0.5) * (3 + r * 0.18);
+        lx += normalX * dispersion;
+        lz += normalZ * dispersion;
+        // Tangential jitter too, so the arm has filamentary breaks
+        const tangJitter = (Math.random() - 0.5) * r * 0.05;
+        lx += tangentX * tangJitter;
+        lz += tangentZ * tangJitter;
+
+        // Sin-noise perturbation — gives sheet-like wisps inside each arm.
+        const nAmp = 0.6 + (r / maxR) * 3.0;
+        const nx = Math.sin(lx * 0.18 + nPhaseA) * Math.cos(lz * 0.14 + nPhaseB);
+        const ny = Math.sin(lz * 0.22 + nPhaseA) * 0.4;
+        const nz = Math.cos(lx * 0.19 + nPhaseB) * Math.sin(ly * 0.25);
         lx += nx * nAmp;
-        ly += ny * nAmp * 0.35;
+        ly += ny * nAmp * 0.5;
         lz += nz * nAmp;
-        // Scale to full nebula footprint.
-        lx *= footprint;
-        const lyOut = ly * footprint;
-        lz *= footprint;
-        // Rotate around Y so each galaxy's long axis points uniquely.
+
+        // Rotate the whole nebula by per-galaxy seed so each looks unique.
         const wx = lx * cosR - lz * sinR;
         const wz = lx * sinR + lz * cosR;
         pos[idx * 3] = p[0] + wx;
-        pos[idx * 3 + 1] = p[1] + lyOut;
+        pos[idx * 3 + 1] = p[1] + ly;
         pos[idx * 3 + 2] = p[2] + wz;
 
-        // Hot-white core fading to status color outward. Because particle
-        // count is now ~uniform across the radius, the bright-core look is
-        // carried by COLOR/ALPHA shading rather than concentration — coreMix
-        // drops off quickly so only the inner ~30% reads as a hot white core.
-        const coreMix = Math.max(0, 1 - u * 2.6);
-        const fade = 0.45 + Math.random() * 0.5;
-        col[idx * 3] = c.r * fade + coreMix * 0.55 + 0.06;
-        col[idx * 3 + 1] = c.g * fade + coreMix * 0.55 + 0.06;
-        col[idx * 3 + 2] = c.b * fade + coreMix * 0.55 + 0.06;
+        // Color: per-particle status tint * 0.45 brightness multiplier (gas,
+        // not solid disks). Core is brighter; tips fade toward black.
+        const radial = Math.min(1, r / maxR);
+        const fade = 0.55 + Math.random() * 0.45;
+        const coreLift = (1 - radial) * 0.35;
+        const bright = 0.45;
+        col[idx * 3] = (c.r * fade + coreLift) * bright;
+        col[idx * 3 + 1] = (c.g * fade + coreLift) * bright;
+        col[idx * 3 + 2] = (c.b * fade + coreLift) * bright;
 
-        // Smaller, more uniform haze grains so the cloud reads as diffuse
-        // cosmic haze rather than distinct puffs. Outer wisps stay tiny so
-        // the haze feathers; core gets a slight size lift so the bright
-        // center is still readable as a galactic nucleus.
-        const baseSize = 0.28 + (1 - u) * 0.35;
-        siz[idx] =
-          Math.random() < 0.008
-            ? baseSize * 1.8 + Math.random() * 0.3
-            : baseSize + Math.random() * 0.18;
         idx++;
       }
     });
 
-    // 2. Ambient sweep — broader, sparser, spread across a wider ring so
-    //    the void between galaxies has texture.
+    // Ambient sweep — sparse drifting motes through the void between galaxies.
     for (let i = 0; i < ambient; i++) {
-      // Ring spans 14..78 units (was 18..56) for a wider field.
       const r = 14 + Math.pow(Math.random(), 0.65) * 64;
       const theta = Math.random() * Math.PI * 2;
       const y = (Math.random() - 0.5) * 22;
@@ -152,44 +158,35 @@ export function CosmicDust({ perGalaxy = 2200, ambient = 1200, dim = false }: Pr
       pos[idx * 3 + 1] = y;
       pos[idx * 3 + 2] = Math.sin(theta) * r;
 
-      // Neutral whites with hints of cyan / violet / pink.
       const tint = Math.random();
       let r2 = 0.62, g2 = 0.7, b2 = 0.9;
       if (tint < 0.25) {
-        r2 = 0.36; g2 = 0.85; b2 = 1.0;        // cyan
+        r2 = 0.36; g2 = 0.85; b2 = 1.0;
       } else if (tint < 0.45) {
-        r2 = 0.78; g2 = 0.55; b2 = 1.0;        // violet
+        r2 = 0.78; g2 = 0.55; b2 = 1.0;
       } else if (tint < 0.55) {
-        r2 = 1.0; g2 = 0.55; b2 = 0.78;        // soft pink
+        r2 = 1.0; g2 = 0.55; b2 = 0.78;
       } else {
         const b = 0.55 + Math.random() * 0.35;
-        r2 = b; g2 = b; b2 = b;                 // dust white
+        r2 = b; g2 = b; b2 = b;
       }
-      col[idx * 3] = r2;
-      col[idx * 3 + 1] = g2;
-      col[idx * 3 + 2] = b2;
-
-      // Smaller ambient mote sizes — these should never read as discrete
-      // bokeh balls; they're atmospheric grain.
-      siz[idx] = 0.18 + Math.random() * 0.35;
+      const bright = 0.45;
+      col[idx * 3] = r2 * bright;
+      col[idx * 3 + 1] = g2 * bright;
+      col[idx * 3 + 2] = b2 * bright;
       idx++;
     }
 
-    return { positions: pos, colors: col, sizes: siz };
+    return { positions: pos, colors: col };
   }, [perGalaxy, ambient]);
 
-  // Slow swirl around Y axis with very gentle wobble — feels like a current.
   useFrame((state, delta) => {
     if (ref.current) {
       ref.current.rotation.y += delta * 0.012;
       ref.current.rotation.x = Math.sin(state.clock.elapsedTime * 0.04) * 0.03;
     }
     if (matRef.current) {
-      // Planet view goes nearly black — the user wants the focused planet
-      // alone with just "faint dust and stars" behind it. God-view opacity
-      // pulled down further (0.24 → 0.18) now that particle count is 2200/galaxy
-      // — the cloud reads as diffuse haze, not blown-out additive bokeh.
-      const target = dim ? 0.012 : 0.18;
+      const target = dim ? 0.01 : 0.55;
       matRef.current.opacity += (target - matRef.current.opacity) * Math.min(1, delta * 4);
     }
   });
@@ -199,16 +196,16 @@ export function CosmicDust({ perGalaxy = 2200, ambient = 1200, dim = false }: Pr
       <bufferGeometry>
         <bufferAttribute attach="attributes-position" args={[positions, 3]} />
         <bufferAttribute attach="attributes-color" args={[colors, 3]} />
-        <bufferAttribute attach="attributes-size" args={[sizes, 1]} />
       </bufferGeometry>
       <pointsMaterial
         ref={matRef}
         map={sprite}
-        size={1.9}
+        alphaMap={sprite}
+        size={0.35}
         sizeAttenuation
         vertexColors
         transparent
-        opacity={0.18}
+        opacity={0.55}
         depthWrite={false}
         blending={THREE.AdditiveBlending}
       />
