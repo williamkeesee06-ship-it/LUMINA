@@ -92,6 +92,33 @@ export interface UIState {
   isMapOpen: boolean;
 
   /**
+   *  Email moon viewer state. When `openThreadId` is set, the
+   *  EmailThreadView panel slides in over the cockpit and the camera
+   *  focuses on the parent planet. Cleared by the panel's close button or
+   *  any selectJob/enterGalaxy transition that takes the user elsewhere.
+   *  `openThreadJobId` is the planet the moon belongs to so the panel can
+   *  surface the WO and the parent satellites.
+   */
+  openThreadId: string | null;
+  openThreadJobId: string | null;
+
+  /**
+   *  Cached per-thread auto-summaries (in-memory only — Lumina's durable
+   *  memory persists the same summary via rememberFact in luminaMemory).
+   *  Lets us avoid re-summarizing a thread the operator just opened.
+   */
+  threadSummaries: Record<string, string>;
+
+  /**
+   *  Account state surfaced by the Orb Auth Panel — email + picture + the
+   *  scope set Google actually granted. Filled in after sign-in / re-auth.
+   *  Independent of `googleToken` so an expired token can keep the panel
+   *  showing the right user while the OAuth flow reruns.
+   */
+  googleAccount: { email: string; name?: string; picture?: string } | null;
+  googleGrantedScopes: string[];
+
+  /**
    *  Job Focus Mode — fullscreen 50/50 overlay locked to a single job.
    *  When set, the universe and tactical map step aside and the operator
    *  works on this one work order with every Smartsheet field editable
@@ -144,6 +171,22 @@ export interface UIState {
   attachSatellites: (jobId: string, sats: Satellite[], folderId?: string | null) => void;
   // Gmail email threads (moons) — no folder concept
   attachMoons: (jobId: string, moons: Moon[]) => void;
+  /** Open the in-cockpit EmailThreadView for a specific thread. Resolves the
+   *  parent planet (job) automatically by searching every job's moons. */
+  openThread: (threadId: string, jobId?: string | null) => void;
+  closeThread: () => void;
+  /** Mark a moon read locally — used after the user opens or replies in the
+   *  in-cockpit thread viewer so the pulsing glow turns matte without a
+   *  second Gmail fetch. */
+  markMoonRead: (threadId: string) => void;
+  /** Cache a per-thread summary in-memory (separate from durable Lumina
+   *  memory persistence). */
+  setThreadSummary: (threadId: string, summary: string) => void;
+  /** Set / clear the signed-in Google account profile. */
+  setGoogleAccount: (
+    account: { email: string; name?: string; picture?: string } | null,
+  ) => void;
+  setGoogleGrantedScopes: (scopes: string[]) => void;
   toggleChecklistItem: (jobId: string, key: keyof JobChecklist) => void;
   setChecklistText: (jobId: string, key: keyof JobChecklist, value: string) => void;
   /** Local update to a job's NSC Project Notes — persistence to Smartsheet
@@ -215,6 +258,11 @@ export const useUI = create<UIState>((set, get) => ({
   showHistoryOnMap: false,
 
   focusedJobId: null,
+  openThreadId: null,
+  openThreadJobId: null,
+  threadSummaries: {},
+  googleAccount: null,
+  googleGrantedScopes: [],
 
   setJobs: (jobs) => set({ jobs }),
   setLoading: (loading) => set({ loading }),
@@ -375,6 +423,55 @@ export const useUI = create<UIState>((set, get) => ({
           : j,
       ),
     })),
+
+  openThread: (threadId, jobId = null) => {
+    const state = get();
+    let parentId = jobId;
+    if (!parentId) {
+      for (const j of state.jobs) {
+        if (j.moons?.some((m) => m.threadId === threadId)) {
+          parentId = j.id;
+          break;
+        }
+      }
+    }
+    // Focus the parent planet so the camera lands on it. selectJob handles
+    // viewMode / focusedGalaxy bookkeeping.
+    if (parentId) {
+      const job = state.jobs.find((j) => j.id === parentId);
+      if (job) {
+        set({
+          selectedJobId: job.id,
+          selectedJobNumber: job.workOrder,
+          viewMode: "planet",
+          focusedGalaxy: job.status,
+          activeStatus: job.status,
+        });
+      }
+    }
+    set({ openThreadId: threadId, openThreadJobId: parentId });
+    sfx.confirm();
+  },
+
+  closeThread: () => set({ openThreadId: null, openThreadJobId: null }),
+
+  markMoonRead: (threadId) =>
+    set((s) => ({
+      jobs: s.jobs.map((j) => ({
+        ...j,
+        moons: j.moons?.map((m) =>
+          m.threadId === threadId ? { ...m, unread: false } : m,
+        ),
+      })),
+    })),
+
+  setThreadSummary: (threadId, summary) =>
+    set((s) => ({
+      threadSummaries: { ...s.threadSummaries, [threadId]: summary },
+    })),
+
+  setGoogleAccount: (googleAccount) => set({ googleAccount }),
+  setGoogleGrantedScopes: (googleGrantedScopes) => set({ googleGrantedScopes }),
 
   toggleChecklistItem: (jobId, key) =>
     set((s) => ({
