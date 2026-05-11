@@ -55,16 +55,17 @@ export function UniverseScene() {
     <div className="absolute inset-0" style={{ zIndex: 0 }}>
     <Canvas
       gl={{ antialias: true, powerPreference: "high-performance" }}
-      camera={{ position: [0, 52, 150], fov: 52, near: 0.1, far: 1200 }}
+      camera={{ position: [0, 65, 205], fov: 52, near: 0.1, far: 1200 }}
       dpr={[1, 1.75]}
     >
       <color attach="background" args={["#02050a"]} />
-      {/* Fog pushed out again to match the wider galaxy ring (radius 120 vs
-          PR #5's 78). At standoff Z=150 the far edge galaxies sit roughly
-          240 from camera, so fog far must clear ~480 to avoid silhouetting
-          them out. Near edge of fog is kept past the closest galaxy front
-          face. */}
-      <fog attach="fog" args={["#02050a", 220, 560]} />
+      {/* Fog pushed FAR out (PR #8: 560 → 950) so the new 100u-footprint
+          nebulae aren't fogged into the void at the back of the field.
+          With galaxies at radius 120 and clouds extending ~100u beyond,
+          the far edge can sit ~440 from a Z=205 camera, so fog far must
+          clear that with margin. Near edge moved back to 280 so the
+          atmospheric falloff still feels present in the near void. */}
+      <fog attach="fog" args={["#02050a", 280, 950]} />
       <ambientLight intensity={0.25} />
       {/* Cool key + warm rim — luxurious dual lighting */}
       <pointLight position={[0, 30, 30]} intensity={0.7} color="#5BF3FF" />
@@ -79,36 +80,40 @@ export function UniverseScene() {
       <Suspense fallback={null}>
         <NebulaClouds />
       </Suspense>
-      {/* Far layer — dense field of tiny crisp pinpoint stars filling the
-          whole sky. The user wanted "more white stars" — boosted from 1500.
-          Radius bumped to sit comfortably outside the now-wider galaxy ring
-          (radius 120) so the field still wraps the entire visible field. */}
+      {/* Far layer — dense field of tiny crisp pinpoint white stars filling
+          the whole sky. PR #8: count pushed 2400 → 4500 so the background
+          reads as a heavily-populated star field, with planet dots being a
+          quiet sprinkle within. Size kept small so they remain pinpoints,
+          not bokeh. Radius keeps the field wrapping the wider galaxy ring
+          (radius 120). */}
       <Stardust
-        count={2400}
-        radius={220}
-        size={0.10}
-        baseOpacity={0.75}
-        twinkleFraction={0.025}
+        count={4500}
+        radius={240}
+        size={0.09}
+        baseOpacity={0.78}
+        twinkleFraction={0.02}
         spin={0.005}
         flatten={1}
         dim={isPlanetView}
       />
-      {/* Mid layer — medium-bright stars at conversational distance */}
+      {/* Mid layer — medium-bright stars at conversational distance. Count
+          bumped 900 → 1300 to keep mid-depth density readable now that the
+          far layer dominates. */}
       <Stardust
-        count={900}
-        radius={75}
-        size={0.15}
+        count={1300}
+        radius={85}
+        size={0.13}
         baseOpacity={0.88}
-        twinkleFraction={0.04}
+        twinkleFraction={0.035}
         spin={0.01}
         flatten={0.7}
         dim={isPlanetView}
       />
       {/* Near layer — slightly larger, drift past camera, occasional twinkle */}
       <Stardust
-        count={260}
+        count={320}
         radius={32}
-        size={0.22}
+        size={0.20}
         baseOpacity={0.95}
         twinkleFraction={0.08}
         spin={0.02}
@@ -118,13 +123,13 @@ export function UniverseScene() {
       {/* Shooting stars — tapered streaks every ~10s, no squares */}
       <Meteors intervalSec={11} poolSize={5} radius={95} dim={isPlanetView} />
       {/* Cosmic dust / swirl — blends galaxies into surrounding space */}
-      {/* PR #7: each galaxy is now a large volumetric nebula (~55u radius
-          footprint, ~3.9× the previous 14u) with power-law density falloff
-          and sin-noise filaments — bright dense core fading to long wispy
-          outer arms. Particle count quadrupled to keep the cloud dense as
-          it expands. Neighboring nebulae intentionally bleed into each
-          other in the middle of the field. */}
-      <CosmicDust perGalaxy={900} ambient={1400} dim={isPlanetView} />
+      {/* PR #8: nebula footprint pushed to 100u (was 55u) and softened
+          falloff (pow 1.15 vs 2.2) so each galaxy's haze fills nearly half
+          the gap to its 120u-distant neighbor — adjacent clouds visibly
+          OVERLAP in the middle of the field. Particle count per galaxy
+          more than doubled (900 → 2200) so density reads all the way out
+          to the outer reaches, not just at the core. */}
+      <CosmicDust perGalaxy={2200} ambient={1400} dim={isPlanetView} />
 
       {/* Universe layer — always render, fade out when entering galaxy */}
       <Suspense fallback={null}>

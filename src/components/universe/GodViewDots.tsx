@@ -131,23 +131,25 @@ function GalaxyDotCluster({
       const halo = haloRefs.current[i];
       if (!dot || !halo) continue;
       if (it.unread) {
-        // Pulse cadence — readable from across the universe view.
+        // Pulse cadence — readable from across the universe view. Amplitude
+        // shrunk so the unread cue is a subtle brighten/grow, not a 1.8×
+        // bokeh swell that re-floods the screen with colored balls.
         const pulse = 0.6 + Math.sin(t * 4.4 + it.phase) * 0.4; // 0.2..1.0
-        const scale = 1.0 + pulse * 0.8; // 1.0..1.8
+        const scale = 1.0 + pulse * 0.6; // 1.0..1.6
         dot.scale.setScalar(scale);
-        halo.scale.setScalar(scale * 1.5);
+        halo.scale.setScalar(scale * 1.2);
         const dm = dot.material as THREE.MeshBasicMaterial;
         const hm = halo.material as THREE.MeshBasicMaterial;
-        dm.opacity = 0.85 + pulse * 0.15;
-        hm.opacity = 0.35 + pulse * 0.35;
+        dm.opacity = 0.75 + pulse * 0.15;
+        hm.opacity = 0.18 + pulse * 0.18;
       } else {
         // Quiet planet — static muted dot.
-        dot.scale.setScalar(0.7);
-        halo.scale.setScalar(0.9);
+        dot.scale.setScalar(0.65);
+        halo.scale.setScalar(0.8);
         const dm = dot.material as THREE.MeshBasicMaterial;
         const hm = halo.material as THREE.MeshBasicMaterial;
-        dm.opacity = 0.55;
-        hm.opacity = 0.15;
+        dm.opacity = 0.45;
+        hm.opacity = 0.08;
       }
     }
     if (ambientRef.current) {
@@ -183,33 +185,37 @@ function GalaxyDotCluster({
 
       {layout.map((it, i) => (
         <group key={it.id} position={it.pos}>
-          {/* Halo — additive bloom bleed around the dot */}
+          {/* Halo — additive bloom bleed around the dot. Radius slashed from
+              0.12 → 0.028 (~77% smaller) so the halo bloom no longer reads as
+              a screen-filling colored bokeh ball at god view. */}
           <mesh
             ref={(m) => {
               haloRefs.current[i] = m;
             }}
           >
-            <sphereGeometry args={[0.12, 10, 10]} />
+            <sphereGeometry args={[0.028, 8, 8]} />
             <meshBasicMaterial
               color={it.color}
               transparent
-              opacity={0.25}
+              opacity={0.18}
               depthWrite={false}
               blending={THREE.AdditiveBlending}
               toneMapped={false}
             />
           </mesh>
-          {/* Bright dot core */}
+          {/* Bright dot core — radius slashed from 0.06 → 0.014 (~77% smaller)
+              so each planet reads as a small bright pinpoint comparable to a
+              background starfield star, not a hero element. */}
           <mesh
             ref={(m) => {
               dotRefs.current[i] = m;
             }}
           >
-            <sphereGeometry args={[0.06, 10, 10]} />
+            <sphereGeometry args={[0.014, 8, 8]} />
             <meshBasicMaterial
               color={it.color}
               transparent
-              opacity={0.85}
+              opacity={0.75}
               depthWrite={false}
               blending={THREE.AdditiveBlending}
               toneMapped={false}

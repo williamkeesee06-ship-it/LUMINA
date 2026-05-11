@@ -38,7 +38,7 @@ export function CameraRig() {
   const warpFromFov = useRef(52);
 
   // Scripted target (used until the user takes control)
-  const targetPos = useRef(new THREE.Vector3(0, 52, 150));
+  const targetPos = useRef(new THREE.Vector3(0, 65, 205));
   const targetLook = useRef(new THREE.Vector3(0, 0, 0));
   const currentLook = useRef(new THREE.Vector3(0, 0, 0));
 
@@ -81,12 +81,13 @@ export function CameraRig() {
     // A new viewMode means: cancel free-fly, snap back to a scripted shot.
     freeFly.current = false;
     if (viewMode === "universe") {
-      // God view standoff bumped again to match the wider galaxy ring
-      // (120u radius vs PR #5's 78). Camera pulled back proportionally so
-      // the wider spread still fits comfortably in frame as a constellation
-      // of distinct clusters, with the inter-galaxy dust bleed staying in
-      // view rather than getting cropped at the edges.
-      targetPos.current.set(0, 52, 150);
+      // God view standoff pushed further back (PR #8: Z 150 → 205, Y 52 → 65)
+      // so the whole 120u galaxy ring AND its 100u-footprint nebula bleed
+      // are visible at once. The user's screenshot from PR #7 showed the
+      // camera sitting too close — planet dots filled the frame because
+      // the camera was inside one cluster's bokeh zone. The pull-back makes
+      // god view feel like a wide observer's view of the universe.
+      targetPos.current.set(0, 65, 205);
       targetLook.current.set(0, 0, 0);
     } else if (viewMode === "galaxy" && focusedGalaxy) {
       const p = GALAXY_POSITIONS[focusedGalaxy];
