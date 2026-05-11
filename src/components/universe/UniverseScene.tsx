@@ -24,7 +24,7 @@ function Skybox() {
   const tex = useLoader(THREE.TextureLoader, "/textures/starfield.png");
   return (
     <mesh>
-      <sphereGeometry args={[400, 64, 32]} />
+      <sphereGeometry args={[600, 64, 32]} />
       <meshBasicMaterial
         map={tex}
         side={THREE.BackSide}
@@ -55,14 +55,16 @@ export function UniverseScene() {
     <div className="absolute inset-0" style={{ zIndex: 0 }}>
     <Canvas
       gl={{ antialias: true, powerPreference: "high-performance" }}
-      camera={{ position: [0, 38, 110], fov: 52, near: 0.1, far: 900 }}
+      camera={{ position: [0, 52, 150], fov: 52, near: 0.1, far: 1200 }}
       dpr={[1, 1.75]}
     >
       <color attach="background" args={["#02050a"]} />
-      {/* Fog pushed out to match the wider galaxy ring (radius 78). With the
-          old 90 → 240 range, outer clusters dimmed past readable at god view.
-          PR #5: stretch to 160 → 420 so the spread stays legible. */}
-      <fog attach="fog" args={["#02050a", 160, 420]} />
+      {/* Fog pushed out again to match the wider galaxy ring (radius 120 vs
+          PR #5's 78). At standoff Z=150 the far edge galaxies sit roughly
+          240 from camera, so fog far must clear ~480 to avoid silhouetting
+          them out. Near edge of fog is kept past the closest galaxy front
+          face. */}
+      <fog attach="fog" args={["#02050a", 220, 560]} />
       <ambientLight intensity={0.25} />
       {/* Cool key + warm rim — luxurious dual lighting */}
       <pointLight position={[0, 30, 30]} intensity={0.7} color="#5BF3FF" />
@@ -78,10 +80,12 @@ export function UniverseScene() {
         <NebulaClouds />
       </Suspense>
       {/* Far layer — dense field of tiny crisp pinpoint stars filling the
-          whole sky. The user wanted "more white stars" — boosted from 1500. */}
+          whole sky. The user wanted "more white stars" — boosted from 1500.
+          Radius bumped to sit comfortably outside the now-wider galaxy ring
+          (radius 120) so the field still wraps the entire visible field. */}
       <Stardust
         count={2400}
-        radius={140}
+        radius={220}
         size={0.10}
         baseOpacity={0.75}
         twinkleFraction={0.025}

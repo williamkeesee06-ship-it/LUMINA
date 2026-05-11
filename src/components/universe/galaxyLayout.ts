@@ -7,11 +7,12 @@ import { GALAXIES } from "@/types";
  */
 function buildPositions(): Record<Galaxy, [number, number, number]> {
   // Spread the ring outward so each cluster has clear empty void between it
-  // and its neighbors. PR #5: bumped from 42 → 78 (≈1.85× spacing) so god
-  // view reads as 7 distinct clusters of glowing dots rather than a
-  // shoulder-to-shoulder blob. Camera/fog adjusted in UniverseScene to
-  // match.
-  const radius = 78;
+  // and its neighbors. PR #5 bumped 42 → 78 (≈1.85×); PR #6 follow-up pushes
+  // further to 120 (≈2.85× original) so the galaxy field fills more of the
+  // god-view canvas. The per-galaxy particle clouds are intentionally LEFT
+  // UNCONSTRAINED — neighboring dust should continue to bleed and overlap so
+  // the universe reads as a real galaxy field, not a set of contained discs.
+  const radius = 120;
   const out = {} as Record<Galaxy, [number, number, number]>;
   GALAXIES.forEach((g, i) => {
     const a = (i / GALAXIES.length) * Math.PI * 2 - Math.PI / 2;

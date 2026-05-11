@@ -38,7 +38,7 @@ export function CameraRig() {
   const warpFromFov = useRef(52);
 
   // Scripted target (used until the user takes control)
-  const targetPos = useRef(new THREE.Vector3(0, 38, 110));
+  const targetPos = useRef(new THREE.Vector3(0, 52, 150));
   const targetLook = useRef(new THREE.Vector3(0, 0, 0));
   const currentLook = useRef(new THREE.Vector3(0, 0, 0));
 
@@ -81,10 +81,12 @@ export function CameraRig() {
     // A new viewMode means: cancel free-fly, snap back to a scripted shot.
     freeFly.current = false;
     if (viewMode === "universe") {
-      // God view standoff bumped to match the wider galaxy ring (78u radius
-      // vs the previous 42). Camera pulled back so the whole spread fits in
-      // frame as a constellation of distinct clusters.
-      targetPos.current.set(0, 38, 110);
+      // God view standoff bumped again to match the wider galaxy ring
+      // (120u radius vs PR #5's 78). Camera pulled back proportionally so
+      // the wider spread still fits comfortably in frame as a constellation
+      // of distinct clusters, with the inter-galaxy dust bleed staying in
+      // view rather than getting cropped at the edges.
+      targetPos.current.set(0, 52, 150);
       targetLook.current.set(0, 0, 0);
     } else if (viewMode === "galaxy" && focusedGalaxy) {
       const p = GALAXY_POSITIONS[focusedGalaxy];
@@ -359,8 +361,10 @@ export function CameraRig() {
         wheelImpulse.current *= Math.exp(-6 * delta);
       }
 
-      // Soft world bounds so we can't fly into oblivion
-      const R = 360;
+      // Soft world bounds so we can't fly into oblivion. Bumped with the
+      // wider galaxy ring (radius 120) so free-fly still lets the user pull
+      // back far enough to see the whole field.
+      const R = 500;
       const dist = camera.position.length();
       if (dist > R) camera.position.multiplyScalar(R / dist);
       return;
