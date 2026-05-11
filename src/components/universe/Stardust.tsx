@@ -192,10 +192,9 @@ export function Stardust({
 
 /**
  *  Hard white pinpoint stars threaded through a single galaxy's plasma so
- *  they punch through the gas like real nebula photography. 200 stars by
- *  default at radius 28u (fits inside the galaxy footprint without bleeding
- *  into the 120u-distant neighbor). Plus a small set of larger
- *  size-attenuated "foreground" suns at a tighter radius.
+ *  they punch through the gas like real nebula photography. PR #11: count
+ *  cut 200 → 80 + smaller per-star size so they no longer compound the
+ *  saturated white core that swallowed labels and planets.
  */
 interface GalaxyStarClusterProps {
   center: [number, number, number];
@@ -206,7 +205,7 @@ interface GalaxyStarClusterProps {
 
 export function GalaxyStarCluster({
   center,
-  count = 200,
+  count = 80,
   radius = 28,
   dim = false,
 }: GalaxyStarClusterProps) {
@@ -262,7 +261,7 @@ export function GalaxyStarCluster({
         </bufferGeometry>
         <pointsMaterial
           ref={matRef}
-          size={1.4}
+          size={0.95}
           color={0xffffff}
           sizeAttenuation={false}
           depthWrite={false}
@@ -276,7 +275,7 @@ export function GalaxyStarCluster({
         </bufferGeometry>
         <pointsMaterial
           ref={fgMatRef}
-          size={0.4}
+          size={0.28}
           color={0xffffff}
           sizeAttenuation
           depthWrite={false}
