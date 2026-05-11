@@ -296,6 +296,124 @@ export async function searchGmail(token: string, query: string): Promise<Moon[]>
   }));
 }
 
+/* ------------------------------------------------------------------ */
+/*  Gmail moons — list / thread / send                                 */
+/* ------------------------------------------------------------------ */
+
+export interface GmailListItem {
+  id: string;
+  threadId: string;
+  subject: string;
+  from: string;
+  to?: string;
+  cc?: string;
+  date: string;
+  messageId?: string;
+  snippet: string;
+  internalDate?: string;
+  unread: boolean;
+  labelIds?: string[];
+}
+
+export async function listGmail(
+  token: string,
+  opts: { label?: string; query?: string; unreadOnly?: boolean; limit?: number } = {},
+): Promise<{ ok: true; messages: GmailListItem[] } | { ok: false; message: string }> {
+  try {
+    const r = await fetch("/api/gmail-list", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+      body: JSON.stringify(opts),
+    });
+    const data = await r.json().catch(() => ({}));
+    if (!r.ok) {
+      return { ok: false, message: data?.detail ?? data?.error ?? `gmail-list ${r.status}` };
+    }
+    return { ok: true, messages: (data.messages ?? []) as GmailListItem[] };
+  } catch (err) {
+    return { ok: false, message: err instanceof Error ? err.message : "Network error." };
+  }
+}
+
+export interface GmailThreadMessage {
+  id: string;
+  threadId: string;
+  from: string;
+  to: string;
+  cc: string;
+  bcc?: string;
+  replyTo?: string;
+  date: string;
+  subject: string;
+  messageId: string;
+  references: string;
+  inReplyTo: string;
+  plainBody: string;
+  htmlBody: string;
+  snippet: string;
+  internalDate: string;
+  unread: boolean;
+  labelIds: string[];
+}
+
+export async function readGmailThread(
+  token: string,
+  threadId: string,
+): Promise<
+  | { ok: true; threadId: string; messages: GmailThreadMessage[] }
+  | { ok: false; message: string }
+> {
+  try {
+    const r = await fetch("/api/gmail-thread", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+      body: JSON.stringify({ threadId }),
+    });
+    const data = await r.json().catch(() => ({}));
+    if (!r.ok) {
+      return { ok: false, message: data?.detail ?? data?.error ?? `gmail-thread ${r.status}` };
+    }
+    return {
+      ok: true,
+      threadId: data.threadId,
+      messages: (data.messages ?? []) as GmailThreadMessage[],
+    };
+  } catch (err) {
+    return { ok: false, message: err instanceof Error ? err.message : "Network error." };
+  }
+}
+
+export interface GmailSendArgs {
+  threadId?: string;
+  to: string[];
+  cc?: string[];
+  bcc?: string[];
+  subject: string;
+  body: string;
+  inReplyTo?: string;
+  references?: string[];
+}
+
+export async function sendGmail(
+  token: string,
+  args: GmailSendArgs,
+): Promise<{ ok: true; messageId: string; threadId: string } | { ok: false; message: string }> {
+  try {
+    const r = await fetch("/api/gmail-send", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+      body: JSON.stringify(args),
+    });
+    const data = await r.json().catch(() => ({}));
+    if (!r.ok) {
+      return { ok: false, message: data?.detail ?? data?.error ?? `gmail-send ${r.status}` };
+    }
+    return { ok: true, messageId: data.messageId, threadId: data.threadId };
+  } catch (err) {
+    return { ok: false, message: err instanceof Error ? err.message : "Network error." };
+  }
+}
+
 /** Drive documents = SATELLITES in this universe (orbit further, structural). */
 export async function listDrive(
   token: string,
