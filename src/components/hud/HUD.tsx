@@ -13,6 +13,20 @@ import { NeonGlobeV2 } from "./NeonGlobeV2";
 import { HudPager } from "./HudPager";
 import { sfx } from "@/lib/audio";
 import { requestGoogleToken } from "@/lib/googleAuth";
+import { NORTH_SKY_INBOX_URL, NORTH_SKY_WINDOW_FEATURES } from "@/lib/constants";
+
+/**
+ * PR #13 — double-click handler for any Gmail widget. Pops the operator's real
+ * inbox (scoped to the North Sky label) in a new browser tab. Single-click
+ * behaviour on the widget is preserved (connect / acknowledge).
+ */
+function openNorthSkyInbox() {
+  try {
+    window.open(NORTH_SKY_INBOX_URL, "_blank", NORTH_SKY_WINDOW_FEATURES);
+  } catch {
+    /* popup blocked — caller's UI surface handles the fallback */
+  }
+}
 
 const GALAXY_SHORT: Record<Galaxy, string> = {
   Complete: "Complete",
@@ -616,6 +630,7 @@ function HUDHorizontal() {
                       }
                       pulse={!googleToken || unreadCount > 0}
                       onClick={handleConnectGmail}
+                      onDoubleClick={openNorthSkyInbox}
                       size={84}
                       showNeedle={false}
                     />
@@ -722,6 +737,7 @@ function HUDHorizontal() {
                         active={false}
                         onMouseEnter={() => sfx.hover()}
                         onClick={handleConnectGmail}
+                        onDoubleClick={openNorthSkyInbox}
                       />
                     </div>
                   )
@@ -1248,6 +1264,7 @@ function NavigationPageVertical({
           size={66}
           onMouseEnter={() => sfx.hover()}
           onClick={handleConnectGmail}
+          onDoubleClick={openNorthSkyInbox}
         />
       </div>
     </div>
@@ -1309,6 +1326,7 @@ function TelemetryPageVertical({
           }
           pulse={!googleToken || unreadCount > 0}
           onClick={handleConnectGmail}
+          onDoubleClick={openNorthSkyInbox}
           size={96}
           showNeedle={false}
         />

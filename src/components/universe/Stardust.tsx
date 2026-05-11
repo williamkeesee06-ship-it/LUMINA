@@ -214,6 +214,29 @@ export function GalaxyStarCluster({
   const matRef = useRef<THREE.PointsMaterial>(null);
   const fgMatRef = useRef<THREE.PointsMaterial>(null);
 
+  // PR #13 — soft circular sprite. Without a map, Three's default `pointsMaterial`
+  // rasterises each point as a hard white SQUARE — root cause of the "white
+  // squares everywhere" report after PR #11/#10. A tiny radial gradient gives
+  // every star a proper round falloff at any zoom / DPR.
+  const starSprite = useMemo(() => {
+    const s = 64;
+    const canvas = document.createElement("canvas");
+    canvas.width = canvas.height = s;
+    const ctx = canvas.getContext("2d")!;
+    const g = ctx.createRadialGradient(s / 2, s / 2, 0, s / 2, s / 2, s / 2);
+    g.addColorStop(0.0, "rgba(255,255,255,1)");
+    g.addColorStop(0.25, "rgba(255,255,255,0.85)");
+    g.addColorStop(0.55, "rgba(255,255,255,0.18)");
+    g.addColorStop(1.0, "rgba(255,255,255,0)");
+    ctx.fillStyle = g;
+    ctx.fillRect(0, 0, s, s);
+    const tex = new THREE.CanvasTexture(canvas);
+    tex.minFilter = THREE.LinearFilter;
+    tex.magFilter = THREE.LinearFilter;
+    tex.needsUpdate = true;
+    return tex;
+  }, []);
+
   const corePositions = useMemo(() => {
     const pos = new Float32Array(count * 3);
     for (let i = 0; i < count; i++) {
@@ -261,12 +284,16 @@ export function GalaxyStarCluster({
         </bufferGeometry>
         <pointsMaterial
           ref={matRef}
-          size={0.95}
+          map={starSprite}
+          size={3.6}
           color={0xffffff}
           sizeAttenuation={false}
           depthWrite={false}
           transparent
           opacity={0.95}
+          alphaTest={0.02}
+          blending={THREE.AdditiveBlending}
+          toneMapped={false}
         />
       </points>
       <points ref={fgRef}>
@@ -275,12 +302,16 @@ export function GalaxyStarCluster({
         </bufferGeometry>
         <pointsMaterial
           ref={fgMatRef}
-          size={0.28}
+          map={starSprite}
+          size={0.8}
           color={0xffffff}
           sizeAttenuation
           depthWrite={false}
           transparent
           opacity={0.95}
+          alphaTest={0.02}
+          blending={THREE.AdditiveBlending}
+          toneMapped={false}
         />
       </points>
     </group>

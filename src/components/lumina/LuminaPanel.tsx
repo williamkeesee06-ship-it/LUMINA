@@ -32,6 +32,7 @@ import {
 } from "@/lib/voice";
 import { LuminaLiveSession, type LuminaLiveStatus, type LuminaLiveToolResult } from "@/lib/geminiLive";
 import { useReminderStore } from "@/store/reminderStore";
+import { NORTH_SKY_INBOX_URL, NORTH_SKY_WINDOW_FEATURES } from "@/lib/constants";
 
 interface ToolCall {
   name:
@@ -70,7 +71,9 @@ interface ToolCall {
     | "setHudMode"
     | "setOrientation"
     | "enterFocusMode"
-    | "exitFocusMode";
+    | "exitFocusMode"
+    // PR #13 — pop the operator's real Gmail (North Sky label scope) in a tab.
+    | "openGmail";
   args: Record<string, unknown>;
 }
 
@@ -1030,6 +1033,19 @@ export function LuminaPanel({
       ackChat("Exited focus mode.");
       return;
     }
+    if (call.name === "openGmail") {
+      // PR #13 — open the operator's real Gmail in a fresh tab, scoped to the
+      // North Sky label. Fixes the "Lumina said she opened gmail but nothing
+      // happened" complaint: previously the model spoke the action without
+      // any client-side handler firing.
+      try {
+        window.open(NORTH_SKY_INBOX_URL, "_blank", NORTH_SKY_WINDOW_FEATURES);
+      } catch {
+        /* popup blocked — surface to chat below */
+      }
+      ackChat("North Sky inbox opening in a new tab.");
+      return;
+    }
   };
 
   // Whitelist of legal checklist keys for setChecklistText / toggleChecklistItem.
@@ -1080,7 +1096,14 @@ export function LuminaPanel({
       return;
     }
     const { clean, toolCall } = parseToolCall(result.text);
-    const replyText = clean || (toolCall ? "Engaging." : "");
+    let replyText = clean || (toolCall ? "Engaging." : "");
+    // PR #13 — empty content + no tool means Lumina returned nothing
+    // actionable. Surface a fallback line so the operator doesn't stare at
+    // a blank model row while the orb sits idle, and so spinner state always
+    // resolves on every exit path.
+    if (!replyText && !toolCall) {
+      replyText = "I got stuck — try rephrasing.";
+    }
     setMessages((m) => [
       ...m,
       { role: "model", text: replyText, toolCall: toolCall ?? undefined },
@@ -1092,12 +1115,27 @@ export function LuminaPanel({
       speak(replyText, { onEnd: () => maybeRelisten() });
     }
 
-    if (toolCall) {
-      setOrbMode("navigating");
-      await executeTool(toolCall);
-      setMemTick((t) => t + 1);
-      setTimeout(() => setOrbMode("idle"), 1200);
-    } else {
+    try {
+      if (toolCall) {
+        setOrbMode("navigating");
+        await executeTool(toolCall);
+        setMemTick((t) => t + 1);
+        setTimeout(() => setOrbMode("idle"), 1200);
+      } else {
+        setOrbMode("idle");
+      }
+    } catch (err) {
+      // PR #13 — guarantee the orb / busy state resolves even if a tool
+      // handler throws. Previously an unhandled exception would leave the
+      // chat in "thinking…" forever.
+      setMessages((m) => [
+        ...m,
+        {
+          role: "system",
+          text: `Tool error: ${(err as Error).message}`,
+          failed: true,
+        },
+      ]);
       setOrbMode("idle");
     }
     setBusy(false);
@@ -1675,6 +1713,29 @@ export function LuminaPanel({
             setFocusFiftyFifty(false);
             exitFocus();
             return { ok: true, message: "Exited focus mode." };
+          }
+          if (call.name === "openGmail") {
+            // PR #13 — live voice was narrating "opening gmail" without ever
+            // executing it. This handler actually fires the popup so chat and
+            // voice surface behave identically.
+            let opened: Window | null = null;
+            try {
+              opened = window.open(
+                NORTH_SKY_INBOX_URL,
+                "_blank",
+                NORTH_SKY_WINDOW_FEATURES,
+              );
+            } catch {
+              /* popup blocked — fall through */
+            }
+            if (!opened) {
+              return {
+                ok: false,
+                message:
+                  "Popup blocked. Tell Billy to allow popups for LUMINA or click the Gmail widget.",
+              };
+            }
+            return { ok: true, message: "Opened North Sky inbox in a new tab." };
           }
           return { ok: false, message: `Unknown tool: ${call.name}` };
         } catch (err) {

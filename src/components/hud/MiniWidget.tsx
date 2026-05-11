@@ -11,6 +11,10 @@ interface Props {
   disabled?: boolean;
   onClick?: () => void;
   onMouseEnter?: () => void;
+  /** PR #13 — optional double-click hook. Used by Gmail widget to pop the
+   *  North Sky inbox in a real browser tab without taking over the single-click
+   *  (which still toggles the in-app view). */
+  onDoubleClick?: () => void;
   /** Disc diameter in px. Default 32 (legacy compact). 60+ for hero navigation page. */
   size?: number;
   /** PR #6 — render a pulsating ring signalling a recent change for this widget. */
@@ -33,6 +37,7 @@ export function MiniWidget({
   disabled = false,
   onClick,
   onMouseEnter,
+  onDoubleClick,
   size = 32,
   pulse = false,
 }: Props) {
@@ -44,6 +49,7 @@ export function MiniWidget({
     <button
       type="button"
       onClick={onClick}
+      onDoubleClick={onDoubleClick}
       onMouseEnter={onMouseEnter}
       className="group flex flex-col items-center select-none cursor-pointer"
       style={{
