@@ -12,7 +12,6 @@ import { HyperspaceTransition } from "@/components/effects/HyperspaceTransition"
 import { JobFocusMode } from "@/components/focus/JobFocusMode";
 import { hydrateMemory } from "@/lib/luminaMemory";
 import { startWatcher, stopWatcher } from "@/lib/northSkyWatcher";
-import { runSituationalChecks } from "@/lib/situationalAwareness";
 import { primeReminderStore } from "@/store/reminderStore";
 
 export default function App() {
@@ -30,7 +29,6 @@ export default function App() {
   const setError = useUI((s) => s.setError);
   const error = useUI((s) => s.error);
   const loading = useUI((s) => s.loading);
-  const jobs = useUI((s) => s.jobs);
   const googleToken = useUI((s) => s.googleToken);
   const setUnreadCount = useUI((s) => s.setUnreadCount);
 
@@ -90,23 +88,13 @@ export default function App() {
     return () => window.clearInterval(id);
   }, []);
 
-  // Boot the reminder store + run situational-awareness sweeps.
-  //   - On app load (once jobs are populated).
-  //   - Every 5 min via interval.
-  //   - On every jobs slice change (new email, status change, crew assignment
-  //     all flow through `setJobs` / `attachMoons` / `setJobFields`).
+  // Boot the reminder store. PR #12: the proactive situational-awareness
+  // sweeps that used to fire here (on jobs change + every 5 min) were
+  // removed — they auto-imported items into the notification center,
+  // which is now manual-only. Only Lumina tool calls and direct UI
+  // actions can add reminders.
   useEffect(() => {
     primeReminderStore();
-  }, []);
-  useEffect(() => {
-    if (jobs.length === 0) return;
-    runSituationalChecks(jobs);
-  }, [jobs]);
-  useEffect(() => {
-    const id = window.setInterval(() => {
-      runSituationalChecks(useUI.getState().jobs);
-    }, 5 * 60_000);
-    return () => window.clearInterval(id);
   }, []);
 
   // Refresh Gmail unread count when token arrives.
