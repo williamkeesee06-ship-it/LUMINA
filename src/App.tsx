@@ -110,19 +110,49 @@ export default function App() {
   }, []);
 
   // Refresh Gmail unread count when token arrives.
+  // PR #10: scope strictly to the "North Sky" label — the operator does not
+  // want the full inbox of 53k+ messages counted, only forwarded North Sky
+  // mail. We resolve the label id from /labels (the user already has the
+  // North Sky label in PR #4 setup), then read messagesUnread on it.
   useEffect(() => {
     if (!googleToken) {
       setUnreadCount(0);
       return;
     }
-    fetch("https://gmail.googleapis.com/gmail/v1/users/me/labels/INBOX", {
-      headers: { Authorization: `Bearer ${googleToken}` },
-    })
-      .then((r) => (r.ok ? r.json() : null))
-      .then((data: { messagesUnread?: number } | null) => {
-        if (data?.messagesUnread != null) setUnreadCount(data.messagesUnread);
-      })
-      .catch(() => {});
+    let cancelled = false;
+    (async () => {
+      try {
+        const labelsRes = await fetch(
+          "https://gmail.googleapis.com/gmail/v1/users/me/labels",
+          { headers: { Authorization: `Bearer ${googleToken}` } },
+        );
+        if (!labelsRes.ok) return;
+        const labelsData = (await labelsRes.json()) as {
+          labels?: { id: string; name: string }[];
+        };
+        const northSky = labelsData.labels?.find(
+          (l) => l.name?.toLowerCase() === "north sky",
+        );
+        if (!northSky || cancelled) {
+          if (!cancelled) setUnreadCount(0);
+          return;
+        }
+        const labelRes = await fetch(
+          `https://gmail.googleapis.com/gmail/v1/users/me/labels/${encodeURIComponent(northSky.id)}`,
+          { headers: { Authorization: `Bearer ${googleToken}` } },
+        );
+        if (!labelRes.ok || cancelled) return;
+        const labelData = (await labelRes.json()) as { messagesUnread?: number };
+        if (labelData?.messagesUnread != null) {
+          setUnreadCount(labelData.messagesUnread);
+        }
+      } catch {
+        /* offline / scope denied — leave the count alone */
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
   }, [googleToken, setUnreadCount]);
 
   // North Sky watcher — polls /api/gmail (action=list) for moons every 60s while the

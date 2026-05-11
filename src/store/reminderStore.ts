@@ -270,6 +270,44 @@ export const useReminderStore = create<ReminderState>((set, get) => ({
   },
 }));
 
+/**
+ *  PR #10 one-shot cleanup: drop reminders that came from the old
+ *  traffic-control heuristic (`sa:tc:<jobId>` dedupeKey) and the checklist
+ *  items it spawned. The heuristic was removed because Smartsheet has no
+ *  authoritative `Traffic Control Ordered` column, so it false-flagged
+ *  every scheduled job. Runs once per browser via TC_CLEANUP_KEY.
+ */
+const TC_CLEANUP_KEY = "tc_cleanup_v1";
+
+function isTrafficControlReminder(item: ReminderItem): boolean {
+  if (item.dedupeKey?.startsWith("sa:tc:")) return true;
+  if (item.type === "lumina_suggestion" && /traffic\s*control/i.test(item.text)) return true;
+  return false;
+}
+
+function runTrafficControlCleanup(snapshot: {
+  items: ReminderItem[];
+  dismissed: DismissedEntry[];
+}): { items: ReminderItem[]; dismissed: DismissedEntry[] } {
+  try {
+    if (localStorage.getItem(TC_CLEANUP_KEY) === "done") return snapshot;
+  } catch {
+    return snapshot;
+  }
+  const filteredItems = snapshot.items.filter((i) => !isTrafficControlReminder(i));
+  const filteredDismissed = snapshot.dismissed.filter(
+    (d) => !d.dedupeKey.startsWith("sa:tc:"),
+  );
+  const next = { items: filteredItems, dismissed: filteredDismissed };
+  try {
+    localStorage.setItem(TC_CLEANUP_KEY, "done");
+  } catch {
+    /* quota / disabled — best effort */
+  }
+  if (filteredItems.length !== snapshot.items.length) saveLocal(next);
+  return next;
+}
+
 // Boot: prime from localStorage synchronously. Remote pull (best-effort)
 // runs once on first call.
 let primed = false;
@@ -279,9 +317,10 @@ export function primeReminderStore(): void {
   primed = true;
   const local = loadLocal();
   if (local) {
+    const cleaned = runTrafficControlCleanup(local);
     useReminderStore.setState({
-      items: local.items,
-      dismissed: local.dismissed,
+      items: cleaned.items,
+      dismissed: cleaned.dismissed,
       hydrated: true,
     });
   } else {
@@ -294,10 +333,13 @@ export function primeReminderStore(): void {
     .then((data: { record?: { items?: ReminderItem[]; dismissed?: DismissedEntry[] } | null } | null) => {
       const record = data?.record;
       if (!record) return;
-      useReminderStore.getState().hydrateFromRemote({
-        items: Array.isArray(record.items) ? record.items : [],
-        dismissed: Array.isArray(record.dismissed) ? record.dismissed : [],
-      });
+      const items = (Array.isArray(record.items) ? record.items : []).filter(
+        (i) => !isTrafficControlReminder(i),
+      );
+      const dismissed = (Array.isArray(record.dismissed) ? record.dismissed : []).filter(
+        (d) => !d.dedupeKey.startsWith("sa:tc:"),
+      );
+      useReminderStore.getState().hydrateFromRemote({ items, dismissed });
     })
     .catch(() => {
       /* offline / no backend */

@@ -1,23 +1,17 @@
 /**
- *  Situational-awareness checks (PR #6).
+ *  Situational-awareness checks.
  *
  *  Lumina watches the live job + email state and surfaces SUGGESTIONS on
- *  the reminder strip when she notices a gap. Suggest only — she does not
- *  auto-draft replies or take action. Clicking a suggestion (handled by
- *  the strip) opens the chat pre-prompted so Billy can decide what to do.
+ *  the reminder strip when she notices a gap.
  *
- *  Throttle: each suggestion carries a deterministic `dedupeKey`. The
- *  reminder store tombstones a key for 24h once dismissed (see
- *  reminderStore.ts), so a check won't re-surface the same suggestion
- *  within that window.
+ *  Active checks:
+ *    1. Permit field empty + schedule date within 14 days
+ *    2. Customer email thread waiting > 24h for a reply
  *
- *  Checks:
- *    1. Crew assigned + schedule date set + no "traffic control" mention
- *       in notes/checklist → "Need to order traffic control for ___?"
- *    2. Permit field empty + schedule date within 14 days →
- *       "___ scheduled but no permit logged — chase status?"
- *    3. Customer email thread waiting > 24h for a reply →
- *       "Customer waiting on reply for ___ — draft response?"
+ *  PR #10 removed the "needs traffic control" check — Smartsheet has no
+ *  `Traffic Control Ordered` column, so the old heuristic falsely flagged
+ *  every scheduled job. Bringing it back requires a real Smartsheet
+ *  column to gate on.
  */
 import type { Job } from "@/types";
 import { useReminderStore } from "@/store/reminderStore";
@@ -44,18 +38,6 @@ function parseDate(s: string): Date | null {
   if (m2) return new Date(parseInt(m2[1], 10), parseInt(m2[2], 10) - 1, parseInt(m2[3], 10));
   const d = new Date(s);
   return isNaN(d.getTime()) ? null : d;
-}
-
-function mentionsTrafficControl(j: Job): boolean {
-  const haystack = [j.notes, j.splicingNotes].filter(Boolean).join(" ").toLowerCase();
-  if (/\btraffic\s*control\b|\btc\s*order\b|\btraffic-control\b/.test(haystack)) return true;
-  if (j.checklist?.trafficControl) return true;
-  if (j.checklistText?.trafficControl?.trim()) return true;
-  // Also count moons whose subject mentions it.
-  for (const m of j.moons ?? []) {
-    if (/\btraffic\s*control\b/i.test((m.subject ?? "") + " " + (m.snippet ?? ""))) return true;
-  }
-  return false;
 }
 
 function hasUnansweredCustomerMail(j: Job): boolean {
@@ -88,15 +70,7 @@ export function computeSituationalSuggestions(jobs: Job[]): SituationalSuggestio
   const out: SituationalSuggestion[] = [];
   for (const j of jobs) {
     if (!j.workOrder) continue;
-    // 1. Crew + schedule + no traffic-control signal
-    if (j.crew && j.crew.trim() && j.scheduleDate && !mentionsTrafficControl(j)) {
-      out.push({
-        text: `Need to order traffic control for ${j.workOrder}? Crew is scheduled but no TC order detected.`,
-        jobId: j.id,
-        dedupeKey: `sa:tc:${j.id}`,
-      });
-    }
-    // 2. Empty permit + scheduled within 14 days
+    // 1. Empty permit + scheduled within 14 days
     if ((!j.permitNumber || !j.permitNumber.trim()) && inDays(j.scheduleDate, 14)) {
       out.push({
         text: `${j.workOrder} scheduled but no permit logged — chase status?`,
@@ -104,7 +78,7 @@ export function computeSituationalSuggestions(jobs: Job[]): SituationalSuggestio
         dedupeKey: `sa:permit:${j.id}`,
       });
     }
-    // 3. Unanswered customer email > 24h
+    // 2. Unanswered customer email > 24h
     if (hasUnansweredCustomerMail(j)) {
       out.push({
         text: `Customer waiting on reply for ${j.workOrder} — draft response?`,

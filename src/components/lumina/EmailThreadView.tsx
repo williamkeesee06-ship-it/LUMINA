@@ -476,8 +476,18 @@ function MessageBlock({ msg }: { msg: GmailThreadMessage }) {
     .slice(0, 2)
     .toUpperCase();
 
-  // Pick plain text if available; trim trailing quoted history.
-  const { active, quoted } = useMemo(() => splitQuoted(msg.plainBody || ""), [msg.plainBody]);
+  // Pick plain text if available; trim trailing quoted history. The plain
+  // body is also run through stripForwardedEnvelope() so the
+  // "---------- Forwarded message ----------" + Date/Subject/To/Cc lines
+  // get dropped per operator request — only `From:` survives.
+  const { active, quoted } = useMemo(() => {
+    const stripped = stripForwardedEnvelope(msg.plainBody || "");
+    return splitQuoted(stripped);
+  }, [msg.plainBody]);
+  const cleanedHtml = useMemo(
+    () => (msg.htmlBody ? stripForwardedEnvelopeHtml(msg.htmlBody) : ""),
+    [msg.htmlBody],
+  );
   const hasHtml = Boolean(msg.htmlBody);
   return (
     <div
@@ -517,7 +527,7 @@ function MessageBlock({ msg }: { msg: GmailThreadMessage }) {
         {hasHtml ? (
           <div
             className="email-body"
-            dangerouslySetInnerHTML={{ __html: msg.htmlBody }}
+            dangerouslySetInnerHTML={{ __html: cleanedHtml }}
           />
         ) : (
           <>
@@ -591,4 +601,53 @@ function splitQuoted(body: string): { active: string; quoted: string } {
   const active = lines.slice(0, cut).join("\n").trim();
   const quoted = lines.slice(cut).join("\n").trim();
   return { active, quoted };
+}
+
+/**
+ *  Drop the forwarded-message envelope noise from a plain-text body.
+ *  Removes the divider plus Date/Subject/To/Cc lines (which can wrap onto
+ *  the following indented line). Keeps the `From:` line — the operator
+ *  said "i only care who it was from."
+ */
+function stripForwardedEnvelope(body: string): string {
+  if (!body) return body;
+  return body
+    .replace(/^-{2,}\s*Forwarded message\s*-{2,}\s*$/gim, "")
+    .replace(/^Date:\s.+(\n[ \t]+.+)*$/gim, "")
+    .replace(/^Subject:\s.+(\n[ \t]+.+)*$/gim, "")
+    .replace(/^To:\s.+(\n[ \t]+.+)*$/gim, "")
+    .replace(/^Cc:\s.+(\n[ \t]+.+)*$/gim, "")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
+}
+
+/**
+ *  HTML variant — best-effort regex pass. Gmail typically renders these
+ *  envelopes as plain text inside <div> or <p> blocks; we strip those
+ *  lines and the divider. We deliberately keep the From line so the
+ *  operator can still see who originally sent the message.
+ */
+function stripForwardedEnvelopeHtml(html: string): string {
+  if (!html) return html;
+  let out = html;
+  // Divider — sometimes rendered as a row of dashes between <div> tags.
+  out = out.replace(
+    /(<(?:div|p|span)[^>]*>)?\s*-{2,}\s*Forwarded message\s*-{2,}\s*(<\/(?:div|p|span)>)?/gim,
+    "",
+  );
+  // Each envelope line — strip a div/p/span whose contents start with the
+  // header keyword, up to the matching closing tag. Two passes per label
+  // to catch both div/p/span variants without regex backreferences.
+  for (const label of ["Date", "Subject", "To", "Cc"]) {
+    for (const tag of ["div", "p", "span"]) {
+      const re = new RegExp(
+        `<${tag}[^>]*>\\s*${label}:[^<]*</${tag}>`,
+        "gim",
+      );
+      out = out.replace(re, "");
+    }
+  }
+  // Plain-text fallback inside HTML — strip the bare lines if they leaked.
+  out = stripForwardedEnvelope(out);
+  return out;
 }

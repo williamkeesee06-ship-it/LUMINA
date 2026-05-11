@@ -5,8 +5,9 @@ import * as THREE from "three";
 import { useUI, selectGalaxyCounts } from "@/store/uiStore";
 import { GALAXIES } from "@/types";
 import { CameraRig } from "./CameraRig";
-import { Stardust } from "./Stardust";
+import { Stardust, GalaxyStarCluster } from "./Stardust";
 import { CosmicDust } from "./CosmicDust";
+import { AmbientHaze } from "./AmbientHaze";
 import { GalaxyCluster } from "./GalaxyCluster";
 import { GalaxyLabels } from "./GalaxyLabels";
 import { PlanetField } from "./PlanetField";
@@ -70,6 +71,9 @@ export function UniverseScene() {
       {/* Cool key + warm rim — luxurious dual lighting */}
       <pointLight position={[0, 30, 30]} intensity={0.7} color="#5BF3FF" />
       <pointLight position={[-40, -10, -20]} intensity={0.35} color="#FF3D9A" />
+      {/* Directional sun — lights one hemisphere of each moon so the
+          cratered surface and tidal-lock orientation read clearly. */}
+      <directionalLight position={[10, 5, 5]} intensity={1.2} color="#ffffff" />
 
       <Suspense fallback={null}>
         <Skybox />
@@ -122,14 +126,24 @@ export function UniverseScene() {
       />
       {/* Shooting stars — tapered streaks every ~10s, no squares */}
       <Meteors intervalSec={11} poolSize={5} radius={95} dim={isPlanetView} />
-      {/* Cosmic dust / swirl — blends galaxies into surrounding space */}
-      {/* PR #8: nebula footprint pushed to 100u (was 55u) and softened
-          falloff (pow 1.15 vs 2.2) so each galaxy's haze fills nearly half
-          the gap to its 120u-distant neighbor — adjacent clouds visibly
-          OVERLAP in the middle of the field. Particle count per galaxy
-          more than doubled (900 → 2200) so density reads all the way out
-          to the outer reaches, not just at the core. */}
-      <CosmicDust perGalaxy={2200} ambient={1400} dim={isPlanetView} />
+      {/* Ambient haze — universe-wide plasma patches sitting BETWEEN galaxies,
+          never over them. Replaces the old `ambient` point particles. */}
+      <AmbientHaze dim={isPlanetView} />
+      {/* Cosmic dust — per-galaxy plasma stack. 7 billboarded ShaderMaterial
+          planes per galaxy (ridged-noise fbm, additive). Replaces the old
+          point-particle haze that read as bokeh balls. */}
+      <CosmicDust dim={isPlanetView} />
+      {/* Dense hard-white pinpoint stars threaded through each galaxy's
+          plasma — punch through the gas like real nebula photography. */}
+      {GALAXIES.map((g) => (
+        <GalaxyStarCluster
+          key={g + "-stars"}
+          center={GALAXY_POSITIONS[g]}
+          count={200}
+          radius={28}
+          dim={isPlanetView}
+        />
+      ))}
 
       {/* Universe layer — always render, fade out when entering galaxy */}
       <Suspense fallback={null}>
@@ -192,8 +206,8 @@ export function UniverseScene() {
 
       <EffectComposer multisampling={0}>
         <Bloom
-          intensity={1.6}
-          luminanceThreshold={0.15}
+          intensity={0.85}
+          luminanceThreshold={0.20}
           luminanceSmoothing={0.55}
           mipmapBlur
         />

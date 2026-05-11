@@ -11,7 +11,7 @@ import {
   sendGmail,
 } from "@/lib/api";
 import { sfx } from "@/lib/audio";
-import { GALAXIES, type Galaxy } from "@/types";
+import { GALAXIES, type Galaxy, type JobChecklist } from "@/types";
 import {
   loadMemory,
   addTurn as memAddTurn,
@@ -49,7 +49,28 @@ interface ToolCall {
     | "openMoonForJob"
     | "draftReply"
     | "sendReply"
-    | "addReminder";
+    | "addReminder"
+    // PR #10 — Lumina full mutation tools (chat + voice parity)
+    | "clearReminders"
+    | "removeReminder"
+    | "bulkUpdateReminders"
+    | "clearChecklistItems"
+    | "addChecklistItem"
+    | "editChecklistItem"
+    | "setJobField"
+    | "createJob"
+    | "archiveJob"
+    | "composeEmail"
+    | "sendEmail"
+    | "replyToThread"
+    | "forwardThread"
+    | "clearMemory"
+    | "forgetFact"
+    | "setMemoryFact"
+    | "setHudMode"
+    | "setOrientation"
+    | "enterFocusMode"
+    | "exitFocusMode";
   args: Record<string, unknown>;
 }
 
@@ -103,6 +124,15 @@ export function LuminaPanel({
   const openThread = useUI((s) => s.openThread);
   const setThreadSummary = useUI((s) => s.setThreadSummary);
   const threadSummaries = useUI((s) => s.threadSummaries);
+  // PR #10 — Lumina full mutation tools. New store hooks consumed below.
+  const toggleChecklistItem = useUI((s) => s.toggleChecklistItem);
+  const setChecklistText = useUI((s) => s.setChecklistText);
+  const setJobFields = useUI((s) => s.setJobFields);
+  const setHudMode = useUI((s) => s.setHudMode);
+  const setHudOrientation = useUI((s) => s.setHudOrientation);
+  const enterFocus = useUI((s) => s.enterFocus);
+  const exitFocus = useUI((s) => s.exitFocus);
+  const setFocusFiftyFifty = useUI((s) => s.setFocusFiftyFifty);
 
   // Initial greeting + persisted history replay
   const [messages, setMessages] = useState<DisplayMessage[]>(() => {
@@ -369,19 +399,48 @@ export function LuminaPanel({
       return;
     }
     if (call.name === "flyToGalaxy") {
-      const g = String(call.args.galaxy ?? "") as Galaxy;
-      if ((GALAXIES as readonly string[]).includes(g)) {
-        enterGalaxy(g);
+      // Normalize-and-match against the canonical GALAXIES list so a
+      // case/whitespace/dash variant from Gemini still resolves. Mirrors
+      // the live-voice path's fuzzy match.
+      const raw = String(call.args.galaxy ?? "");
+      const norm = (s: string) => s.replace(/[\s\-_]/g, "").toLowerCase();
+      const target = norm(raw);
+      const match = (GALAXIES as readonly Galaxy[]).find(
+        (g) => norm(g) === target,
+      );
+      if (match) {
+        enterGalaxy(match);
         sfx.confirm();
+      } else {
+        const msg = `No galaxy matches "${raw}". Pick one of: ${GALAXIES.join(", ")}.`;
+        setMessages((m) => [...m, { role: "system", text: msg, failed: true }]);
+        recordTurn("model", msg);
+        if (lastSpokenInputRef.current || liveModeRef.current) speak(msg);
+        sfx.error();
       }
       return;
     }
     if (call.name === "flyToJob") {
       const wo = String(call.args.workOrder ?? "");
-      const j = jobs.find((x) => x.workOrder === wo);
+      const normWo = (s: string) => s.replace(/[\s\-_.]/g, "").toUpperCase();
+      const target = normWo(wo);
+      const j = jobs.find((x) => {
+        const w = normWo(x.workOrder ?? "");
+        if (w === target) return true;
+        if (target.startsWith("P") && w === target.slice(1)) return true;
+        if (w.startsWith("P") && w.slice(1) === target) return true;
+        if (target.length >= 5 && w.endsWith(target)) return true;
+        return false;
+      });
       if (j) {
         selectJob(j.id);
         sfx.confirm();
+      } else {
+        const msg = `Work order ${wo} isn't in the universe.`;
+        setMessages((m) => [...m, { role: "system", text: msg, failed: true }]);
+        recordTurn("model", msg);
+        if (lastSpokenInputRef.current || liveModeRef.current) speak(msg);
+        sfx.error();
       }
       return;
     }
@@ -654,8 +713,332 @@ export function LuminaPanel({
       setMessages((m) => [...m, { role: "model", text: ack }]);
       recordTurn("model", ack);
       sfx.confirm();
+      return;
+    }
+
+    // ============================================================
+    //  PR #10 — Full Lumina mutation surface (chat + voice parity)
+    // ============================================================
+
+    // Helper for tools that need to resolve a WO to a Job.
+    const norm = (s: string) => s.replace(/[\s\-_.]/g, "").toUpperCase();
+    const findJobByWO = (raw: string) => {
+      const target = norm(raw);
+      return jobs.find((x) => {
+        const w = norm(x.workOrder ?? "");
+        if (w === target) return true;
+        if (target.startsWith("P") && w === target.slice(1)) return true;
+        if (w.startsWith("P") && w.slice(1) === target) return true;
+        if (target.length >= 5 && w.endsWith(target)) return true;
+        return false;
+      });
+    };
+    const ackChat = (text: string) => {
+      setMessages((m) => [...m, { role: "model", text }]);
+      recordTurn("model", text);
+      if (lastSpokenInputRef.current || liveModeRef.current) {
+        speak(text, { onEnd: () => maybeRelisten() });
+      }
+      sfx.confirm();
+    };
+    const failChat = (text: string) => {
+      setMessages((m) => [...m, { role: "system", text, failed: true }]);
+      recordTurn("model", text);
+      if (lastSpokenInputRef.current || liveModeRef.current) {
+        speak(text, { onEnd: () => maybeRelisten() });
+      }
+      sfx.error();
+    };
+
+    if (call.name === "clearReminders") {
+      const filter = call.args.filter ? String(call.args.filter).toLowerCase() : "";
+      const store = useReminderStore.getState();
+      const matching = store.items.filter(
+        (i) =>
+          !i.completedAt &&
+          !i.dismissedAt &&
+          (!filter || i.text.toLowerCase().includes(filter)),
+      );
+      for (const it of matching) store.dismissReminder(it.id);
+      ackChat(`Cleared ${matching.length} reminder${matching.length === 1 ? "" : "s"}.`);
+      return;
+    }
+    if (call.name === "removeReminder") {
+      const id = call.args.id ? String(call.args.id) : null;
+      const text = call.args.text ? String(call.args.text).toLowerCase() : "";
+      const store = useReminderStore.getState();
+      let target = id ? store.items.find((i) => i.id === id) : undefined;
+      if (!target && text) {
+        target = store.items.find(
+          (i) => !i.completedAt && !i.dismissedAt && i.text.toLowerCase().includes(text),
+        );
+      }
+      if (!target) {
+        failChat("No matching reminder found.");
+        return;
+      }
+      store.dismissReminder(target.id);
+      ackChat(`Removed: ${target.text}`);
+      return;
+    }
+    if (call.name === "bulkUpdateReminders") {
+      // We don't expose a full patch surface yet — support completeAll on the
+      // ids supplied as the most common bulk operation.
+      const ids = (call.args.ids as string[]) ?? [];
+      const completed = Boolean((call.args.patch as Record<string, unknown> | undefined)?.completed);
+      const store = useReminderStore.getState();
+      let count = 0;
+      for (const id of ids) {
+        if (completed) {
+          store.completeReminder(id);
+          count++;
+        } else {
+          store.dismissReminder(id);
+          count++;
+        }
+      }
+      ackChat(`Updated ${count} reminder${count === 1 ? "" : "s"}.`);
+      return;
+    }
+    if (call.name === "clearChecklistItems") {
+      const wo = call.args.workOrder ? String(call.args.workOrder) : null;
+      const job = wo ? findJobByWO(wo) : null;
+      if (!job) {
+        failChat("Couldn't resolve a job for the checklist clear.");
+        return;
+      }
+      const keys = ["trafficControl", "eight11", "preCon", "jobStart", "routedSrpRtasq", "hsr"] as const;
+      for (const k of keys) {
+        if (job.checklist?.[k]) toggleChecklistItem(job.id, k);
+        setChecklistText(job.id, k, "");
+      }
+      ackChat(`Cleared checklist on ${job.workOrder}.`);
+      return;
+    }
+    if (call.name === "addChecklistItem") {
+      const wo = call.args.workOrder ? String(call.args.workOrder) : "";
+      const key = String(call.args.key ?? "") as keyof typeof CHECKLIST_KEY_SET;
+      const text = call.args.text ? String(call.args.text) : "";
+      const job = findJobByWO(wo);
+      if (!job) {
+        failChat(`Couldn't find work order ${wo}.`);
+        return;
+      }
+      if (!(key in CHECKLIST_KEY_SET)) {
+        failChat(`Unknown checklist key: ${key}.`);
+        return;
+      }
+      if (!job.checklist?.[key as keyof JobChecklist]) {
+        toggleChecklistItem(job.id, key as keyof JobChecklist);
+      }
+      if (text) setChecklistText(job.id, key as keyof JobChecklist, text);
+      ackChat(`Added ${key} on ${job.workOrder}.`);
+      return;
+    }
+    if (call.name === "editChecklistItem") {
+      const wo = call.args.workOrder ? String(call.args.workOrder) : "";
+      const key = String(call.args.key ?? "");
+      const text = String(call.args.text ?? "");
+      const job = findJobByWO(wo);
+      if (!job) {
+        failChat(`Couldn't find ${wo}.`);
+        return;
+      }
+      if (!(key in CHECKLIST_KEY_SET)) {
+        failChat(`Unknown checklist key: ${key}.`);
+        return;
+      }
+      setChecklistText(job.id, key as keyof JobChecklist, text);
+      ackChat(`Updated ${key} on ${job.workOrder}.`);
+      return;
+    }
+    if (call.name === "setJobField") {
+      const wo = String(call.args.workOrder ?? "");
+      const field = String(call.args.field ?? "");
+      const value = call.args.value === null ? null : String(call.args.value ?? "");
+      const job = findJobByWO(wo);
+      if (!job) {
+        failChat(`Couldn't find ${wo}.`);
+        return;
+      }
+      const allowed: Record<string, true> = {
+        notes: true,
+        splicingNotes: true,
+        rawSecondaryStatus: true,
+        jobStatus: true,
+        address: true,
+        city: true,
+        zip: true,
+        scheduleDate: true,
+        endDate: true,
+        dueDate: true,
+        crew: true,
+        permitNumber: true,
+        workType: true,
+        base: true,
+        bidValue: true,
+      };
+      if (!allowed[field]) {
+        failChat(`Field "${field}" is not editable through Lumina.`);
+        return;
+      }
+      const result = await setJobFields(job.id, { [field]: value ?? undefined } as never);
+      if (!result.ok) {
+        failChat(`Save failed: ${result.message}`);
+        return;
+      }
+      ackChat(`Updated ${field} on ${job.workOrder}.`);
+      return;
+    }
+    if (call.name === "createJob" || call.name === "archiveJob") {
+      // Local-only stub — Smartsheet sync is a follow-up per the brief.
+      failChat(
+        call.name === "createJob"
+          ? "createJob is local-only and not wired to Smartsheet yet — surface this as a reminder instead."
+          : "archiveJob isn't wired to Smartsheet yet — surface this as a reminder.",
+      );
+      return;
+    }
+    if (call.name === "composeEmail") {
+      // Stash a draft locally in the reminder strip so the operator can see
+      // what Lumina prepared. Send is gated to sendEmail below.
+      const subject = String(call.args.subject ?? "(no subject)");
+      const to = String(call.args.to ?? "");
+      const body = String(call.args.body ?? "");
+      const draftKey = `draft_${Date.now().toString(36)}`;
+      useReminderStore.getState().addReminder({
+        text: `Draft to ${to} · ${subject}\n${body.slice(0, 120)}…`,
+        type: "draft_pending",
+        dedupeKey: draftKey,
+      });
+      ackChat(`Draft saved (${draftKey}). Confirm to send.`);
+      return;
+    }
+    if (call.name === "sendEmail" || call.name === "replyToThread" || call.name === "forwardThread") {
+      if (!Boolean(call.args.confirm)) {
+        failChat("Refusing to send — confirm flag required. State the draft and confirm.");
+        return;
+      }
+      if (!googleToken) {
+        failChat("Send needs Google connect.");
+        return;
+      }
+      const threadId = call.args.threadId ? String(call.args.threadId) : undefined;
+      const subject = call.args.subject ? String(call.args.subject) : "(no subject)";
+      const body = String(call.args.body ?? "");
+      const toList = Array.isArray(call.args.to)
+        ? (call.args.to as string[])
+        : call.args.to
+          ? [String(call.args.to)]
+          : [];
+      if (toList.length === 0 || !body) {
+        failChat("Send requires to + body.");
+        return;
+      }
+      const res = await sendGmail(googleToken, {
+        threadId,
+        to: toList,
+        subject,
+        body,
+      });
+      if (!res.ok) {
+        failChat(`Send failed: ${res.message}`);
+        return;
+      }
+      ackChat("Sent.");
+      return;
+    }
+    if (call.name === "clearMemory") {
+      const scope = String(call.args.scope ?? "all");
+      if (scope === "all" || scope === "facts") {
+        clearAllMemory();
+        setMemTick((t) => t + 1);
+      }
+      ackChat(`Memory cleared (${scope}).`);
+      return;
+    }
+    if (call.name === "forgetFact") {
+      const text = String(call.args.text ?? "").toLowerCase();
+      const mem = loadMemory();
+      const match = mem.facts.find((f) => f.text.toLowerCase().includes(text));
+      if (!match) {
+        failChat("No matching fact found.");
+        return;
+      }
+      forgetFactById(match.id);
+      setMemTick((t) => t + 1);
+      ackChat(`Forgot: ${match.text}`);
+      return;
+    }
+    if (call.name === "setMemoryFact") {
+      const value = String(call.args.value ?? call.args.text ?? "").trim();
+      if (!value) {
+        failChat("setMemoryFact needs a value.");
+        return;
+      }
+      const factId = call.args.id ? String(call.args.id) : null;
+      if (factId) {
+        updateFact(factId, value);
+      } else {
+        rememberFact(value, "explicit");
+      }
+      setMemTick((t) => t + 1);
+      ackChat("Memory updated.");
+      return;
+    }
+    if (call.name === "setHudMode") {
+      const mode = String(call.args.mode ?? "expanded");
+      if (mode === "minimized" || mode === "expanded") {
+        setHudMode(mode);
+        ackChat(`HUD ${mode}.`);
+      } else {
+        failChat(`Unknown HUD mode: ${mode}.`);
+      }
+      return;
+    }
+    if (call.name === "setOrientation") {
+      const o = String(call.args.orientation ?? "vertical");
+      if (o === "vertical" || o === "horizontal") {
+        setHudOrientation(o);
+        ackChat(`HUD ${o}.`);
+      } else {
+        failChat(`Unknown orientation: ${o}.`);
+      }
+      return;
+    }
+    if (call.name === "enterFocusMode") {
+      // If a workOrder is provided, enter focus on that job; otherwise flip
+      // the existing focus to 50/50 split.
+      const wo = call.args.workOrder ? String(call.args.workOrder) : null;
+      if (wo) {
+        const j = findJobByWO(wo);
+        if (!j) {
+          failChat(`Couldn't find ${wo}.`);
+          return;
+        }
+        enterFocus(j.id);
+      }
+      setFocusFiftyFifty(true);
+      ackChat("Focus mode engaged.");
+      return;
+    }
+    if (call.name === "exitFocusMode") {
+      setFocusFiftyFifty(false);
+      exitFocus();
+      ackChat("Exited focus mode.");
+      return;
     }
   };
+
+  // Whitelist of legal checklist keys for setChecklistText / toggleChecklistItem.
+  const CHECKLIST_KEY_SET = {
+    trafficControl: true,
+    eight11: true,
+    preCon: true,
+    jobStart: true,
+    routedSrpRtasq: true,
+    hsr: true,
+  } as const;
 
   async function send(spoken = false) {
     const text = input.trim();
@@ -1093,6 +1476,202 @@ export function LuminaPanel({
             });
             if (!res.ok) return { ok: false, message: res.message };
             return { ok: true, message: "Reply sent.", data: { messageId: res.messageId } };
+          }
+
+          // ===== PR #10 — full mutation tools (live voice parity) =====
+          const normWO2 = (s: string) => s.replace(/[\s\-_.]/g, "").toUpperCase();
+          const findJob2 = (raw: string) => {
+            const target = normWO2(raw);
+            return jobs.find((x) => {
+              const w = normWO2(x.workOrder ?? "");
+              if (w === target) return true;
+              if (target.startsWith("P") && w === target.slice(1)) return true;
+              if (w.startsWith("P") && w.slice(1) === target) return true;
+              if (target.length >= 5 && w.endsWith(target)) return true;
+              return false;
+            });
+          };
+          if (call.name === "addReminder") {
+            const text = String(call.args.text ?? "").trim();
+            if (!text) return { ok: false, message: "Reminder text required." };
+            useReminderStore.getState().addReminder({ text, type: "user" });
+            return { ok: true, message: `Locked in: ${text}` };
+          }
+          if (call.name === "clearReminders") {
+            const filter = call.args.filter ? String(call.args.filter).toLowerCase() : "";
+            const store = useReminderStore.getState();
+            const matching = store.items.filter(
+              (i) => !i.completedAt && !i.dismissedAt && (!filter || i.text.toLowerCase().includes(filter)),
+            );
+            for (const it of matching) store.dismissReminder(it.id);
+            return { ok: true, message: `Cleared ${matching.length} reminder${matching.length === 1 ? "" : "s"}.` };
+          }
+          if (call.name === "removeReminder") {
+            const id = call.args.id ? String(call.args.id) : null;
+            const text = call.args.text ? String(call.args.text).toLowerCase() : "";
+            const store = useReminderStore.getState();
+            let target = id ? store.items.find((i) => i.id === id) : undefined;
+            if (!target && text) {
+              target = store.items.find(
+                (i) => !i.completedAt && !i.dismissedAt && i.text.toLowerCase().includes(text),
+              );
+            }
+            if (!target) return { ok: false, message: "No matching reminder." };
+            store.dismissReminder(target.id);
+            return { ok: true, message: `Removed: ${target.text}` };
+          }
+          if (call.name === "bulkUpdateReminders") {
+            const ids = (call.args.ids as string[]) ?? [];
+            const completed = Boolean((call.args.patch as Record<string, unknown> | undefined)?.completed);
+            const store = useReminderStore.getState();
+            for (const id of ids) {
+              if (completed) store.completeReminder(id);
+              else store.dismissReminder(id);
+            }
+            return { ok: true, message: `Updated ${ids.length} reminders.` };
+          }
+          if (call.name === "setJobField") {
+            const job = findJob2(String(call.args.workOrder ?? ""));
+            const field = String(call.args.field ?? "");
+            const value = call.args.value === null ? null : String(call.args.value ?? "");
+            if (!job) return { ok: false, message: "Work order not found." };
+            const allowed: Record<string, true> = {
+              notes: true,
+              splicingNotes: true,
+              rawSecondaryStatus: true,
+              jobStatus: true,
+              address: true,
+              city: true,
+              zip: true,
+              scheduleDate: true,
+              endDate: true,
+              dueDate: true,
+              crew: true,
+              permitNumber: true,
+              workType: true,
+              base: true,
+              bidValue: true,
+            };
+            if (!allowed[field]) return { ok: false, message: `Field "${field}" not editable.` };
+            const result = await setJobFields(job.id, { [field]: value ?? undefined } as never);
+            if (!result.ok) return { ok: false, message: result.message };
+            return { ok: true, message: `Updated ${field} on ${job.workOrder}.` };
+          }
+          if (call.name === "clearChecklistItems") {
+            const job = findJob2(String(call.args.workOrder ?? ""));
+            if (!job) return { ok: false, message: "Work order not found." };
+            const keys = ["trafficControl", "eight11", "preCon", "jobStart", "routedSrpRtasq", "hsr"] as const;
+            for (const k of keys) {
+              if (job.checklist?.[k]) toggleChecklistItem(job.id, k);
+              setChecklistText(job.id, k, "");
+            }
+            return { ok: true, message: `Cleared checklist on ${job.workOrder}.` };
+          }
+          if (call.name === "addChecklistItem" || call.name === "editChecklistItem") {
+            const job = findJob2(String(call.args.workOrder ?? ""));
+            if (!job) return { ok: false, message: "Work order not found." };
+            const key = String(call.args.key ?? "");
+            const text = call.args.text ? String(call.args.text) : "";
+            const validKeys = ["trafficControl", "eight11", "preCon", "jobStart", "routedSrpRtasq", "hsr"];
+            if (!validKeys.includes(key)) return { ok: false, message: `Unknown key ${key}.` };
+            if (call.name === "addChecklistItem" && !job.checklist?.[key as keyof JobChecklist]) {
+              toggleChecklistItem(job.id, key as keyof JobChecklist);
+            }
+            if (text) setChecklistText(job.id, key as keyof JobChecklist, text);
+            return { ok: true, message: `${call.name === "addChecklistItem" ? "Added" : "Updated"} ${key} on ${job.workOrder}.` };
+          }
+          if (call.name === "createJob" || call.name === "archiveJob") {
+            return {
+              ok: false,
+              message: `${call.name} isn't wired to Smartsheet yet — surface as a reminder.`,
+            };
+          }
+          if (call.name === "composeEmail") {
+            const subject = String(call.args.subject ?? "(no subject)");
+            const to = String(call.args.to ?? "");
+            const body = String(call.args.body ?? "");
+            const draftKey = `draft_${Date.now().toString(36)}`;
+            useReminderStore.getState().addReminder({
+              text: `Draft to ${to} · ${subject}\n${body.slice(0, 120)}…`,
+              type: "draft_pending",
+              dedupeKey: draftKey,
+            });
+            return { ok: true, message: `Draft saved (${draftKey}).`, data: { draftKey } };
+          }
+          if (call.name === "sendEmail" || call.name === "replyToThread" || call.name === "forwardThread") {
+            if (!Boolean(call.args.confirm)) {
+              return { ok: false, message: "Refusing to send — confirm flag required." };
+            }
+            if (!googleToken) return { ok: false, message: "Not signed in to Google." };
+            const threadId = call.args.threadId ? String(call.args.threadId) : undefined;
+            const subject = call.args.subject ? String(call.args.subject) : "(no subject)";
+            const body = String(call.args.body ?? "");
+            const toList = Array.isArray(call.args.to)
+              ? (call.args.to as string[])
+              : call.args.to
+                ? [String(call.args.to)]
+                : [];
+            if (toList.length === 0 || !body) return { ok: false, message: "Need to + body." };
+            const res = await sendGmail(googleToken, {
+              threadId,
+              to: toList,
+              subject,
+              body,
+            });
+            if (!res.ok) return { ok: false, message: res.message };
+            return { ok: true, message: "Sent." };
+          }
+          if (call.name === "clearMemory") {
+            const scope = String(call.args.scope ?? "all");
+            if (scope === "all" || scope === "facts") clearAllMemory();
+            return { ok: true, message: `Memory cleared (${scope}).` };
+          }
+          if (call.name === "forgetFact") {
+            const text = String(call.args.text ?? "").toLowerCase();
+            const mem = loadMemory();
+            const match = mem.facts.find((f) => f.text.toLowerCase().includes(text));
+            if (!match) return { ok: false, message: "No matching fact." };
+            forgetFactById(match.id);
+            return { ok: true, message: `Forgot: ${match.text}` };
+          }
+          if (call.name === "setMemoryFact") {
+            const value = String(call.args.value ?? call.args.text ?? "").trim();
+            if (!value) return { ok: false, message: "setMemoryFact needs a value." };
+            const factId = call.args.id ? String(call.args.id) : null;
+            if (factId) updateFact(factId, value);
+            else rememberFact(value, "explicit");
+            return { ok: true, message: "Memory updated." };
+          }
+          if (call.name === "setHudMode") {
+            const mode = String(call.args.mode ?? "expanded");
+            if (mode !== "minimized" && mode !== "expanded") {
+              return { ok: false, message: `Unknown HUD mode ${mode}.` };
+            }
+            setHudMode(mode);
+            return { ok: true, message: `HUD ${mode}.` };
+          }
+          if (call.name === "setOrientation") {
+            const o = String(call.args.orientation ?? "vertical");
+            if (o !== "vertical" && o !== "horizontal") {
+              return { ok: false, message: `Unknown orientation ${o}.` };
+            }
+            setHudOrientation(o);
+            return { ok: true, message: `HUD ${o}.` };
+          }
+          if (call.name === "enterFocusMode") {
+            const wo = call.args.workOrder ? String(call.args.workOrder) : null;
+            if (wo) {
+              const j = findJob2(wo);
+              if (!j) return { ok: false, message: `Work order ${wo} not found.` };
+              enterFocus(j.id);
+            }
+            setFocusFiftyFifty(true);
+            return { ok: true, message: "Focus mode engaged." };
+          }
+          if (call.name === "exitFocusMode") {
+            setFocusFiftyFifty(false);
+            exitFocus();
+            return { ok: true, message: "Exited focus mode." };
           }
           return { ok: false, message: `Unknown tool: ${call.name}` };
         } catch (err) {

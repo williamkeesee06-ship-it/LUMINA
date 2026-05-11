@@ -33,6 +33,8 @@ export function JobFocusMode() {
   const openThread = useUI((s) => s.openThread);
   const openThreadId = useUI((s) => s.openThreadId);
   const googleToken = useUI((s) => s.googleToken);
+  const focusFiftyFifty = useUI((s) => s.focusFiftyFifty);
+  const setFocusFiftyFifty = useUI((s) => s.setFocusFiftyFifty);
   const job = useUI((s) =>
     focusedJobId ? s.jobs.find((j) => j.id === focusedJobId) : undefined,
   );
@@ -143,9 +145,17 @@ export function JobFocusMode() {
         }}
       />
 
-      <div className="relative w-full h-full flex">
+      <div
+        className="relative w-full h-full grid"
+        style={{
+          // Default = card 70% / email 30% so the job card dominates with a
+          // sliver of email. Focus mode (50/50) is toggled via the pill in
+          // the right pane and via Lumina's enterFocusMode tool.
+          gridTemplateColumns: focusFiftyFifty ? "1fr 1fr" : "70% 30%",
+        }}
+      >
         {/* LEFT: editable job card */}
-        <div className="flex-1 basis-1/2 h-full flex flex-col overflow-hidden border-r border-white/5">
+        <div className="h-full flex flex-col overflow-hidden border-r border-white/5 min-w-[440px]">
           {/* Top header strip */}
           <header className="px-8 pt-6 pb-4 border-b border-white/5 relative">
             <div className="flex items-center justify-between mb-3">
@@ -393,7 +403,7 @@ export function JobFocusMode() {
             The bright neon-blue pill in the top-right flips between the two
             primary views; attachment clicks still take over the whole right
             half (closing returns to whichever toggle was active). */}
-        <div className="flex-1 basis-1/2 h-full relative overflow-hidden bg-black/80">
+        <div className="h-full relative overflow-hidden bg-black/80">
           {rightPane === "email" ? (
             <EmailThreadView variant="inline-large" />
           ) : (
@@ -426,6 +436,34 @@ export function JobFocusMode() {
               }
             >
               {rightPane === "email" ? "MAP" : "EMAIL"}
+            </button>
+          )}
+
+          {/* 50/50 toggle — default layout is 70/30 (card dominates with a
+              sliver of email). Clicking flips to a 50/50 split for the
+              full Focus Mode view per the operator brief. */}
+          {!openSat && (
+            <button
+              type="button"
+              onMouseEnter={() => sfx.hover()}
+              onClick={() => {
+                sfx.select();
+                setFocusFiftyFifty(!focusFiftyFifty);
+              }}
+              className="absolute top-4 right-[110px] z-20 font-mono uppercase tracking-[0.28em] text-[10px] px-3 py-1.5 rounded-full transition-colors"
+              style={{
+                color: focusFiftyFifty ? "#001218" : "#9be7ff",
+                background: focusFiftyFifty
+                  ? "var(--accent-blue, #00E5FF)"
+                  : "transparent",
+                border: "1px solid rgba(0,229,255,0.6)",
+                boxShadow: focusFiftyFifty
+                  ? "0 0 10px rgba(0,229,255,0.7)"
+                  : "0 0 6px rgba(0,229,255,0.25)",
+              }}
+              title={focusFiftyFifty ? "Back to card-dominant 70/30 layout" : "50/50 split"}
+            >
+              {focusFiftyFifty ? "50/50" : "70/30"}
             </button>
           )}
 
