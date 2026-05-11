@@ -44,6 +44,14 @@ function useHudData() {
   const counts = useUI(selectGalaxyCounts);
   const enterGalaxy = useUI((s) => s.enterGalaxy);
   const focusedGalaxy = useUI((s) => s.focusedGalaxy);
+  const recentChanges = useUI((s) => s.recentChanges);
+  const clearRecentForGalaxy = useUI((s) => s.clearRecentChangesForGalaxy);
+  // Set of galaxies that currently have a pulse-eligible recent change.
+  const pulsingGalaxies = useMemo(() => {
+    const out = new Set<Galaxy>();
+    for (const r of recentChanges) out.add(r.galaxy);
+    return out;
+  }, [recentChanges]);
   const jobs = useUI((s) => s.jobs);
   const loading = useUI((s) => s.loading);
   const error = useUI((s) => s.error);
@@ -108,6 +116,8 @@ function useHudData() {
     toggleMapFilter,
     toggleHistoryOnMap,
     handleConnectGmail,
+    pulsingGalaxies,
+    clearRecentForGalaxy,
   };
 }
 
@@ -136,6 +146,8 @@ function HUDVertical() {
     toggleMapFilter,
     toggleHistoryOnMap,
     handleConnectGmail,
+    pulsingGalaxies,
+    clearRecentForGalaxy,
   } = useHudData();
   void _universeVitality; // retired — universe gauge replaced by 4 system gauges
 
@@ -272,6 +284,11 @@ function HUDVertical() {
                   showHistoryOnMap={showHistoryOnMap}
                   toggleMapFilter={toggleMapFilter}
                   toggleHistoryOnMap={toggleHistoryOnMap}
+                  unreadCount={unreadCount}
+                  googleToken={googleToken}
+                  handleConnectGmail={handleConnectGmail}
+                  pulsingGalaxies={pulsingGalaxies}
+                  clearRecentForGalaxy={clearRecentForGalaxy}
                 />
               )}
             </div>
@@ -469,6 +486,8 @@ function HUDHorizontal() {
     toggleMapFilter,
     toggleHistoryOnMap,
     handleConnectGmail,
+    pulsingGalaxies,
+    clearRecentForGalaxy,
   } = useHudData();
   void _universeVitality; // retired — universe gauge replaced by 4 system gauges
 
@@ -647,8 +666,10 @@ function HUDHorizontal() {
                             rgb={rgb}
                             active={active && !isMapOpen}
                             disabled={isFiltered}
+                            pulse={pulsingGalaxies.has(g)}
                             onMouseEnter={() => sfx.hover()}
                             onClick={() => {
+                              clearRecentForGalaxy(g);
                               if (isMapOpen) {
                                 toggleMapFilter(g);
                               } else {
@@ -666,8 +687,10 @@ function HUDHorizontal() {
                         rgb="138,147,168"
                         active={false}
                         disabled={isMapOpen ? !showHistoryOnMap : false}
+                        pulse={pulsingGalaxies.has("Complete")}
                         onMouseEnter={() => sfx.hover()}
                         onClick={() => {
+                          clearRecentForGalaxy("Complete");
                           if (isMapOpen) {
                             toggleHistoryOnMap();
                           } else {
@@ -675,6 +698,30 @@ function HUDHorizontal() {
                             enterGalaxy(focusedGalaxy === "Complete" ? null : "Complete");
                           }
                         }}
+                      />
+                      {/* GMAIL widget — moved into the nav row in PR #6.
+                          Sits in History's prior final slot; History
+                          is one slot earlier. Both orientations consistent. */}
+                      <CircleWidget
+                        label={googleToken ? "GMAIL" : "CONNECT"}
+                        value={googleToken ? unreadCount : "→"}
+                        color={
+                          googleToken
+                            ? unreadCount > 0
+                              ? "#FF3D9A"
+                              : "#5BF3FF"
+                            : "#FFB347"
+                        }
+                        rgb={
+                          googleToken
+                            ? unreadCount > 0
+                              ? "255,61,154"
+                              : "91,243,255"
+                            : "255,179,71"
+                        }
+                        active={false}
+                        onMouseEnter={() => sfx.hover()}
+                        onClick={handleConnectGmail}
                       />
                     </div>
                   )
@@ -1088,6 +1135,11 @@ function NavigationPageVertical({
   showHistoryOnMap,
   toggleMapFilter,
   toggleHistoryOnMap,
+  unreadCount,
+  googleToken,
+  handleConnectGmail,
+  pulsingGalaxies,
+  clearRecentForGalaxy,
 }: {
   counts: Record<Galaxy, number>;
   focusedGalaxy: Galaxy | null;
@@ -1097,6 +1149,11 @@ function NavigationPageVertical({
   showHistoryOnMap: boolean;
   toggleMapFilter: (g: Galaxy) => void;
   toggleHistoryOnMap: () => void;
+  unreadCount: number;
+  googleToken: string | null;
+  handleConnectGmail: () => void;
+  pulsingGalaxies: Set<Galaxy>;
+  clearRecentForGalaxy: (g: Galaxy) => void;
 }) {
   return (
     <div className="flex flex-col items-stretch">
@@ -1130,8 +1187,10 @@ function NavigationPageVertical({
               active={active && !isMapOpen}
               disabled={isFiltered}
               size={66}
+              pulse={pulsingGalaxies.has(g)}
               onMouseEnter={() => sfx.hover()}
               onClick={() => {
+                clearRecentForGalaxy(g);
                 if (isMapOpen) {
                   toggleMapFilter(g);
                 } else {
@@ -1142,7 +1201,9 @@ function NavigationPageVertical({
             />
           );
         })}
-        {/* HISTORY widget — toggles black-marker Complete jobs on the map. */}
+        {/* HISTORY widget — toggles black-marker Complete jobs on the map.
+            PR #6: HISTORY now precedes GMAIL (Gmail takes History's old
+            final slot, History moves up one). Applies to both orientations. */}
         <MiniWidget
           label="HISTORY"
           value={counts.Complete}
@@ -1151,8 +1212,10 @@ function NavigationPageVertical({
           active={false}
           disabled={isMapOpen ? !showHistoryOnMap : false}
           size={66}
+          pulse={pulsingGalaxies.has("Complete")}
           onMouseEnter={() => sfx.hover()}
           onClick={() => {
+            clearRecentForGalaxy("Complete");
             if (isMapOpen) {
               toggleHistoryOnMap();
             } else {
@@ -1160,6 +1223,31 @@ function NavigationPageVertical({
               enterGalaxy(focusedGalaxy === "Complete" ? null : "Complete");
             }
           }}
+        />
+        {/* GMAIL widget — unread count from the North Sky label. Click to
+            connect when not signed in; otherwise tap to acknowledge (the
+            badge is the live unread count, see telemetry page for gauge). */}
+        <MiniWidget
+          label={googleToken ? "GMAIL" : "CONNECT"}
+          value={googleToken ? unreadCount : "→"}
+          color={
+            googleToken
+              ? unreadCount > 0
+                ? "#FF3D9A"
+                : "#5BF3FF"
+              : "#FFB347"
+          }
+          rgb={
+            googleToken
+              ? unreadCount > 0
+                ? "255,61,154"
+                : "91,243,255"
+              : "255,179,71"
+          }
+          active={false}
+          size={66}
+          onMouseEnter={() => sfx.hover()}
+          onClick={handleConnectGmail}
         />
       </div>
     </div>

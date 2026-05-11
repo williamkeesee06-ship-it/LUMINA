@@ -31,6 +31,7 @@ import {
   cancelSpeak,
 } from "@/lib/voice";
 import { LuminaLiveSession, type LuminaLiveStatus, type LuminaLiveToolResult } from "@/lib/geminiLive";
+import { useReminderStore } from "@/store/reminderStore";
 
 interface ToolCall {
   name:
@@ -47,7 +48,8 @@ interface ToolCall {
     | "summarizeThread"
     | "openMoonForJob"
     | "draftReply"
-    | "sendReply";
+    | "sendReply"
+    | "addReminder";
   args: Record<string, unknown>;
 }
 
@@ -398,6 +400,27 @@ export function LuminaPanel({
         setMemTick((t) => t + 1);
         sfx.confirm();
       }
+      return;
+    }
+    if (call.name === "addReminder") {
+      // Capture a structured to-do for the reminder strip. The model emits
+      // this when Billy says "remind me to ___", "we need to ___",
+      // "follow up on ___", etc.
+      const text = String(call.args.text ?? "").trim();
+      if (!text) return;
+      const sourceJobId =
+        typeof call.args.workOrder === "string"
+          ? jobs.find((j) => j.workOrder === call.args.workOrder)?.id
+          : undefined;
+      useReminderStore.getState().addReminder({
+        text,
+        type: "user",
+        sourceJobId,
+      });
+      sfx.confirm();
+      const ack = `Locked in: ${text}`;
+      setMessages((m) => [...m, { role: "model", text: ack }]);
+      recordTurn("model", ack);
       return;
     }
     if (call.name === "listCalendar") {

@@ -38,7 +38,7 @@ export function CameraRig() {
   const warpFromFov = useRef(52);
 
   // Scripted target (used until the user takes control)
-  const targetPos = useRef(new THREE.Vector3(0, 38, 110));
+  const targetPos = useRef(new THREE.Vector3(0, 52, 150));
   const targetLook = useRef(new THREE.Vector3(0, 0, 0));
   const currentLook = useRef(new THREE.Vector3(0, 0, 0));
 
@@ -47,6 +47,7 @@ export function CameraRig() {
   const yaw = useRef(0);
   const pitch = useRef(0);
   const isDragging = useRef(false);
+  const dragButton = useRef<"left" | "right">("left");
   const lastPointer = useRef<{ x: number; y: number } | null>(null);
   // Total pointer travel since pointerdown — used to suppress the synthetic
   // click that fires after a drag-pan so it doesn't accidentally re-select
@@ -80,10 +81,12 @@ export function CameraRig() {
     // A new viewMode means: cancel free-fly, snap back to a scripted shot.
     freeFly.current = false;
     if (viewMode === "universe") {
-      // God view standoff bumped to match the wider galaxy ring (78u radius
-      // vs the previous 42). Camera pulled back so the whole spread fits in
-      // frame as a constellation of distinct clusters.
-      targetPos.current.set(0, 38, 110);
+      // God view standoff bumped again to match the wider galaxy ring
+      // (120u radius vs PR #5's 78). Camera pulled back proportionally so
+      // the wider spread still fits comfortably in frame as a constellation
+      // of distinct clusters, with the inter-galaxy dust bleed staying in
+      // view rather than getting cropped at the edges.
+      targetPos.current.set(0, 52, 150);
       targetLook.current.set(0, 0, 0);
     } else if (viewMode === "galaxy" && focusedGalaxy) {
       const p = GALAXY_POSITIONS[focusedGalaxy];
@@ -120,14 +123,15 @@ export function CameraRig() {
     };
 
     const onPointerDown = (e: PointerEvent) => {
-      // Don't hijack right-click or middle-click outside drags
-      if (e.button !== 0) return;
+      // Track LMB (pan) and RMB (rotate). Middle is ignored.
+      if (e.button !== 0 && e.button !== 2) return;
       // Ignore if the pointerdown is on a UI overlay (HUD, panel) — those
       // stop propagation, but as a guard:
       const target = e.target as HTMLElement | null;
       if (target && target !== dom && !dom.contains(target)) return;
 
       isDragging.current = true;
+      dragButton.current = e.button === 2 ? "right" : "left";
       lastPointer.current = { x: e.clientX, y: e.clientY };
       dragStart.current = { x: e.clientX, y: e.clientY };
       dragTravel.current = 0;
@@ -151,14 +155,41 @@ export function CameraRig() {
       } catch {
         /* no-op */
       }
-      const sens = 0.0035;
-      // Inverted (push) drag: drag right -> camera pans LEFT (world appears
-      // to swipe right), drag down -> camera pans UP. Feels like pushing the
-      // scene rather than grabbing it.
-      yaw.current += dx * sens;
-      pitch.current += dy * sens;
-      const lim = Math.PI / 2 - 0.05;
-      pitch.current = Math.max(-lim, Math.min(lim, pitch.current));
+      if (dragButton.current === "right") {
+        // RMB drag → rotate (yaw / pitch).
+        const sens = 0.0035;
+        yaw.current += dx * sens;
+        pitch.current += dy * sens;
+        const lim = Math.PI / 2 - 0.05;
+        pitch.current = Math.max(-lim, Math.min(lim, pitch.current));
+      } else {
+        // LMB drag → pan. Horizontal = camera local X (strafe). Vertical =
+        // camera forward/back, projected onto the horizontal (XZ) plane so
+        // the scene slides forward instead of dipping below the floor.
+        // Scale by distance to focus so panning at standoff doesn't crawl
+        // and panning up close doesn't fly past the planet.
+        const state = useUI.getState();
+        let focus = new THREE.Vector3(0, 0, 0);
+        if (state.focusedGalaxy) {
+          const g = GALAXY_POSITIONS[state.focusedGalaxy];
+          focus.set(g[0], g[1], g[2]);
+        }
+        const dist = Math.max(2, camera.position.distanceTo(focus));
+        const panScale = dist * 0.0018;
+        const camRight = new THREE.Vector3();
+        camera.getWorldDirection(camRight); // forward
+        const forwardFlat = new THREE.Vector3(
+          camRight.x,
+          0,
+          camRight.z,
+        ).normalize();
+        const rightFlat = new THREE.Vector3()
+          .crossVectors(forwardFlat, new THREE.Vector3(0, 1, 0))
+          .normalize();
+        // Drag right → pan left (push the world right). Drag down → pan back.
+        camera.position.addScaledVector(rightFlat, -dx * panScale);
+        camera.position.addScaledVector(forwardFlat, -dy * panScale);
+      }
     };
 
     const onPointerUp = (e: PointerEvent) => {
@@ -225,6 +256,10 @@ export function CameraRig() {
       keys.current[e.key.toLowerCase()] = false;
     };
 
+    // Suppress the default browser context menu on RMB so RMB-drag-to-rotate
+    // doesn't open a menu mid-gesture.
+    const onContextMenu = (e: Event) => e.preventDefault();
+
     dom.addEventListener("pointerdown", onPointerDown);
     dom.addEventListener("pointermove", onPointerMove);
     dom.addEventListener("pointerup", onPointerUp);
@@ -232,6 +267,7 @@ export function CameraRig() {
     // Capture-phase click on the canvas — must intercept before R3F.
     dom.addEventListener("click", onClickCapture, true);
     dom.addEventListener("wheel", onWheel, { passive: false });
+    dom.addEventListener("contextmenu", onContextMenu);
     window.addEventListener("keydown", onKeyDown);
     window.addEventListener("keyup", onKeyUp);
 
@@ -242,6 +278,7 @@ export function CameraRig() {
       dom.removeEventListener("pointercancel", onPointerUp);
       dom.removeEventListener("click", onClickCapture, true);
       dom.removeEventListener("wheel", onWheel);
+      dom.removeEventListener("contextmenu", onContextMenu);
       window.removeEventListener("keydown", onKeyDown);
       window.removeEventListener("keyup", onKeyUp);
     };
@@ -324,8 +361,10 @@ export function CameraRig() {
         wheelImpulse.current *= Math.exp(-6 * delta);
       }
 
-      // Soft world bounds so we can't fly into oblivion
-      const R = 360;
+      // Soft world bounds so we can't fly into oblivion. Bumped with the
+      // wider galaxy ring (radius 120) so free-fly still lets the user pull
+      // back far enough to see the whole field.
+      const R = 500;
       const dist = camera.position.length();
       if (dist > R) camera.position.multiplyScalar(R / dist);
       return;

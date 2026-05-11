@@ -500,93 +500,46 @@
    ────────────────────────────────────────────────────────────────────── */
 .watermark-pillar {
   background: #FFFFFF;
+  /* PR #6 — bar locked to neon orange. Period + amplitude held to the
+     prior multi-hue cycle so the rhythm reads the same; only the hue
+     changes. */
   animation: watermark-pillar-pulse 6.5s ease-in-out infinite;
 }
 
 @keyframes watermark-pillar-pulse {
-  /* Royal blue burst */
-  0% {
+  0%, 100% {
     box-shadow:
       0 0 1px #FFFFFF,
-      0 0 3px #6E92FF,
-      0 0 6px #2A5CFF,
-      0 0 14px rgba(42, 92, 255, 0.95),
-      0 0 28px rgba(42, 92, 255, 0.6),
-      0 0 48px rgba(42, 92, 255, 0.35);
+      0 0 3px #FFB36B,
+      0 0 6px #FF7A1A,
+      0 0 14px rgba(255, 106, 0, 0.95),
+      0 0 28px rgba(255, 106, 0, 0.6),
+      0 0 48px rgba(255, 106, 0, 0.35);
     opacity: 1;
   }
-  /* Soft dim between hues */
-  12% {
+  35% {
     box-shadow:
       0 0 1px #FFFFFF,
-      0 0 2px rgba(110, 146, 255, 0.4),
-      0 0 4px rgba(42, 92, 255, 0.3);
+      0 0 2px rgba(255, 179, 107, 0.45),
+      0 0 4px rgba(255, 106, 0, 0.3);
     opacity: 0.55;
   }
-  /* Cyan burst */
-  25% {
+  65% {
     box-shadow:
       0 0 1px #FFFFFF,
-      0 0 3px #9DF7FF,
-      0 0 6px #5BF3FF,
-      0 0 14px rgba(91, 243, 255, 0.95),
-      0 0 28px rgba(91, 243, 255, 0.6),
-      0 0 48px rgba(91, 243, 255, 0.35);
+      0 0 3px #FFB36B,
+      0 0 6px #FF7A1A,
+      0 0 14px rgba(255, 106, 0, 0.95),
+      0 0 28px rgba(255, 106, 0, 0.6),
+      0 0 48px rgba(255, 106, 0, 0.35);
     opacity: 1;
   }
-  37% {
+  85% {
     box-shadow:
       0 0 1px #FFFFFF,
-      0 0 2px rgba(91, 243, 255, 0.4),
-      0 0 4px rgba(91, 243, 255, 0.3);
+      0 0 2px rgba(255, 179, 107, 0.45),
+      0 0 4px rgba(255, 106, 0, 0.3);
     opacity: 0.55;
-  }
-  /* Magenta burst */
-  50% {
-    box-shadow:
-      0 0 1px #FFFFFF,
-      0 0 3px #FF8FCB,
-      0 0 6px #FF3D9A,
-      0 0 14px rgba(255, 61, 154, 0.95),
-      0 0 28px rgba(255, 61, 154, 0.6),
-      0 0 48px rgba(255, 61, 154, 0.35);
-    opacity: 1;
-  }
-  62% {
-    box-shadow:
-      0 0 1px #FFFFFF,
-      0 0 2px rgba(255, 61, 154, 0.4),
-      0 0 4px rgba(255, 61, 154, 0.3);
-    opacity: 0.55;
-  }
-  /* Neon green burst */
-  75% {
-    box-shadow:
-      0 0 1px #FFFFFF,
-      0 0 3px #7CFFA8,
-      0 0 6px #39FF7A,
-      0 0 14px rgba(57, 255, 122, 0.95),
-      0 0 28px rgba(57, 255, 122, 0.6),
-      0 0 48px rgba(57, 255, 122, 0.35);
-    opacity: 1;
-  }
-  87% {
-    box-shadow:
-      0 0 1px #FFFFFF,
-      0 0 2px rgba(57, 255, 122, 0.4),
-      0 0 4px rgba(57, 255, 122, 0.3);
-    opacity: 0.55;
-  }
-  /* Loop back to royal blue */
-  100% {
-    box-shadow:
-      0 0 1px #FFFFFF,
-      0 0 3px #6E92FF,
-      0 0 6px #2A5CFF,
-      0 0 14px rgba(42, 92, 255, 0.95),
-      0 0 28px rgba(42, 92, 255, 0.6),
-      0 0 48px rgba(42, 92, 255, 0.35);
-    opacity: 1;
   }
 }
 
@@ -604,6 +557,32 @@
     0 0 8px rgba(0, 0, 0, 0.6);
   letter-spacing: 0.05em;
   text-transform: uppercase;
+}
+
+/* ──────────────────────────────────────────────────────────────────────
+   Nav-widget pulse ring (PR #6). Surfaces when a job arrives in the
+   universe or moves galaxies. Driven by `--pulse-rgb`; the widget reads
+   its own galaxy color so this stays palette-agnostic.
+   ────────────────────────────────────────────────────────────────────── */
+.nav-pulse-ring {
+  position: absolute;
+  inset: -6px;
+  border-radius: 999px;
+  pointer-events: none;
+  border: 2px solid rgba(var(--pulse-rgb, 91 243 255), 0.85);
+  animation: nav-pulse 1.75s ease-out infinite;
+}
+@keyframes nav-pulse {
+  0% {
+    transform: scale(1);
+    opacity: 0.95;
+    box-shadow: 0 0 0 0 rgba(var(--pulse-rgb, 91 243 255), 0.7);
+  }
+  100% {
+    transform: scale(1.35);
+    opacity: 0;
+    box-shadow: 0 0 0 12px rgba(var(--pulse-rgb, 91 243 255), 0);
+  }
 }
 
 /* ──────────────────────────────────────────────────────────────────────

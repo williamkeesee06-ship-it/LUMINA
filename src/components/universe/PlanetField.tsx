@@ -215,7 +215,6 @@ function Planet({
   const coreRef = useRef<THREE.Mesh>(null);
   const ringRef = useRef<THREE.Mesh>(null);
   const ringGlowRef = useRef<THREE.Mesh>(null);
-  const lockRef = useRef<THREE.Mesh>(null);
   const labelRef = useRef<THREE.Group>(null);
 
   // tiltDeg retained for API compatibility but unused now — ring is
@@ -252,9 +251,6 @@ function Planet({
       const baseGlow = hero ? 0.95 : selected ? 0.7 : 0.55;
       const tgt = (dim ? 0.08 : baseGlow) + Math.sin(t * 1.2) * (hero ? 0.12 : 0.08);
       m.opacity += (tgt - m.opacity) * Math.min(1, delta * 5);
-    }
-    if (lockRef.current) {
-      lockRef.current.rotation.z += delta * 0.6;
     }
     // Keep label readable at constant pixel size regardless of distance.
     // Drei's Text is in world units, so to hold a constant projected size,
@@ -370,23 +366,6 @@ function Planet({
           <NeonTag label={label} color={color} selected={selected} />
         </Billboard>
       </group>
-
-      {/* Tactical lock-on ring — billboarded perfect circle when selected */}
-      {selected && (
-        <Billboard follow position={[0, 0, 0]}>
-          <mesh ref={lockRef}>
-            <ringGeometry args={[0.85, 0.9, 64]} />
-            <meshBasicMaterial
-              color={color}
-              transparent
-              opacity={0.85}
-              side={THREE.DoubleSide}
-              blending={THREE.AdditiveBlending}
-              toneMapped={false}
-            />
-          </mesh>
-        </Billboard>
-      )}
 
       {/* Satellites — small glowing dots orbiting the selected planet, one
           per Smartsheet attachment. Color = attachment category. */}

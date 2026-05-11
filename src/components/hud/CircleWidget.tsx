@@ -11,6 +11,8 @@ interface Props {
   disabled?: boolean;
   onClick?: () => void;
   onMouseEnter?: () => void;
+  /** PR #6 — render a pulsating ring signalling a recent change for this widget. */
+  pulse?: boolean;
 }
 
 /**
@@ -28,6 +30,7 @@ export function CircleWidget({
   disabled = false,
   onClick,
   onMouseEnter,
+  pulse = false,
 }: Props) {
   return (
     <button
@@ -51,6 +54,7 @@ export function CircleWidget({
         style={{
           width: 60,
           height: 60,
+          ["--pulse-rgb" as string]: rgb.replace(/,/g, " "),
           background:
             "radial-gradient(circle at 50% 35%, #0e1320 0%, #060912 70%, #03050a 100%)",
           border: `1.6px solid ${disabled ? "#3a4258" : color}`,
@@ -62,16 +66,21 @@ export function CircleWidget({
         }}
       >
         <div
-          className="font-mono font-semibold tabular-nums leading-none"
+          className="font-mono tabular-nums leading-none"
           style={{
-            fontSize: 22,
-            color: "#ffffff",
+            fontSize: 24,
+            // PR #6 follow-up: force high-contrast off-white regardless of
+            // widget accent. Pair with a dark text-shadow so the number lifts
+            // cleanly off the colored arc/ring behind it.
+            color: "#F0F8FF",
+            fontWeight: 800,
             textShadow:
-              "0 0 6px rgba(255,255,255,0.9), 0 0 14px rgba(255,255,255,0.5)",
+              "0 0 6px rgba(0,0,0,0.85), 0 1px 2px rgba(0,0,0,0.95), 0 0 14px rgba(0,0,0,0.55)",
           }}
         >
           {value}
         </div>
+        {pulse && !disabled && <span className="nav-pulse-ring" aria-hidden />}
         {/* OFF-state diagonal slash. SVG to keep stroke crisp. */}
         {disabled && (
           <svg

@@ -22,14 +22,23 @@ import type { VercelRequest, VercelResponse } from "@vercel/node";
 const FIRESTORE_PROJECT_ID = process.env.FIRESTORE_PROJECT_ID;
 const FIRESTORE_API_KEY = process.env.FIRESTORE_API_KEY;
 const FIRESTORE_COLLECTION = process.env.FIRESTORE_COLLECTION || "lumina_memory";
+const REMINDERS_COLLECTION = process.env.LUMINA_REMINDERS_COLLECTION || "lumina_reminders";
 
 function hasFirestore(): boolean {
   return Boolean(FIRESTORE_PROJECT_ID && FIRESTORE_API_KEY);
 }
 
-function firestoreDocUrl(op: string): string {
+/**
+ *  PR #6: `kind` selects which Firestore collection the request operates
+ *  against. Default is the legacy memory collection — preserves the
+ *  contract for hydrateMemoryFromRemote/pushMemoryToRemote. Reminder strip
+ *  passes `kind=reminders` to route into a parallel collection so the two
+ *  state machines don't trample each other.
+ */
+function firestoreDocUrl(op: string, kind: "memory" | "reminders" = "memory"): string {
   const enc = encodeURIComponent(op);
-  return `https://firestore.googleapis.com/v1/projects/${FIRESTORE_PROJECT_ID}/databases/(default)/documents/${FIRESTORE_COLLECTION}/${enc}?key=${FIRESTORE_API_KEY}`;
+  const coll = kind === "reminders" ? REMINDERS_COLLECTION : FIRESTORE_COLLECTION;
+  return `https://firestore.googleapis.com/v1/projects/${FIRESTORE_PROJECT_ID}/databases/(default)/documents/${coll}/${enc}?key=${FIRESTORE_API_KEY}`;
 }
 
 /**
@@ -63,6 +72,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     res.status(400).json({ error: "bad_op" });
     return;
   }
+  const kindRaw = String(req.query.kind ?? "memory");
+  const kind: "memory" | "reminders" = kindRaw === "reminders" ? "reminders" : "memory";
 
   if (!hasFirestore()) {
     // No backend wired — be explicit so the client can silently fall back.
@@ -76,7 +87,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
   try {
     if (req.method === "GET") {
-      const r = await fetch(firestoreDocUrl(op), { method: "GET" });
+      const r = await fetch(firestoreDocUrl(op, kind), { method: "GET" });
       if (r.status === 404) {
         res.status(200).json({ record: null });
         return;
@@ -101,7 +112,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       }
       // PATCH is the upsert verb in Firestore REST — but to keep this simple
       // we use the documents:write-style PATCH on the doc URL.
-      const r = await fetch(firestoreDocUrl(op), {
+      const r = await fetch(firestoreDocUrl(op, kind), {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(toFirestoreBody(record)),

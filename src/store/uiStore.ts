@@ -139,6 +139,24 @@ export interface UIState {
   // between the universe and the tactical map.
   mapTransition: MapTransition;
 
+  /**
+   *  Recent-changes feed (PR #6). When a job enters the universe for the
+   *  first time, moves to a different galaxy, or otherwise signals a
+   *  "something changed" event, an entry lands here. The HUD nav widgets
+   *  read this slice to render a pulsating ring while the change is fresh.
+   *  Entries auto-expire after `RECENT_TTL_MS` (5 min) or clear when the
+   *  matching widget is clicked.
+   */
+  recentChanges: { type: "new_job" | "galaxy_move"; jobId: string; galaxy: Galaxy; ts: number }[];
+
+  /** Note a job entered the universe or moved galaxies. Drives the pulsating
+   *  ring on the corresponding nav widget. */
+  noteRecentChange: (entry: { type: "new_job" | "galaxy_move"; jobId: string; galaxy: Galaxy }) => void;
+  /** Clear pulse for a specific galaxy (called on widget click or TTL sweep). */
+  clearRecentChangesForGalaxy: (galaxy: Galaxy) => void;
+  /** Drop entries older than `RECENT_TTL_MS`. Called by the watcher and on widget render. */
+  sweepRecentChanges: () => void;
+
   // Actions
   setJobs: (jobs: Job[]) => void;
   setLoading: (v: boolean) => void;
@@ -220,6 +238,15 @@ export interface UIState {
   ) => Promise<{ ok: true } | { ok: false; message: string }>;
 }
 
+/** Recent-changes TTL: pulse drops automatically 5 minutes after the
+ *  triggering event. Same constant referenced by the HUD selector. */
+export const RECENT_TTL_MS = 5 * 60 * 1000;
+
+function pruneRecent<T extends { ts: number }>(items: T[]): T[] {
+  const cutoff = Date.now() - RECENT_TTL_MS;
+  return items.filter((i) => i.ts >= cutoff);
+}
+
 export const useUI = create<UIState>((set, get) => ({
   jobs: [],
   loading: false,
@@ -258,13 +285,38 @@ export const useUI = create<UIState>((set, get) => ({
   showHistoryOnMap: false,
 
   focusedJobId: null,
+  recentChanges: [],
   openThreadId: null,
   openThreadJobId: null,
   threadSummaries: {},
   googleAccount: null,
   googleGrantedScopes: [],
 
-  setJobs: (jobs) => set({ jobs }),
+  setJobs: (jobs) => {
+    // Diff against the previous job set to detect new arrivals and
+    // galaxy moves. Both surface as recent-changes entries so the HUD
+    // nav widgets can pulse.
+    const prev = get().jobs;
+    const prevById = new Map(prev.map((j) => [j.id, j] as const));
+    const diffs: { type: "new_job" | "galaxy_move"; jobId: string; galaxy: Galaxy; ts: number }[] = [];
+    const now = Date.now();
+    for (const j of jobs) {
+      const p = prevById.get(j.id);
+      if (!p) {
+        // First sync after boot floods this — skip recent-change noise
+        // when the prior list was empty.
+        if (prev.length > 0) {
+          diffs.push({ type: "new_job", jobId: j.id, galaxy: j.status, ts: now });
+        }
+      } else if (p.status !== j.status) {
+        diffs.push({ type: "galaxy_move", jobId: j.id, galaxy: j.status, ts: now });
+      }
+    }
+    set((s) => ({
+      jobs,
+      recentChanges: pruneRecent([...s.recentChanges, ...diffs]),
+    }));
+  },
   setLoading: (loading) => set({ loading }),
   setError: (error) => set({ error }),
   setGoogleToken: (googleToken) => set({ googleToken }),
@@ -566,6 +618,22 @@ export const useUI = create<UIState>((set, get) => ({
     sfx.select();
     set({ focusedJobId: null });
   },
+
+  noteRecentChange: ({ type, jobId, galaxy }) =>
+    set((s) => ({
+      recentChanges: pruneRecent([
+        ...s.recentChanges,
+        { type, jobId, galaxy, ts: Date.now() },
+      ]),
+    })),
+
+  clearRecentChangesForGalaxy: (galaxy) =>
+    set((s) => ({
+      recentChanges: s.recentChanges.filter((r) => r.galaxy !== galaxy),
+    })),
+
+  sweepRecentChanges: () =>
+    set((s) => ({ recentChanges: pruneRecent(s.recentChanges) })),
 
   setJobFields: async (jobId, patch) => {
     const before = get().jobs.find((j) => j.id === jobId);

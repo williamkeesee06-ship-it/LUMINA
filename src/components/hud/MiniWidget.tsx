@@ -13,6 +13,8 @@ interface Props {
   onMouseEnter?: () => void;
   /** Disc diameter in px. Default 32 (legacy compact). 60+ for hero navigation page. */
   size?: number;
+  /** PR #6 — render a pulsating ring signalling a recent change for this widget. */
+  pulse?: boolean;
 }
 
 /**
@@ -32,6 +34,7 @@ export function MiniWidget({
   onClick,
   onMouseEnter,
   size = 32,
+  pulse = false,
 }: Props) {
   // Type sizes scale with the disc so a hero-sized widget keeps proportion.
   const labelSize = Math.max(7, Math.round(size * 0.18));
@@ -74,6 +77,7 @@ export function MiniWidget({
         style={{
           width: size,
           height: size,
+          ["--pulse-rgb" as string]: rgb.replace(/,/g, " "),
           background:
             "radial-gradient(circle at 50% 35%, #0e1320 0%, #060912 70%, #03050a 100%)",
           // Thicker, brighter ring — scales with disc size for hero widgets.
@@ -86,20 +90,23 @@ export function MiniWidget({
         }}
       >
         <div
-          className="font-mono font-semibold tabular-nums leading-none"
+          className="font-mono tabular-nums leading-none"
           style={{
             fontSize: valueSize,
-            // Use the galaxy color for a crisp, bright readout instead of
-            // pure white — white was bleeding through the soft halo and
-            // looking fuzzy. A 1px white core inside a tight color halo
-            // gives the number a sharp neon-tube feel.
-            color: "#ffffff",
-            textShadow: `0 0 1px #ffffff, 0 0 3px ${color}, 0 0 6px ${color}aa`,
+            // PR #6 follow-up: force high-contrast off-white and lift it off
+            // the colored arc with a dark text-shadow. The arc/ring already
+            // carries the accent-color signal; the number doesn't need to be
+            // the accent too — it just needs to be legible.
+            color: "#F0F8FF",
+            fontWeight: 800,
+            textShadow:
+              "0 0 6px rgba(0,0,0,0.85), 0 1px 2px rgba(0,0,0,0.95), 0 0 12px rgba(0,0,0,0.55)",
             WebkitFontSmoothing: "antialiased",
           }}
         >
           {value}
         </div>
+        {pulse && !disabled && <span className="nav-pulse-ring" aria-hidden />}
         {/* Diagonal strike line for the OFF state — SVG so the line stays
             crisp at every device pixel ratio and doesn't bleed past the disc. */}
         {disabled && (

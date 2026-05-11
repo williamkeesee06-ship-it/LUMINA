@@ -19,6 +19,7 @@ import { Orb } from "./Orb";
 import { LuminaPanel } from "./LuminaPanel";
 import { OrbAuthPanel } from "./OrbAuthPanel";
 import { EmailThreadView } from "./EmailThreadView";
+import { ReminderStrip } from "./ReminderStrip";
 
 const ORB_SIZE = 80; // disc — outer halo box is +28 inside Orb
 const ORB_FRAME = ORB_SIZE + 28; // matches Orb.tsx frame calc
@@ -51,6 +52,16 @@ export function LuminaDock() {
       {/* In-cockpit thread viewer — fixed right edge. Reads openThreadId
           from the store; renders nothing until a moon is clicked. */}
       <EmailThreadView />
+
+      {/* Reminder Strip (PR #6) — single-line ticker that lives in the
+          empty horizontal band immediately right of the LUMINA orb. Click
+          to expand into a checkbox to-do panel. Sits at z-30 so the chat
+          panel (z-40) covers it when open. Anchored relative to the
+          orb's frame so it tracks if the orb ever moves. */}
+      <ReminderStrip
+        anchorLeft={ORB_OFFSET + ORB_FRAME + 16}
+        anchorBottom={ORB_OFFSET + 24}
+      />
 
       {/* Orb anchor — always visible. Bottom-left, fixed. */}
       <div
