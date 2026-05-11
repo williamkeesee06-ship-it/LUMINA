@@ -345,6 +345,242 @@ const TOOLS = [
           required: ["threadId", "body", "confirm"],
         },
       },
+      // ===== PR #10 — full mutation surface =====
+      {
+        name: "addReminder",
+        description:
+          "Capture a to-do for the reminder strip. Use when Billy says 'remind me to', 'follow up on', 'we need to', etc.",
+        parameters: {
+          type: "OBJECT",
+          properties: {
+            text: { type: "STRING" },
+            workOrder: { type: "STRING" },
+          },
+          required: ["text"],
+        },
+      },
+      {
+        name: "clearReminders",
+        description:
+          "Drop all visible reminders. Optional filter (substring, case-insensitive) keeps only matching ones.",
+        parameters: {
+          type: "OBJECT",
+          properties: { filter: { type: "STRING" } },
+        },
+      },
+      {
+        name: "removeReminder",
+        description: "Remove one reminder by id or by fuzzy text match.",
+        parameters: {
+          type: "OBJECT",
+          properties: {
+            id: { type: "STRING" },
+            text: { type: "STRING" },
+          },
+        },
+      },
+      {
+        name: "bulkUpdateReminders",
+        description:
+          "Bulk complete (patch.completed=true) or dismiss (patch.completed=false) a list of reminder ids.",
+        parameters: {
+          type: "OBJECT",
+          properties: {
+            ids: { type: "ARRAY", items: { type: "STRING" } },
+            patch: { type: "OBJECT", properties: { completed: { type: "BOOLEAN" } } },
+          },
+          required: ["ids", "patch"],
+        },
+      },
+      {
+        name: "clearChecklistItems",
+        description: "Wipe all six checklist marks + text on a single planet.",
+        parameters: {
+          type: "OBJECT",
+          properties: { workOrder: { type: "STRING" } },
+          required: ["workOrder"],
+        },
+      },
+      {
+        name: "addChecklistItem",
+        description:
+          "Toggle a checklist key on a planet. Keys: trafficControl, eight11, preCon, jobStart, routedSrpRtasq, hsr.",
+        parameters: {
+          type: "OBJECT",
+          properties: {
+            workOrder: { type: "STRING" },
+            key: { type: "STRING" },
+            text: { type: "STRING" },
+          },
+          required: ["workOrder", "key"],
+        },
+      },
+      {
+        name: "editChecklistItem",
+        description: "Update the text for a single checklist key (keeps the toggle state).",
+        parameters: {
+          type: "OBJECT",
+          properties: {
+            workOrder: { type: "STRING" },
+            key: { type: "STRING" },
+            text: { type: "STRING" },
+          },
+          required: ["workOrder", "key", "text"],
+        },
+      },
+      {
+        name: "setJobField",
+        description:
+          "Mutate one Smartsheet-backed field on a job. Whitelist: notes, splicingNotes, rawSecondaryStatus, jobStatus, address, city, zip, scheduleDate, endDate, dueDate, crew, permitNumber, workType, base, bidValue.",
+        parameters: {
+          type: "OBJECT",
+          properties: {
+            workOrder: { type: "STRING" },
+            field: { type: "STRING" },
+            value: { type: "STRING" },
+          },
+          required: ["workOrder", "field"],
+        },
+      },
+      {
+        name: "createJob",
+        description: "Local-only stub — surfaces a reminder for Smartsheet manual entry.",
+        parameters: {
+          type: "OBJECT",
+          properties: {
+            workOrder: { type: "STRING" },
+            status: { type: "STRING" },
+          },
+          required: ["workOrder"],
+        },
+      },
+      {
+        name: "archiveJob",
+        description: "Local-only stub — surfaces a reminder for Smartsheet manual archive.",
+        parameters: {
+          type: "OBJECT",
+          properties: { workOrder: { type: "STRING" } },
+          required: ["workOrder"],
+        },
+      },
+      {
+        name: "composeEmail",
+        description: "Save a draft in the reminder strip. Does NOT auto-send.",
+        parameters: {
+          type: "OBJECT",
+          properties: {
+            to: { type: "STRING" },
+            cc: { type: "STRING" },
+            subject: { type: "STRING" },
+            body: { type: "STRING" },
+            threadId: { type: "STRING" },
+          },
+          required: ["to", "subject", "body"],
+        },
+      },
+      {
+        name: "sendEmail",
+        description: "Send an email. Refuses unless confirm === true.",
+        parameters: {
+          type: "OBJECT",
+          properties: {
+            to: { type: "STRING" },
+            subject: { type: "STRING" },
+            body: { type: "STRING" },
+            threadId: { type: "STRING" },
+            confirm: { type: "BOOLEAN" },
+          },
+          required: ["to", "subject", "body", "confirm"],
+        },
+      },
+      {
+        name: "replyToThread",
+        description: "Reply on an existing thread. Refuses unless confirm === true.",
+        parameters: {
+          type: "OBJECT",
+          properties: {
+            threadId: { type: "STRING" },
+            body: { type: "STRING" },
+            confirm: { type: "BOOLEAN" },
+          },
+          required: ["threadId", "body", "confirm"],
+        },
+      },
+      {
+        name: "forwardThread",
+        description: "Forward a thread to a new recipient. Refuses unless confirm === true.",
+        parameters: {
+          type: "OBJECT",
+          properties: {
+            threadId: { type: "STRING" },
+            to: { type: "STRING" },
+            body: { type: "STRING" },
+            confirm: { type: "BOOLEAN" },
+          },
+          required: ["threadId", "to", "confirm"],
+        },
+      },
+      {
+        name: "clearMemory",
+        description: "Wipe Lumina's persistent memory. scope: facts | summary | all.",
+        parameters: {
+          type: "OBJECT",
+          properties: { scope: { type: "STRING" } },
+          required: ["scope"],
+        },
+      },
+      {
+        name: "forgetFact",
+        description: "Fuzzy-match + remove a single memory fact.",
+        parameters: {
+          type: "OBJECT",
+          properties: { text: { type: "STRING" } },
+          required: ["text"],
+        },
+      },
+      {
+        name: "setMemoryFact",
+        description: "Add or update a memory fact. If id supplied, updates that fact; otherwise creates new.",
+        parameters: {
+          type: "OBJECT",
+          properties: {
+            id: { type: "STRING" },
+            value: { type: "STRING" },
+          },
+          required: ["value"],
+        },
+      },
+      {
+        name: "setHudMode",
+        description: "Flip the HUD between minimized and expanded.",
+        parameters: {
+          type: "OBJECT",
+          properties: { mode: { type: "STRING", enum: ["minimized", "expanded"] } },
+          required: ["mode"],
+        },
+      },
+      {
+        name: "setOrientation",
+        description: "Flip the HUD orientation between vertical and horizontal.",
+        parameters: {
+          type: "OBJECT",
+          properties: { orientation: { type: "STRING", enum: ["vertical", "horizontal"] } },
+          required: ["orientation"],
+        },
+      },
+      {
+        name: "enterFocusMode",
+        description: "Engage 50/50 focus mode. Optional workOrder focuses that job first.",
+        parameters: {
+          type: "OBJECT",
+          properties: { workOrder: { type: "STRING" } },
+        },
+      },
+      {
+        name: "exitFocusMode",
+        description: "Back to default 70/30 layout (or universe view).",
+        parameters: { type: "OBJECT", properties: {} },
+      },
     ],
   },
 ];

@@ -2,6 +2,62 @@ import { useMemo, useRef } from "react";
 import { useFrame } from "@react-three/fiber";
 import { Billboard, Text } from "@react-three/drei";
 import * as THREE from "three";
+
+/**
+ *  Procedural crater bump texture for the moon body — a 256×256 CanvasTexture
+ *  that doubles as bumpMap + roughnessMap. Generated once at module load so
+ *  every moon shares one texture (cheap, deterministic, looks consistent).
+ */
+function buildMoonCraterTexture(): THREE.CanvasTexture {
+  const size = 256;
+  const canvas = document.createElement("canvas");
+  canvas.width = canvas.height = size;
+  const ctx = canvas.getContext("2d")!;
+  // Mid-gray base with subtle noise speckle.
+  ctx.fillStyle = "#7a7a7a";
+  ctx.fillRect(0, 0, size, size);
+  const img = ctx.getImageData(0, 0, size, size);
+  for (let i = 0; i < img.data.length; i += 4) {
+    const n = (Math.random() - 0.5) * 32;
+    img.data[i] = Math.max(0, Math.min(255, img.data[i] + n));
+    img.data[i + 1] = Math.max(0, Math.min(255, img.data[i + 1] + n));
+    img.data[i + 2] = Math.max(0, Math.min(255, img.data[i + 2] + n));
+  }
+  ctx.putImageData(img, 0, 0);
+  // 70 craters of varying sizes, mostly dark bowls with a brighter rim.
+  for (let i = 0; i < 70; i++) {
+    const cx = Math.random() * size;
+    const cy = Math.random() * size;
+    const r = 3 + Math.random() * Math.random() * 28;
+    const dark = `rgba(30,30,30,${0.55 + Math.random() * 0.35})`;
+    const rim = `rgba(220,220,220,${0.15 + Math.random() * 0.25})`;
+    const grd = ctx.createRadialGradient(cx, cy, 0, cx, cy, r);
+    grd.addColorStop(0, dark);
+    grd.addColorStop(0.75, dark);
+    grd.addColorStop(0.92, rim);
+    grd.addColorStop(1, "rgba(0,0,0,0)");
+    ctx.fillStyle = grd;
+    ctx.beginPath();
+    ctx.arc(cx, cy, r, 0, Math.PI * 2);
+    ctx.fill();
+  }
+  // Few brighter highlight spots for surface variation.
+  for (let i = 0; i < 25; i++) {
+    const cx = Math.random() * size;
+    const cy = Math.random() * size;
+    const r = 1 + Math.random() * 4;
+    ctx.fillStyle = `rgba(240,240,240,${0.18 + Math.random() * 0.2})`;
+    ctx.beginPath();
+    ctx.arc(cx, cy, r, 0, Math.PI * 2);
+    ctx.fill();
+  }
+  const tex = new THREE.CanvasTexture(canvas);
+  tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
+  tex.needsUpdate = true;
+  return tex;
+}
+
+const MOON_CRATER_TEXTURE = buildMoonCraterTexture();
 import type { Job, Moon, Satellite } from "@/types";
 import { GALAXY_COLORS } from "@/lib/statusMap";
 import { useUI } from "@/store/uiStore";
@@ -526,6 +582,20 @@ function MoonOrbit({
               bodyRefs.current[i] = g;
             }}
           >
+            {/* Outer tidal-lock ring — faint torus floating around each moon
+                so the operator can see that the moon is actually tidal-locked
+                (the ring's plane rotates with the body). Restores PR #5. */}
+            <mesh rotation={[Math.PI / 2, 0, 0]}>
+              <torusGeometry args={[moonBodyRadius * 1.4, 0.02, 8, 48]} />
+              <meshBasicMaterial
+                color="#aaaaaa"
+                transparent
+                opacity={0.25}
+                depthWrite={false}
+                blending={THREE.AdditiveBlending}
+                toneMapped={false}
+              />
+            </mesh>
             <mesh
               onClick={(e) => {
                 e.stopPropagation();
@@ -541,84 +611,15 @@ function MoonOrbit({
               }}
             >
               <sphereGeometry args={[moonBodyRadius, 32, 32]} />
-              {/* Procedural cratered surface — fragment shader noise.
-                  Soft gray base with a slight blue rim to fit the
-                  LUMINA cyan palette. No textures, no extra deps. */}
-              <shaderMaterial
-                transparent={false}
-                uniforms={{
-                  uTint: { value: new THREE.Color(it.color) },
-                }}
-                vertexShader={`
-                  varying vec3 vNormal;
-                  varying vec3 vPos;
-                  void main() {
-                    vNormal = normalize(normalMatrix * normal);
-                    vPos = position;
-                    gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
-                  }
-                `}
-                fragmentShader={`
-                  uniform vec3 uTint;
-                  varying vec3 vNormal;
-                  varying vec3 vPos;
-
-                  // Cheap value-noise hash — enough variance for a
-                  // believable cratered surface at our render scale.
-                  float hash(vec3 p) {
-                    p = fract(p * 0.3183099 + vec3(0.1, 0.7, 0.4));
-                    p *= 17.0;
-                    return fract(p.x * p.y * p.z * (p.x + p.y + p.z));
-                  }
-
-                  float noise(vec3 p) {
-                    vec3 i = floor(p);
-                    vec3 f = fract(p);
-                    f = f * f * (3.0 - 2.0 * f);
-                    float n000 = hash(i);
-                    float n100 = hash(i + vec3(1.0, 0.0, 0.0));
-                    float n010 = hash(i + vec3(0.0, 1.0, 0.0));
-                    float n110 = hash(i + vec3(1.0, 1.0, 0.0));
-                    float n001 = hash(i + vec3(0.0, 0.0, 1.0));
-                    float n101 = hash(i + vec3(1.0, 0.0, 1.0));
-                    float n011 = hash(i + vec3(0.0, 1.0, 1.0));
-                    float n111 = hash(i + vec3(1.0, 1.0, 1.0));
-                    float nx00 = mix(n000, n100, f.x);
-                    float nx10 = mix(n010, n110, f.x);
-                    float nx01 = mix(n001, n101, f.x);
-                    float nx11 = mix(n011, n111, f.x);
-                    float nxy0 = mix(nx00, nx10, f.y);
-                    float nxy1 = mix(nx01, nx11, f.y);
-                    return mix(nxy0, nxy1, f.z);
-                  }
-
-                  void main() {
-                    // Layered noise — broad surface variance + crater darks.
-                    vec3 p = vPos * 8.0;
-                    float n1 = noise(p);
-                    float n2 = noise(p * 2.3 + 13.0);
-                    float n3 = noise(p * 5.1 + 4.0);
-                    // Crater "rims" — peaks of mid-frequency noise punch
-                    // dark bowls into the surface.
-                    float crater = smoothstep(0.62, 0.78, n2);
-                    crater += smoothstep(0.70, 0.88, n3) * 0.6;
-                    float shade = 0.55 + n1 * 0.45 - crater * 0.45;
-                    shade = clamp(shade, 0.18, 1.0);
-
-                    // Soft gray-white moon body with a subtle cyan-ish rim
-                    // from the parent palette (multiplied very lightly).
-                    vec3 base = mix(
-                      vec3(0.62, 0.65, 0.71),
-                      vec3(0.88, 0.90, 0.95),
-                      shade
-                    );
-                    // Rim term — Lambertian-ish toward camera.
-                    float rim = pow(1.0 - max(dot(vNormal, vec3(0.0, 0.0, 1.0)), 0.0), 2.4);
-                    vec3 rimTint = mix(vec3(0.42, 0.70, 0.92), uTint, 0.3);
-                    vec3 col = base + rimTint * rim * 0.35;
-                    gl_FragColor = vec4(col, 1.0);
-                  }
-                `}
+              {/* Procedural cratered surface — CanvasTexture as bumpMap +
+                  roughnessMap on a MeshStandardMaterial. PR #5 → restored. */}
+              <meshStandardMaterial
+                color="#c8c4be"
+                roughness={0.95}
+                metalness={0.0}
+                bumpMap={MOON_CRATER_TEXTURE}
+                bumpScale={0.06}
+                roughnessMap={MOON_CRATER_TEXTURE}
               />
             </mesh>
             {/* A tiny "near-side" indicator mark — a faint highlight on the

@@ -127,6 +127,15 @@ export interface UIState {
    */
   focusedJobId: string | null;
 
+  /**
+   *  Job Focus Mode split ratio. Default (false) = 70/30 card/email — the
+   *  job card dominates with a sliver of email. Toggled true = 50/50 split.
+   *  PR #10: matches the operator brief — "card + sliver of email default;
+   *  focus mode 50/50". Tools `enterFocusMode()` / `exitFocusMode()` flip
+   *  this directly from Lumina.
+   */
+  focusFiftyFifty: boolean;
+
   // Map-only filters — toggled via the HUD galaxy widgets while the map is
   // open. Galaxies in `hiddenGalaxies` are excluded from the map only
   // (universe view is unaffected). `showHistoryOnMap` controls whether
@@ -224,6 +233,8 @@ export interface UIState {
   /** Enter Job Focus Mode for the given job (or exit if null). */
   enterFocus: (jobId: string) => void;
   exitFocus: () => void;
+  /** Flip the focus-mode split ratio. true = 50/50, false = 70/30 default. */
+  setFocusFiftyFifty: (v: boolean) => void;
   /**
    *  Optimistically patch one or more fields on a job and persist to
    *  Smartsheet. Returns ok/false; on failure the local state is rolled
@@ -285,6 +296,7 @@ export const useUI = create<UIState>((set, get) => ({
   showHistoryOnMap: false,
 
   focusedJobId: null,
+  focusFiftyFifty: false,
   recentChanges: [],
   openThreadId: null,
   openThreadJobId: null,
@@ -616,8 +628,10 @@ export const useUI = create<UIState>((set, get) => ({
 
   exitFocus: () => {
     sfx.select();
-    set({ focusedJobId: null });
+    set({ focusedJobId: null, focusFiftyFifty: false });
   },
+
+  setFocusFiftyFifty: (v) => set({ focusFiftyFifty: v }),
 
   noteRecentChange: ({ type, jobId, galaxy }) =>
     set((s) => ({

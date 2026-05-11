@@ -189,3 +189,101 @@ export function Stardust({
     </points>
   );
 }
+
+/**
+ *  Hard white pinpoint stars threaded through a single galaxy's plasma so
+ *  they punch through the gas like real nebula photography. 200 stars by
+ *  default at radius 28u (fits inside the galaxy footprint without bleeding
+ *  into the 120u-distant neighbor). Plus a small set of larger
+ *  size-attenuated "foreground" suns at a tighter radius.
+ */
+interface GalaxyStarClusterProps {
+  center: [number, number, number];
+  count?: number;
+  radius?: number;
+  dim?: boolean;
+}
+
+export function GalaxyStarCluster({
+  center,
+  count = 200,
+  radius = 28,
+  dim = false,
+}: GalaxyStarClusterProps) {
+  const pointsRef = useRef<THREE.Points>(null);
+  const fgRef = useRef<THREE.Points>(null);
+  const matRef = useRef<THREE.PointsMaterial>(null);
+  const fgMatRef = useRef<THREE.PointsMaterial>(null);
+
+  const corePositions = useMemo(() => {
+    const pos = new Float32Array(count * 3);
+    for (let i = 0; i < count; i++) {
+      const r = Math.pow(Math.random(), 0.6) * radius;
+      const theta = Math.random() * Math.PI * 2;
+      const phi = (Math.random() - 0.5) * 0.4;
+      pos[i * 3] = center[0] + Math.cos(theta) * r;
+      pos[i * 3 + 1] = center[1] + Math.sin(phi) * r * 0.35;
+      pos[i * 3 + 2] = center[2] + Math.sin(theta) * r;
+    }
+    return pos;
+  }, [center, count, radius]);
+
+  const fgPositions = useMemo(() => {
+    const fgCount = 20;
+    const fgRadius = Math.max(8, radius * 0.7);
+    const pos = new Float32Array(fgCount * 3);
+    for (let i = 0; i < fgCount; i++) {
+      const r = Math.pow(Math.random(), 0.6) * fgRadius;
+      const theta = Math.random() * Math.PI * 2;
+      const phi = (Math.random() - 0.5) * 0.4;
+      pos[i * 3] = center[0] + Math.cos(theta) * r;
+      pos[i * 3 + 1] = center[1] + Math.sin(phi) * r * 0.35;
+      pos[i * 3 + 2] = center[2] + Math.sin(theta) * r;
+    }
+    return pos;
+  }, [center, radius]);
+
+  useFrame((_, delta) => {
+    if (matRef.current) {
+      const target = dim ? 0.15 : 0.95;
+      matRef.current.opacity += (target - matRef.current.opacity) * Math.min(1, delta * 4);
+    }
+    if (fgMatRef.current) {
+      const target = dim ? 0.15 : 0.95;
+      fgMatRef.current.opacity += (target - fgMatRef.current.opacity) * Math.min(1, delta * 4);
+    }
+  });
+
+  return (
+    <group>
+      <points ref={pointsRef}>
+        <bufferGeometry>
+          <bufferAttribute attach="attributes-position" args={[corePositions, 3]} />
+        </bufferGeometry>
+        <pointsMaterial
+          ref={matRef}
+          size={1.4}
+          color={0xffffff}
+          sizeAttenuation={false}
+          depthWrite={false}
+          transparent
+          opacity={0.95}
+        />
+      </points>
+      <points ref={fgRef}>
+        <bufferGeometry>
+          <bufferAttribute attach="attributes-position" args={[fgPositions, 3]} />
+        </bufferGeometry>
+        <pointsMaterial
+          ref={fgMatRef}
+          size={0.4}
+          color={0xffffff}
+          sizeAttenuation
+          depthWrite={false}
+          transparent
+          opacity={0.95}
+        />
+      </points>
+    </group>
+  );
+}
