@@ -22,10 +22,7 @@ const ROUTES = {
   "/api/jobs": "/api/jobs.ts",
   "/api/lumina": "/api/lumina.ts",
   "/api/geocode": "/api/geocode.ts",
-  "/api/gmail-search": "/api/gmail-search.ts",
-  "/api/gmail-list": "/api/gmail-list.ts",
-  "/api/gmail-thread": "/api/gmail-thread.ts",
-  "/api/gmail-send": "/api/gmail-send.ts",
+  "/api/gmail": "/api/gmail.ts",
   "/api/drive-list": "/api/drive-list.ts",
 };
 

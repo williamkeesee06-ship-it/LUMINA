@@ -95,7 +95,7 @@ export default function App() {
       .catch(() => {});
   }, [googleToken, setUnreadCount]);
 
-  // North Sky watcher — polls /api/gmail-list for moons every 60s while the
+  // North Sky watcher — polls /api/gmail (action=list) for moons every 60s while the
   // user is signed in. Stops on sign-out. visibility-aware (handled inside
   // the watcher), so a backgrounded tab doesn't burn quota.
   useEffect(() => {

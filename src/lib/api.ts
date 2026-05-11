@@ -265,13 +265,13 @@ export async function geocodeAddresses(
 
 /** Gmail email threads = MOONS in this universe (closer, communications). */
 export async function searchGmail(token: string, query: string): Promise<Moon[]> {
-  const r = await fetch("/api/gmail-search", {
+  const r = await fetch("/api/gmail?action=search", {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
       Authorization: `Bearer ${token}`,
     },
-    body: JSON.stringify({ query, maxResults: 8 }),
+    body: JSON.stringify({ action: "search", query, maxResults: 8 }),
   });
   if (!r.ok) return [];
   const { messages } = (await r.json()) as {
@@ -320,10 +320,10 @@ export async function listGmail(
   opts: { label?: string; query?: string; unreadOnly?: boolean; limit?: number } = {},
 ): Promise<{ ok: true; messages: GmailListItem[] } | { ok: false; message: string }> {
   try {
-    const r = await fetch("/api/gmail-list", {
+    const r = await fetch("/api/gmail?action=list", {
       method: "POST",
       headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
-      body: JSON.stringify(opts),
+      body: JSON.stringify({ action: "list", ...opts }),
     });
     const data = await r.json().catch(() => ({}));
     if (!r.ok) {
@@ -364,10 +364,10 @@ export async function readGmailThread(
   | { ok: false; message: string }
 > {
   try {
-    const r = await fetch("/api/gmail-thread", {
+    const r = await fetch("/api/gmail?action=thread", {
       method: "POST",
       headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
-      body: JSON.stringify({ threadId }),
+      body: JSON.stringify({ action: "thread", threadId }),
     });
     const data = await r.json().catch(() => ({}));
     if (!r.ok) {
@@ -399,10 +399,10 @@ export async function sendGmail(
   args: GmailSendArgs,
 ): Promise<{ ok: true; messageId: string; threadId: string } | { ok: false; message: string }> {
   try {
-    const r = await fetch("/api/gmail-send", {
+    const r = await fetch("/api/gmail?action=send", {
       method: "POST",
       headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
-      body: JSON.stringify(args),
+      body: JSON.stringify({ action: "send", ...args }),
     });
     const data = await r.json().catch(() => ({}));
     if (!r.ok) {
