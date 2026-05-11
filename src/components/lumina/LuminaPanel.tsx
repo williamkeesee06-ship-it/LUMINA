@@ -486,8 +486,8 @@ export function LuminaPanel({
       const filter = call.args.filter ? String(call.args.filter) : undefined;
       const unreadOnly = Boolean(call.args.unreadOnly);
       const limit = Math.min(Number(call.args.limit ?? 10) || 10, 25);
+      // The server forces the North Sky label scope — no `label` field here.
       const res = await listGmail(googleToken, {
-        label: "North Sky",
         query: filter,
         unreadOnly,
         limit,
@@ -960,8 +960,8 @@ export function LuminaPanel({
             const filter = call.args.filter ? String(call.args.filter) : undefined;
             const unreadOnly = Boolean(call.args.unreadOnly);
             const limit = Math.min(Number(call.args.limit ?? 10) || 10, 25);
+            // Server forces North Sky scope — `label` is not exposed.
             const res = await listGmail(googleToken, {
-              label: "North Sky",
               query: filter,
               unreadOnly,
               limit,

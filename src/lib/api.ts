@@ -263,15 +263,23 @@ export async function geocodeAddresses(
   return results;
 }
 
-/** Gmail email threads = MOONS in this universe (closer, communications). */
+/**
+ *  Gmail email threads = MOONS in this universe (closer, communications).
+ *  Every search is scoped to the "North Sky" Gmail label — Billy's forwarded
+ *  work mail. Personal email must never surface here. The server enforces the
+ *  same scope (see `api/gmail.ts`); the client-side prefix is defense-in-depth.
+ */
 export async function searchGmail(token: string, query: string): Promise<Moon[]> {
+  const scopedQuery = /label:"north sky"/i.test(query)
+    ? query
+    : `label:"North Sky" ${query}`;
   const r = await fetch("/api/gmail?action=search", {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
       Authorization: `Bearer ${token}`,
     },
-    body: JSON.stringify({ action: "search", query, maxResults: 8 }),
+    body: JSON.stringify({ action: "search", query: scopedQuery, maxResults: 8 }),
   });
   if (!r.ok) return [];
   const { messages } = (await r.json()) as {
@@ -317,9 +325,12 @@ export interface GmailListItem {
 
 export async function listGmail(
   token: string,
-  opts: { label?: string; query?: string; unreadOnly?: boolean; limit?: number } = {},
+  opts: { query?: string; unreadOnly?: boolean; limit?: number } = {},
 ): Promise<{ ok: true; messages: GmailListItem[] } | { ok: false; message: string }> {
   try {
+    // The server always forces the "North Sky" label scope on list — the
+    // `label` field is intentionally NOT exposed in this helper so callers
+    // cannot try to switch scopes.
     const r = await fetch("/api/gmail?action=list", {
       method: "POST",
       headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },

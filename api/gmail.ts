@@ -8,7 +8,16 @@ import type { VercelRequest, VercelResponse } from "@vercel/node";
  *
  * Token policy: the user's OAuth access token rides in the Authorization
  * header and is forwarded to Gmail. Never persisted server-side.
+ *
+ * NORTH SKY LABEL LOCK — every read/write path is scoped to the user's
+ * "North Sky" Gmail label (Billy's forwarded work mail from
+ * wkeesee@northskycomm.com). Personal email outside that label must never
+ * surface to LUMINA. Defense-in-depth: client also scopes, prompts also
+ * instruct, but THIS file is the single source of truth.
  */
+
+const REQUIRED_LABEL = "North Sky";
+const REQUIRED_LABEL_Q = `label:"${REQUIRED_LABEL}"`;
 
 type Action = "list" | "search" | "thread" | "send";
 
@@ -97,31 +106,44 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   }
 }
 
+/**
+ *  Returns true if the `q` string already constrains to the North Sky label.
+ *  Case-insensitive substring match against `label:"North Sky"`. Detects both
+ *  the quoted form and the bareword form (`label:North`) defensively.
+ */
+function qContainsNorthSky(q: string): boolean {
+  const lower = q.toLowerCase();
+  return (
+    lower.includes(`label:"north sky"`) ||
+    lower.includes(`label:'north sky'`)
+  );
+}
+
 // ---------------------------------------------------------------------------
-// list — Gmail label listing with batched metadata fetch. Default label is
-// "North Sky" (the user's forwarded work-mail label).
+// list — Gmail label listing with batched metadata fetch. Default + forced
+// label is "North Sky" (the user's forwarded work-mail label). Any caller-
+// supplied label is IGNORED — the North Sky scope is non-negotiable.
 // ---------------------------------------------------------------------------
 async function handleList(
   auth: string,
   body: Record<string, unknown>,
   res: VercelResponse,
 ) {
-  const label = ((body.label as string | undefined) ?? "North Sky").trim();
+  // Ignore any caller-supplied `label` field — North Sky is enforced.
   const userQuery = ((body.query as string | undefined) ?? "").trim();
   const unreadOnly = Boolean(body.unreadOnly);
   const limitInput = (body.limit as number | undefined) ?? 50;
   const limit = Math.min(Math.max(limitInput, 1), 100);
   const pageToken = body.pageToken as string | undefined;
 
-  const qParts: string[] = [];
-  if (label) qParts.push(`label:"${label}"`);
+  const qParts: string[] = [REQUIRED_LABEL_Q];
   if (unreadOnly) qParts.push("is:unread");
   if (userQuery) qParts.push(userQuery);
   const q = qParts.join(" ");
 
   try {
     const params = new URLSearchParams();
-    if (q) params.set("q", q);
+    params.set("q", q);
     params.set("maxResults", String(limit));
     if (pageToken) params.set("pageToken", pageToken);
     const listUrl = `https://gmail.googleapis.com/gmail/v1/users/me/messages?${params.toString()}`;
@@ -189,18 +211,20 @@ async function handleList(
 }
 
 // ---------------------------------------------------------------------------
-// search — free-text Gmail query, capped at 25 results.
+// search — free-text Gmail query, capped at 25 results. The North Sky label
+// constraint is ALWAYS prepended server-side; callers cannot opt out.
 // ---------------------------------------------------------------------------
 async function handleSearch(
   auth: string,
   body: Record<string, unknown>,
   res: VercelResponse,
 ) {
-  const q = ((body.query as string | undefined) ?? "").trim();
-  if (!q) {
+  const rawQ = ((body.query as string | undefined) ?? "").trim();
+  if (!rawQ) {
     res.status(400).json({ error: "missing_query" });
     return;
   }
+  const q = qContainsNorthSky(rawQ) ? rawQ : `${REQUIRED_LABEL_Q} ${rawQ}`;
   const maxInput = (body.maxResults as number | undefined) ?? 8;
   const max = Math.min(Math.max(maxInput, 1), 25);
 
@@ -251,6 +275,7 @@ async function handleSearch(
 
 // ---------------------------------------------------------------------------
 // thread — full thread with sanitized HTML + plain-text fallback per message.
+// Returns 403 if NO message in the thread carries the North Sky label.
 // ---------------------------------------------------------------------------
 async function handleThread(
   auth: string,
@@ -278,6 +303,29 @@ async function handleThread(
       return;
     }
     const data = (await r.json()) as GmailThreadResp;
+
+    // Enforce North Sky scope on thread reads — if no message in the thread
+    // carries the label, the whole thread is out-of-scope and we refuse to
+    // hand back any body. Resolve the label id once, then check each msg.
+    const northSkyLabelId = await resolveNorthSkyLabelId(auth);
+    if (!northSkyLabelId) {
+      res.status(403).json({
+        error: "north_sky_label_missing",
+        message: `Gmail has no label named "${REQUIRED_LABEL}".`,
+      });
+      return;
+    }
+    const carries = (data.messages ?? []).some((m) =>
+      (m.labelIds ?? []).includes(northSkyLabelId),
+    );
+    if (!carries) {
+      res.status(403).json({
+        error: "thread_outside_scope",
+        message: "Thread is not in North Sky label",
+      });
+      return;
+    }
+
     const messages = (data.messages ?? []).map(parseMessage);
     res.status(200).json({ threadId: data.id, messages });
   } catch (err) {
@@ -429,6 +477,9 @@ function sanitizeAttrs(raw: string): string {
 
 // ---------------------------------------------------------------------------
 // send — RFC 5322 MIME builder, threading headers, gmail.send scope required.
+// Reply path (threadId provided) is gated on the source thread carrying the
+// North Sky label. New-thread sends are allowed but are auto-labeled with
+// North Sky after delivery so the conversation stays in scope.
 // ---------------------------------------------------------------------------
 async function handleSend(
   auth: string,
@@ -448,6 +499,29 @@ async function handleSend(
   if (typeof sendBody.body !== "string" || sendBody.body.length === 0) {
     res.status(400).json({ error: "missing_body" });
     return;
+  }
+
+  // Resolve the label ID once — needed for the reply scope check and for
+  // tagging new outbound messages.
+  const northSkyLabelId = await resolveNorthSkyLabelId(auth);
+  if (!northSkyLabelId) {
+    res.status(403).json({
+      error: "north_sky_label_missing",
+      message: `Gmail has no label named "${REQUIRED_LABEL}".`,
+    });
+    return;
+  }
+
+  // Reply path: verify the source thread carries the North Sky label.
+  if (sendBody.threadId) {
+    const ok = await threadCarriesLabel(auth, sendBody.threadId, northSkyLabelId);
+    if (!ok) {
+      res.status(403).json({
+        error: "reply_outside_scope",
+        message: "Cannot reply to a thread outside the North Sky label",
+      });
+      return;
+    }
   }
 
   try {
@@ -477,10 +551,85 @@ async function handleSend(
       return;
     }
     const data = (await r.json()) as { id?: string; threadId?: string };
+
+    // For new (non-reply) sends, apply the North Sky label to the sent
+    // message so the outbound stays in scope. Best-effort: if the modify
+    // call fails, the send already succeeded so we don't 5xx — we just log.
+    if (!sendBody.threadId && data.id) {
+      try {
+        await fetch(
+          `https://gmail.googleapis.com/gmail/v1/users/me/messages/${data.id}/modify`,
+          {
+            method: "POST",
+            headers: {
+              Authorization: auth,
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({ addLabelIds: [northSkyLabelId] }),
+          },
+        );
+      } catch {
+        // Non-fatal — message is sent, label tag failed.
+      }
+    }
+
     res.status(200).json({ messageId: data.id, threadId: data.threadId });
   } catch (err) {
     const message = err instanceof Error ? err.message : "Unknown error";
     res.status(502).json({ error: "gmail_proxy_failed", message });
+  }
+}
+
+// ---------------------------------------------------------------------------
+// helpers — label resolution + thread scope check
+// ---------------------------------------------------------------------------
+
+/**
+ *  Resolve the user's "North Sky" label ID by listing labels and matching
+ *  the human name (case-insensitive). Returns null if the user has no such
+ *  label. Per-token cache keyed off the Authorization header so different
+ *  users in the same warm function instance don't cross-contaminate.
+ */
+const labelIdCache = new Map<string, string | null>();
+async function resolveNorthSkyLabelId(auth: string): Promise<string | null> {
+  const cached = labelIdCache.get(auth);
+  if (cached !== undefined) return cached;
+  try {
+    const r = await fetch("https://gmail.googleapis.com/gmail/v1/users/me/labels", {
+      headers: { Authorization: auth },
+    });
+    if (!r.ok) {
+      labelIdCache.set(auth, null);
+      return null;
+    }
+    const data = (await r.json()) as { labels?: { id: string; name: string }[] };
+    const match = (data.labels ?? []).find(
+      (l) => l.name.trim().toLowerCase() === REQUIRED_LABEL.toLowerCase(),
+    );
+    const id = match ? match.id : null;
+    labelIdCache.set(auth, id);
+    return id;
+  } catch {
+    labelIdCache.set(auth, null);
+    return null;
+  }
+}
+
+async function threadCarriesLabel(
+  auth: string,
+  threadId: string,
+  labelId: string,
+): Promise<boolean> {
+  try {
+    const u = `https://gmail.googleapis.com/gmail/v1/users/me/threads/${encodeURIComponent(
+      threadId,
+    )}?format=minimal`;
+    const r = await fetch(u, { headers: { Authorization: auth } });
+    if (!r.ok) return false;
+    const data = (await r.json()) as { messages?: { labelIds?: string[] }[] };
+    return (data.messages ?? []).some((m) => (m.labelIds ?? []).includes(labelId));
+  } catch {
+    return false;
   }
 }
 
