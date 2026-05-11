@@ -12,6 +12,7 @@ import { GalaxyLabels } from "./GalaxyLabels";
 import { PlanetField } from "./PlanetField";
 import { NebulaClouds } from "./NebulaClouds";
 import { Meteors } from "./Meteors";
+import { GodViewDots } from "./GodViewDots";
 import { GALAXY_POSITIONS } from "./galaxyLayout";
 import { sfx } from "@/lib/audio";
 
@@ -54,11 +55,14 @@ export function UniverseScene() {
     <div className="absolute inset-0" style={{ zIndex: 0 }}>
     <Canvas
       gl={{ antialias: true, powerPreference: "high-performance" }}
-      camera={{ position: [0, 22, 60], fov: 52, near: 0.1, far: 500 }}
+      camera={{ position: [0, 38, 110], fov: 52, near: 0.1, far: 900 }}
       dpr={[1, 1.75]}
     >
       <color attach="background" args={["#02050a"]} />
-      <fog attach="fog" args={["#02050a", 90, 240]} />
+      {/* Fog pushed out to match the wider galaxy ring (radius 78). With the
+          old 90 → 240 range, outer clusters dimmed past readable at god view.
+          PR #5: stretch to 160 → 420 so the spread stays legible. */}
+      <fog attach="fog" args={["#02050a", 160, 420]} />
       <ambientLight intensity={0.25} />
       {/* Cool key + warm rim — luxurious dual lighting */}
       <pointLight position={[0, 30, 30]} intensity={0.7} color="#5BF3FF" />
@@ -152,6 +156,12 @@ export function UniverseScene() {
 
       {/* Subtle galaxy name labels — sit inside each cluster, color-matched. */}
       <GalaxyLabels />
+
+      {/* God-view planet dots — every planet renders as a small glowing dot
+          at universe zoom. Unread mail = pulse + brighter; quiet = steady.
+          Suppressed when inside a galaxy / planet view so close-up scenes
+          stay uncluttered. */}
+      <GodViewDots jobs={jobs} visible={viewMode === "universe"} />
 
       {/* Planet field — only when inside a galaxy */}
       {viewMode !== "universe" && focusedGalaxy && (

@@ -25,9 +25,26 @@ const NEON_GREEN_BRIGHT = "#7CFFA8";
 const NEON_BLUE = "#3D7BFF";
 const NEON_BLUE_BRIGHT = "#6DA3FF";
 
-export function EmailThreadView() {
+/**
+ *  Variant controls the chrome around the thread viewer:
+ *    - "floating" (default): fixed to the right edge of the viewport as a
+ *      slide-in panel. Used by LuminaDock when a moon is clicked anywhere.
+ *    - "inline": renders as a flex-fill block that takes the full size of
+ *      whatever container mounts it. Used in the planet view's stacked
+ *      right panel and the Focus Mode 50/50 split.
+ *    - "inline-large": same as inline but with a larger body font for the
+ *      planet/focus surfaces (operator's request — small text was illegible).
+ */
+type EmailThreadVariant = "floating" | "inline" | "inline-large";
+
+export function EmailThreadView({
+  variant = "floating",
+}: {
+  variant?: EmailThreadVariant;
+} = {}) {
   const openThreadId = useUI((s) => s.openThreadId);
   const openThreadJobId = useUI((s) => s.openThreadJobId);
+  const focusedJobId = useUI((s) => s.focusedJobId);
   const closeThread = useUI((s) => s.closeThread);
   const markMoonRead = useUI((s) => s.markMoonRead);
   const setThreadSummary = useUI((s) => s.setThreadSummary);
@@ -147,7 +164,42 @@ export function EmailThreadView() {
     };
   }, [lastMessage, openThreadId]);
 
-  if (!openThreadId) return null;
+  // When Focus Mode is active, the inline variant inside JobFocusMode is the
+  // only thread surface the operator should see — suppress the floating
+  // slide-in so we don't render two thread viewers stacked on the screen.
+  if (variant === "floating" && focusedJobId) return null;
+
+  // Floating slide-in panel only renders when a thread is selected.
+  // Inline variants are always mounted (in a sized container) and surface an
+  // empty-state hint when no thread is open so the operator knows where to
+  // click — the moon list above the inline pane is the entry point.
+  if (!openThreadId) {
+    if (variant === "floating") return null;
+    return (
+      <div
+        className="w-full h-full flex items-center justify-center text-center px-6"
+        style={{
+          background: "#000",
+          borderLeft:
+            variant === "inline" || variant === "inline-large"
+              ? `1px solid ${NEON_GREEN}33`
+              : undefined,
+        }}
+      >
+        <div className="space-y-2 max-w-[280px]">
+          <div
+            className="font-display tracking-tactical text-[11px] uppercase"
+            style={{ color: NEON_GREEN_BRIGHT, textShadow: `0 0 6px ${NEON_GREEN}66` }}
+          >
+            moon · email thread
+          </div>
+          <div className="text-white/55 text-sm leading-relaxed">
+            Select a moon from the orbit to open its email thread here.
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   const handleSend = async () => {
     if (!googleToken || !replyTarget || !composerText.trim()) return;
@@ -174,15 +226,28 @@ export function EmailThreadView() {
     sfx.confirm();
   };
 
-  return (
-    <div
-      className="pointer-events-auto fixed right-0 top-0 bottom-0 z-50 w-[520px] max-w-[44vw] overflow-hidden"
-      style={{
+  const isInline = variant === "inline" || variant === "inline-large";
+  const isLarge = variant === "inline-large";
+  const outerClass = isInline
+    ? "w-full h-full overflow-hidden"
+    : "pointer-events-auto fixed right-0 top-0 bottom-0 z-50 w-[520px] max-w-[44vw] overflow-hidden";
+  const outerStyle = isInline
+    ? ({
+        background: "#000",
+        // Operator-tunable body font for the inline planet/focus surfaces.
+        ["--thread-body-fs" as string]: isLarge ? "15.5px" : "13px",
+        ["--thread-subject-fs" as string]: isLarge ? "17px" : "14px",
+      } as React.CSSProperties)
+    : ({
         background: "#000",
         borderLeft: `1px solid ${NEON_GREEN}55`,
         boxShadow: `-12px 0 36px #000d, 0 0 60px ${NEON_GREEN}22`,
-      }}
-    >
+        ["--thread-body-fs" as string]: "13px",
+        ["--thread-subject-fs" as string]: "14px",
+      } as React.CSSProperties);
+
+  return (
+    <div className={outerClass} style={outerStyle}>
       <div className="flex h-full flex-col">
         {/* Header */}
         <div
@@ -198,8 +263,11 @@ export function EmailThreadView() {
               {parentJob ? ` · ${parentJob.workOrder}` : ""}
             </div>
             <div
-              className="text-sm font-display text-white truncate"
-              style={{ textShadow: "0 0 4px rgba(255,255,255,0.4)" }}
+              className="font-display text-white truncate"
+              style={{
+                textShadow: "0 0 4px rgba(255,255,255,0.4)",
+                fontSize: "var(--thread-subject-fs, 14px)",
+              }}
               title={subject}
             >
               {subject}
@@ -442,7 +510,10 @@ function MessageBlock({ msg }: { msg: GmailThreadMessage }) {
           />
         )}
       </div>
-      <div className="px-3 py-2 text-sm text-white/90 leading-relaxed font-body">
+      <div
+        className="px-3 py-2 text-white/90 leading-relaxed font-body"
+        style={{ fontSize: "var(--thread-body-fs, 13px)" }}
+      >
         {hasHtml ? (
           <div
             className="email-body"

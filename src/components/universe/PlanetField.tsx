@@ -406,15 +406,22 @@ function Planet({
 }
 
 /**
- * MoonOrbit — close-orbit ring of email threads. Each moon is a small
- * sphere with a halo, color-coded by sender domain. Unread moons emit a
- * brighter pulse + bigger halo; read moons go matte. Click → openThread.
+ * MoonOrbit — outer-ring email threads. PR #5 redesign:
  *
- * Built off the SatelliteOrbit model but kept distinct because:
- *   - Moons orbit closer than satellites (1.5× planet radius vs 3-5×)
- *   - Color is sender-domain, not file-category
- *   - Pulse intensity depends on unread state, not category
- *   - Click semantics open the EmailThreadView, not the attachment viewer
+ *  - Larger sphere (~2.5× previous radius) so moons read at planet view.
+ *  - Procedural cratered surface via fragment shader — no texture
+ *    downloads, no NASA imagery, no model loaders. Soft gray/off-white
+ *    body with a faint blue rim so it sits in the LUMINA palette.
+ *  - Tidally locked: each moon's own rotation matches its orbital angular
+ *    velocity, so the same face always points back at the planet.
+ *  - Moved to a NEW OUTER ring well outside the satellite ring
+ *    (planet → satellites @ 0.95-1.55 → moons @ 1.95 outer).
+ *  - Soft additive moonlight glow around each body.
+ *  - Unread moons keep the pulse semantic but it now drives the outer
+ *    glow halo instead of the moon body itself.
+ *
+ * Click semantics unchanged: opens the in-cockpit EmailThreadView via the
+ * Zustand `openThread` action.
  */
 function MoonOrbit({
   moons,
@@ -427,58 +434,72 @@ function MoonOrbit({
 }) {
   const openThread = useUI((s) => s.openThread);
   const layout = useMemo(() => {
-    const baseRadius = hero ? 0.92 : 0.78;
+    // OUTER ring radius — placed comfortably outside the satellite tracks
+    // (max satellite radius is 1.55, so 1.95 leaves clear separation).
+    const baseRadius = hero ? 2.05 : 1.95;
     return moons.map((m, i) => {
       const angle = (i / Math.max(1, moons.length)) * Math.PI * 2;
+      // Slow orbital speed so the tidal-lock rotation reads.
+      const speed = 0.14 + (i % 3) * 0.02;
       return {
         moon: m,
         baseAngle: angle,
         radius: baseRadius,
-        tilt: 0.34,
-        speed: 0.22 + (i % 3) * 0.04,
+        tilt: 0.28,
+        speed,
         color: moonColor(m),
         phase: i * 0.41,
       };
     });
   }, [moons, hero]);
 
-  const meshRefs = useRef<(THREE.Group | null)[]>([]);
+  // Per-moon refs: the outer group holds the orbital position; the body
+  // group holds the tidal-lock rotation; the glow halo is animated for pulse.
+  const orbitRefs = useRef<(THREE.Group | null)[]>([]);
+  const bodyRefs = useRef<(THREE.Group | null)[]>([]);
   const glowRefs = useRef<(THREE.Mesh | null)[]>([]);
 
   useFrame((state) => {
     const t = state.clock.elapsedTime;
     layout.forEach((it, idx) => {
-      const m = meshRefs.current[idx];
-      if (!m) return;
+      const orbit = orbitRefs.current[idx];
+      const body = bodyRefs.current[idx];
+      if (!orbit) return;
       const a = it.baseAngle + t * it.speed;
       const x = Math.cos(a) * it.radius;
       const yFlat = Math.sin(a) * it.radius;
       const y = yFlat * Math.cos(it.tilt);
       const z = yFlat * Math.sin(it.tilt);
-      m.position.set(x, y, z);
+      orbit.position.set(x, y, z);
+      // Tidal lock — same face toward the planet at origin. We point the
+      // moon's local -Z toward the parent so the "front" hemisphere with
+      // the visible crater field always faces the planet.
+      if (body) {
+        body.lookAt(0, 0, 0);
+      }
       const g = glowRefs.current[idx];
       if (g) {
         const mat = g.material as THREE.MeshBasicMaterial;
-        // Unread moons pulse hard; read moons are nearly flat.
+        // Unread moons pulse the outer halo brighter / faster.
         const tgt = it.moon.unread
-          ? 0.85 + Math.sin(t * 2.4 + it.phase) * 0.25
-          : 0.28;
+          ? 0.7 + Math.sin(t * 2.6 + it.phase) * 0.3
+          : 0.22;
         mat.opacity += (tgt - mat.opacity) * 0.1;
       }
     });
   });
 
-  // Faint orbital track — a single thin guide ring so the orbit reads as
-  // intentional, not chaotic. Color matches the parent planet.
-  const trackTilt = 0.34;
-  const trackRadius = hero ? 0.92 : 0.78;
+  const trackTilt = 0.28;
+  const trackRadius = hero ? 2.05 : 1.95;
+  const moonBodyRadius = 0.16;
+  const haloRadius = moonBodyRadius * 1.85;
 
   return (
     <group>
-      {/* Orbital guide ring */}
+      {/* Outer orbital guide ring */}
       <group rotation={[trackTilt, 0, 0]}>
         <mesh>
-          <ringGeometry args={[trackRadius - 0.004, trackRadius + 0.004, 96]} />
+          <ringGeometry args={[trackRadius - 0.005, trackRadius + 0.005, 128]} />
           <meshBasicMaterial
             color={planetColor}
             transparent
@@ -495,10 +516,11 @@ function MoonOrbit({
         <group
           key={it.moon.id}
           ref={(g) => {
-            meshRefs.current[i] = g;
+            orbitRefs.current[i] = g;
           }}
         >
-          {/* Halo — opacity animated per frame to pulse */}
+          {/* Soft outer moonlight halo — pulses on unread, additive blending
+              so the existing Bloom pass bleeds the edge for a real-moon feel. */}
           <mesh
             ref={(m) => {
               glowRefs.current[i] = m;
@@ -507,34 +529,133 @@ function MoonOrbit({
               e.stopPropagation();
               openThread(it.moon.threadId);
             }}
-            onPointerOver={(e) => {
-              e.stopPropagation();
-              document.body.style.cursor = "url('/cursor-arrow-pointer.svg') 1 1, pointer";
-            }}
-            onPointerOut={() => {
-              document.body.style.cursor = "";
-            }}
           >
-            <sphereGeometry args={[0.07, 12, 12]} />
+            <sphereGeometry args={[haloRadius, 16, 16]} />
             <meshBasicMaterial
               color={it.color}
               transparent
-              opacity={0.7}
+              opacity={0.4}
               depthWrite={false}
               blending={THREE.AdditiveBlending}
               toneMapped={false}
             />
           </mesh>
-          {/* Bright core */}
-          <mesh
-            onClick={(e) => {
-              e.stopPropagation();
-              openThread(it.moon.threadId);
+
+          {/* Tidally-locked moon body. Faces the planet via lookAt(origin). */}
+          <group
+            ref={(g) => {
+              bodyRefs.current[i] = g;
             }}
           >
-            <sphereGeometry args={[0.032, 12, 12]} />
-            <meshBasicMaterial color={it.color} toneMapped={false} />
-          </mesh>
+            <mesh
+              onClick={(e) => {
+                e.stopPropagation();
+                openThread(it.moon.threadId);
+              }}
+              onPointerOver={(e) => {
+                e.stopPropagation();
+                document.body.style.cursor =
+                  "url('/cursor-arrow-pointer.svg') 1 1, pointer";
+              }}
+              onPointerOut={() => {
+                document.body.style.cursor = "";
+              }}
+            >
+              <sphereGeometry args={[moonBodyRadius, 32, 32]} />
+              {/* Procedural cratered surface — fragment shader noise.
+                  Soft gray base with a slight blue rim to fit the
+                  LUMINA cyan palette. No textures, no extra deps. */}
+              <shaderMaterial
+                transparent={false}
+                uniforms={{
+                  uTint: { value: new THREE.Color(it.color) },
+                }}
+                vertexShader={`
+                  varying vec3 vNormal;
+                  varying vec3 vPos;
+                  void main() {
+                    vNormal = normalize(normalMatrix * normal);
+                    vPos = position;
+                    gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+                  }
+                `}
+                fragmentShader={`
+                  uniform vec3 uTint;
+                  varying vec3 vNormal;
+                  varying vec3 vPos;
+
+                  // Cheap value-noise hash — enough variance for a
+                  // believable cratered surface at our render scale.
+                  float hash(vec3 p) {
+                    p = fract(p * 0.3183099 + vec3(0.1, 0.7, 0.4));
+                    p *= 17.0;
+                    return fract(p.x * p.y * p.z * (p.x + p.y + p.z));
+                  }
+
+                  float noise(vec3 p) {
+                    vec3 i = floor(p);
+                    vec3 f = fract(p);
+                    f = f * f * (3.0 - 2.0 * f);
+                    float n000 = hash(i);
+                    float n100 = hash(i + vec3(1.0, 0.0, 0.0));
+                    float n010 = hash(i + vec3(0.0, 1.0, 0.0));
+                    float n110 = hash(i + vec3(1.0, 1.0, 0.0));
+                    float n001 = hash(i + vec3(0.0, 0.0, 1.0));
+                    float n101 = hash(i + vec3(1.0, 0.0, 1.0));
+                    float n011 = hash(i + vec3(0.0, 1.0, 1.0));
+                    float n111 = hash(i + vec3(1.0, 1.0, 1.0));
+                    float nx00 = mix(n000, n100, f.x);
+                    float nx10 = mix(n010, n110, f.x);
+                    float nx01 = mix(n001, n101, f.x);
+                    float nx11 = mix(n011, n111, f.x);
+                    float nxy0 = mix(nx00, nx10, f.y);
+                    float nxy1 = mix(nx01, nx11, f.y);
+                    return mix(nxy0, nxy1, f.z);
+                  }
+
+                  void main() {
+                    // Layered noise — broad surface variance + crater darks.
+                    vec3 p = vPos * 8.0;
+                    float n1 = noise(p);
+                    float n2 = noise(p * 2.3 + 13.0);
+                    float n3 = noise(p * 5.1 + 4.0);
+                    // Crater "rims" — peaks of mid-frequency noise punch
+                    // dark bowls into the surface.
+                    float crater = smoothstep(0.62, 0.78, n2);
+                    crater += smoothstep(0.70, 0.88, n3) * 0.6;
+                    float shade = 0.55 + n1 * 0.45 - crater * 0.45;
+                    shade = clamp(shade, 0.18, 1.0);
+
+                    // Soft gray-white moon body with a subtle cyan-ish rim
+                    // from the parent palette (multiplied very lightly).
+                    vec3 base = mix(
+                      vec3(0.62, 0.65, 0.71),
+                      vec3(0.88, 0.90, 0.95),
+                      shade
+                    );
+                    // Rim term — Lambertian-ish toward camera.
+                    float rim = pow(1.0 - max(dot(vNormal, vec3(0.0, 0.0, 1.0)), 0.0), 2.4);
+                    vec3 rimTint = mix(vec3(0.42, 0.70, 0.92), uTint, 0.3);
+                    vec3 col = base + rimTint * rim * 0.35;
+                    gl_FragColor = vec4(col, 1.0);
+                  }
+                `}
+              />
+            </mesh>
+            {/* A tiny "near-side" indicator mark — a faint highlight on the
+                planet-facing hemisphere that helps the tidal-lock read. */}
+            <mesh position={[0, 0, -moonBodyRadius * 0.95]}>
+              <circleGeometry args={[moonBodyRadius * 0.18, 16]} />
+              <meshBasicMaterial
+                color={it.color}
+                transparent
+                opacity={0.18}
+                depthWrite={false}
+                blending={THREE.AdditiveBlending}
+                toneMapped={false}
+              />
+            </mesh>
+          </group>
         </group>
       ))}
     </group>
@@ -641,7 +762,8 @@ function SatelliteOrbit({
           </mesh>
         </group>
       ))}
-      {/* Satellite dots — small bright cores with halo */}
+      {/* Satellite mesh — proper bus + solar panels + dish, replaces the
+          old single-sphere dot. Keeps the inner orbit ring intact. */}
       {layout.items.map((it, i) => (
         <group
           key={it.id}
@@ -649,29 +771,118 @@ function SatelliteOrbit({
             meshRefs.current[i] = g;
           }}
         >
-          {/* Halo */}
+          {/* Soft halo around the whole craft for additive bloom bleed. */}
           <mesh
             ref={(m) => {
               glowRefs.current[i] = m;
             }}
           >
-            <sphereGeometry args={[0.05, 12, 12]} />
+            <sphereGeometry args={[0.07, 10, 10]} />
             <meshBasicMaterial
               color={it.color}
               transparent
-              opacity={0.7}
+              opacity={0.55}
               depthWrite={false}
               blending={THREE.AdditiveBlending}
               toneMapped={false}
             />
           </mesh>
-          {/* Bright core */}
-          <mesh>
-            <sphereGeometry args={[0.025, 12, 12]} />
-            <meshBasicMaterial color={it.color} toneMapped={false} />
-          </mesh>
+          <SatelliteMesh color={it.color} />
         </group>
       ))}
+    </group>
+  );
+}
+
+/**
+ * SatelliteMesh — minimal but unambiguous satellite silhouette:
+ *
+ *   ▢━━[ █ ]━━▢         body (box) flanked by two flat solar panels;
+ *        |               dish/antenna cone points forward (-Z) so it reads
+ *        ▽               as an actual probe rather than a featureless dot.
+ *
+ * Kept entirely in primitive geometries (BoxGeometry / PlaneGeometry / ConeGeometry)
+ * so no model loaders or asset packs are required. The reusable component
+ * sits inside the SatelliteOrbit children so each orbiting slot gets one.
+ */
+function SatelliteMesh({ color }: { color: string }) {
+  // Soft cool body color — keeps the visual weight off the orbit color so
+  // the category accent (solar panels + dish glow) carries the meaning.
+  const BUS = "#cdd6e0";
+  const PANEL = "#1a2a44";
+  const PANEL_EDGE = "#2f4773";
+  return (
+    <group>
+      {/* Body / bus — small box, the satellite's main module. */}
+      <mesh>
+        <boxGeometry args={[0.08, 0.06, 0.10]} />
+        <meshStandardMaterial
+          color={BUS}
+          metalness={0.65}
+          roughness={0.4}
+          emissive={color}
+          emissiveIntensity={0.18}
+        />
+      </mesh>
+
+      {/* Left solar panel */}
+      <group position={[-0.12, 0, 0]}>
+        {/* Yoke / arm connecting panel to bus */}
+        <mesh position={[0.05, 0, 0]}>
+          <boxGeometry args={[0.04, 0.012, 0.012]} />
+          <meshStandardMaterial color={BUS} metalness={0.6} roughness={0.45} />
+        </mesh>
+        <mesh>
+          <boxGeometry args={[0.14, 0.005, 0.07]} />
+          <meshStandardMaterial
+            color={PANEL}
+            metalness={0.85}
+            roughness={0.25}
+            emissive={PANEL_EDGE}
+            emissiveIntensity={0.35}
+          />
+        </mesh>
+      </group>
+
+      {/* Right solar panel */}
+      <group position={[0.12, 0, 0]}>
+        <mesh position={[-0.05, 0, 0]}>
+          <boxGeometry args={[0.04, 0.012, 0.012]} />
+          <meshStandardMaterial color={BUS} metalness={0.6} roughness={0.45} />
+        </mesh>
+        <mesh>
+          <boxGeometry args={[0.14, 0.005, 0.07]} />
+          <meshStandardMaterial
+            color={PANEL}
+            metalness={0.85}
+            roughness={0.25}
+            emissive={PANEL_EDGE}
+            emissiveIntensity={0.35}
+          />
+        </mesh>
+      </group>
+
+      {/* Dish / antenna — small cone pointing forward (toward -Z). The
+          dish glows in the satellite's category color so each category
+          still reads at a glance even with the new geometry. */}
+      <group position={[0, 0, -0.07]} rotation={[Math.PI / 2, 0, 0]}>
+        <mesh>
+          <coneGeometry args={[0.035, 0.05, 12, 1, true]} />
+          <meshStandardMaterial
+            color={color}
+            metalness={0.7}
+            roughness={0.35}
+            emissive={color}
+            emissiveIntensity={0.65}
+            side={THREE.DoubleSide}
+          />
+        </mesh>
+        {/* Antenna feed — thin cylinder centered in dish */}
+        <mesh position={[0, -0.03, 0]}>
+          <cylinderGeometry args={[0.005, 0.005, 0.035, 8]} />
+          <meshStandardMaterial color={BUS} metalness={0.9} roughness={0.3} />
+        </mesh>
+      </group>
     </group>
   );
 }
