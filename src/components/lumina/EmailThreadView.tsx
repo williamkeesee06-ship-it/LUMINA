@@ -12,7 +12,7 @@ import { rememberFact } from "@/lib/luminaMemory";
  *  EmailThreadView — in-cockpit Gmail thread viewer.
  *
  *  Slides in from the right when `store.openThreadId` is set. Loads the
- *  full thread via /api/gmail-thread, renders sanitized HTML or plain
+ *  full thread via /api/gmail (action=thread), renders sanitized HTML or plain
  *  text fallback, and supports inline reply with send-confirmation.
  *
  *  The viewer collapses quoted history blocks (lines starting with ">"

@@ -33,7 +33,7 @@ function normalizeToken(raw: string): string {
   return raw.replace(/[\s\-_.]/g, "").toUpperCase();
 }
 
-/** Shape consumed by matchEmailToJobs — same fields gmail-list returns. */
+/** Shape consumed by matchEmailToJobs — same fields /api/gmail action=list returns. */
 export interface GmailMessageMeta {
   id: string;
   threadId: string;

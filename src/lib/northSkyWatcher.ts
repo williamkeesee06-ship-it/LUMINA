@@ -3,7 +3,7 @@
  *
  * Singleton. Starts when a Google token is available and the watcher is
  * armed via `startWatcher`. Stops on sign-out or `stopWatcher`. Polls
- * `/api/gmail-list` for `label:"North Sky"` every 60 s, matches each new
+ * `/api/gmail` (action=list) for `label:"North Sky"` every 60 s, matches each new
  * message against the current Zustand `jobs` slice using `matchEmailToJobs`,
  * and dispatches `attachMoons` for every match.
  *
@@ -211,13 +211,14 @@ function mergeMoonsById(moons: Moon[]): Moon[] {
 }
 
 async function fetchNorthSky(token: string): Promise<GmailMessageMeta[]> {
-  const r = await fetch("/api/gmail-list", {
+  const r = await fetch("/api/gmail?action=list", {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
       Authorization: `Bearer ${token}`,
     },
     body: JSON.stringify({
+      action: "list",
       label: NORTH_SKY_LABEL,
       limit: 50,
     }),
