@@ -13,6 +13,8 @@ interface Props {
   onMouseEnter?: () => void;
   /** Disc diameter in px. Default 32 (legacy compact). 60+ for hero navigation page. */
   size?: number;
+  /** PR #6 — render a pulsating ring signalling a recent change for this widget. */
+  pulse?: boolean;
 }
 
 /**
@@ -32,6 +34,7 @@ export function MiniWidget({
   onClick,
   onMouseEnter,
   size = 32,
+  pulse = false,
 }: Props) {
   // Type sizes scale with the disc so a hero-sized widget keeps proportion.
   const labelSize = Math.max(7, Math.round(size * 0.18));
@@ -74,6 +77,7 @@ export function MiniWidget({
         style={{
           width: size,
           height: size,
+          ["--pulse-rgb" as string]: rgb.replace(/,/g, " "),
           background:
             "radial-gradient(circle at 50% 35%, #0e1320 0%, #060912 70%, #03050a 100%)",
           // Thicker, brighter ring — scales with disc size for hero widgets.
@@ -100,6 +104,7 @@ export function MiniWidget({
         >
           {value}
         </div>
+        {pulse && !disabled && <span className="nav-pulse-ring" aria-hidden />}
         {/* Diagonal strike line for the OFF state — SVG so the line stays
             crisp at every device pixel ratio and doesn't bleed past the disc. */}
         {disabled && (

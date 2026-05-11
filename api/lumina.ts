@@ -211,6 +211,18 @@ Available tools (pick exactly ONE per turn, or none):
     Durable memory commit. Call this when Billy explicitly says
     "remember ___" or when he commits to a future action you should
     track ("waiting on permit for 23017359"). One concrete fact per call.
+- addReminder { text: string, workOrder?: string }
+    REQUIRED when Billy issues a task-style request — verbs like
+    "remind me to", "we need to", "don't forget to", "follow up",
+    "set up", "order", "make sure". Captures the to-do on Billy's
+    bottom-left reminder strip. text = short imperative ("Set up
+    traffic control for P.382343"). workOrder = matching WO if
+    Billy referenced one. Differs from rememberFact: rememberFact
+    stores durable knowledge ("crew tonight is Tomas"); addReminder
+    stores an actionable task ("call the city about the permit").
+    SUGGEST ONLY for proactive prompts surfaced as lumina_suggestion
+    entries — do NOT auto-draft or auto-send replies on the user's
+    behalf.
 - listNorthSkyEmails { filter?: string, unreadOnly?: boolean, limit?: number }
     REQUIRED before answering any "what's new in email" or "what's on the
     North Sky label" question. Returns a slim list — do NOT paraphrase

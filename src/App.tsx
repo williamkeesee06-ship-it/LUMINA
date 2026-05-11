@@ -12,6 +12,8 @@ import { HyperspaceTransition } from "@/components/effects/HyperspaceTransition"
 import { JobFocusMode } from "@/components/focus/JobFocusMode";
 import { hydrateMemory } from "@/lib/luminaMemory";
 import { startWatcher, stopWatcher } from "@/lib/northSkyWatcher";
+import { runSituationalChecks } from "@/lib/situationalAwareness";
+import { primeReminderStore } from "@/store/reminderStore";
 
 export default function App() {
   // Boot-time memory hydration. Local cache primes synchronously inside
@@ -78,6 +80,34 @@ export default function App() {
       alive = false;
     };
   }, [setJobs, setLoading, setError]);
+
+  // Sweep recent-changes TTL once a minute so nav-widget pulses drop
+  // 5 minutes after the triggering event even if no widget is clicked.
+  useEffect(() => {
+    const id = window.setInterval(() => {
+      useUI.getState().sweepRecentChanges();
+    }, 60_000);
+    return () => window.clearInterval(id);
+  }, []);
+
+  // Boot the reminder store + run situational-awareness sweeps.
+  //   - On app load (once jobs are populated).
+  //   - Every 5 min via interval.
+  //   - On every jobs slice change (new email, status change, crew assignment
+  //     all flow through `setJobs` / `attachMoons` / `setJobFields`).
+  useEffect(() => {
+    primeReminderStore();
+  }, []);
+  useEffect(() => {
+    if (jobs.length === 0) return;
+    runSituationalChecks(jobs);
+  }, [jobs]);
+  useEffect(() => {
+    const id = window.setInterval(() => {
+      runSituationalChecks(useUI.getState().jobs);
+    }, 5 * 60_000);
+    return () => window.clearInterval(id);
+  }, []);
 
   // Refresh Gmail unread count when token arrives.
   useEffect(() => {
@@ -226,14 +256,18 @@ function EditorialWatermark({ status }: { status: string }) {
             Bumped from 12px to 15px so the wordmark holds equal weight with
             the LUMINA display text and reads from across the room. */}
         <div
-          className="flex items-center justify-center font-display uppercase text-white/95"
+          className="flex items-center justify-center font-display uppercase"
           style={{
-            fontSize: 15,
+            // ~18% larger than the prior 15px wordmark, per PR #6 brief.
+            fontSize: 18,
             writingMode: "vertical-rl",
             transform: "rotate(180deg)",
             letterSpacing: "0.58em",
-            fontWeight: 600,
-            textShadow: "0 0 6px rgba(78,123,255,0.5)",
+            fontWeight: 700,
+            // Neon-blue accent (--accent-blue from PR #5).
+            color: "var(--accent-blue, #00E5FF)",
+            textShadow:
+              "0 0 3px #00E5FF, 0 0 10px rgba(0,229,255,0.75), 0 0 22px rgba(0,229,255,0.4)",
             paddingTop: 4,
             paddingBottom: 4,
           }}

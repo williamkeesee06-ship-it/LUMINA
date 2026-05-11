@@ -17,7 +17,14 @@ import type { VercelRequest, VercelResponse } from "@vercel/node";
  */
 
 const REQUIRED_LABEL = "North Sky";
-const REQUIRED_LABEL_Q = `label:"${REQUIRED_LABEL}"`;
+// `label:"North Sky"` matches BOTH the INBOX and SENT folders under that
+// label (default Gmail behavior — labels apply across categories). PR #6:
+// the user CCs williamkeesee06@gmail.com on outgoing work mail, so once
+// the Gmail filter is set up (instructions in the PR description), sent
+// mail flows back to LUMINA through this exact query. We also exclude
+// trashed messages so deleted threads stop showing up after the operator
+// clears one. No new OAuth scope, no new endpoint.
+const REQUIRED_LABEL_Q = `label:"${REQUIRED_LABEL}" -in:trash`;
 
 type Action = "list" | "search" | "thread" | "send";
 

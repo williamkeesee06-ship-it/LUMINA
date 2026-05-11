@@ -11,6 +11,8 @@ interface Props {
   disabled?: boolean;
   onClick?: () => void;
   onMouseEnter?: () => void;
+  /** PR #6 — render a pulsating ring signalling a recent change for this widget. */
+  pulse?: boolean;
 }
 
 /**
@@ -28,6 +30,7 @@ export function CircleWidget({
   disabled = false,
   onClick,
   onMouseEnter,
+  pulse = false,
 }: Props) {
   return (
     <button
@@ -51,6 +54,7 @@ export function CircleWidget({
         style={{
           width: 60,
           height: 60,
+          ["--pulse-rgb" as string]: rgb.replace(/,/g, " "),
           background:
             "radial-gradient(circle at 50% 35%, #0e1320 0%, #060912 70%, #03050a 100%)",
           border: `1.6px solid ${disabled ? "#3a4258" : color}`,
@@ -72,6 +76,7 @@ export function CircleWidget({
         >
           {value}
         </div>
+        {pulse && !disabled && <span className="nav-pulse-ring" aria-hidden />}
         {/* OFF-state diagonal slash. SVG to keep stroke crisp. */}
         {disabled && (
           <svg
