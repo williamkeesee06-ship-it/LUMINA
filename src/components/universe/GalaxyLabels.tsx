@@ -30,7 +30,13 @@ export function GalaxyLabels() {
 
   return (
     <>
-      {GALAXIES.filter((g) => g !== "Complete").map((g) => {
+      {/* PR #6 follow-up: previously Complete was filtered out so its
+          (typically empty) galaxy floated label-less in the upper-right
+          while every other bucket got a marquee. Every status bucket must
+          render its label tag regardless of count — an empty COMPLETE
+          galaxy still belongs in the field and still needs to be
+          identifiable + clickable. */}
+      {GALAXIES.map((g) => {
         const pos = GALAXY_POSITIONS[g];
         const color = GALAXY_COLORS[g];
         const isFocused = focusedGalaxy === g;
