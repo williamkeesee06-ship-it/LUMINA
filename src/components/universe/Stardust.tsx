@@ -26,7 +26,7 @@ interface Props {
  * rest stay still so the field reads as deep, calm space.
  */
 export function Stardust({
-  count = 1400,
+  count = 3000,
   radius = 90,
   size = 0.18,
   baseOpacity = 0.85,
@@ -205,7 +205,7 @@ interface GalaxyStarClusterProps {
 
 export function GalaxyStarCluster({
   center,
-  count = 80,
+  count = 200,
   radius = 28,
   dim = false,
 }: GalaxyStarClusterProps) {
@@ -251,7 +251,7 @@ export function GalaxyStarCluster({
   }, [center, count, radius]);
 
   const fgPositions = useMemo(() => {
-    const fgCount = 20;
+    const fgCount = 50;
     const fgRadius = Math.max(8, radius * 0.7);
     const pos = new Float32Array(fgCount * 3);
     for (let i = 0; i < fgCount; i++) {
