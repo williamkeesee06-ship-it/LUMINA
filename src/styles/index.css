@@ -627,4 +627,15 @@
   60% { transform: translate(2px, 2px); filter: contrast(1.5) hue-rotate(45deg); }
   80% { transform: translate(2px, -2px); }
   100% { transform: translate(0); }
-}
+}
+
+@keyframes orb-spin {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
+}
+
+@keyframes orb-spin-reverse {
+  0% { transform: rotate(360deg); }
+  100% { transform: rotate(0deg); }
+}
+
