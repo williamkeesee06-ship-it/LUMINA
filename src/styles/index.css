@@ -603,3 +603,28 @@
     filter: brightness(1.18) saturate(1.15);
   }
 }
+
+.hologram-panel {
+  animation: hologram-load 0.4s ease-out forwards;
+  backdrop-filter: blur(16px) saturate(140%);
+  background: radial-gradient(140% 100% at 50% 0%, rgba(var(--panel-accent), 0.12), transparent 70%), linear-gradient(180deg, rgba(5,10,18,0.7) 0%, rgba(2,4,8,0.85) 100%);
+}
+
+@keyframes hologram-load {
+  0% { opacity: 0; transform: scale(0.95) translateY(10px); filter: contrast(2) brightness(2) hue-rotate(90deg); clip-path: polygon(0 0, 100% 0, 100% 10px, 0 10px); }
+  50% { opacity: 0.8; transform: scale(1.02) translateY(-2px); filter: contrast(1.5) brightness(1.5) hue-rotate(45deg); clip-path: polygon(0 0, 100% 0, 100% 100%, 0 100%); }
+  100% { opacity: 1; transform: scale(1) translateY(0); filter: contrast(1) brightness(1) hue-rotate(0deg); clip-path: polygon(0 0, 100% 0, 100% 100%, 0 100%); }
+}
+
+.hologram-glitch {
+  animation: hologram-glitch-anim 0.3s ease-in-out 2 alternate;
+}
+
+@keyframes hologram-glitch-anim {
+  0% { transform: translate(0); }
+  20% { transform: translate(-2px, 2px); filter: contrast(2); }
+  40% { transform: translate(-2px, -2px); }
+  60% { transform: translate(2px, 2px); filter: contrast(1.5) hue-rotate(45deg); }
+  80% { transform: translate(2px, -2px); }
+  100% { transform: translate(0); }
+}

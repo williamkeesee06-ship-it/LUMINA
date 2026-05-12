@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import Fuse from "fuse.js";
 import { useUI, selectGalaxyCounts } from "@/store/uiStore";
 import {
   sendToLumina,
@@ -73,7 +74,8 @@ interface ToolCall {
     | "enterFocusMode"
     | "exitFocusMode"
     // PR #13 — pop the operator's real Gmail (North Sky label scope) in a tab.
-    | "openGmail";
+    | "openGmail"
+    | "searchUniverse";
   args: Record<string, unknown>;
 }
 
@@ -350,14 +352,12 @@ export function LuminaPanel({
       sfx.confirm();
       return;
     }
-    if (call.name === "lookupJob") {
-      // Look up the full record for any work order Billy mentioned and surface
-      // it directly in the chat as a Lumina-formatted detail block. This
-      // ensures she NEVER fabricates — she pulls real data on demand.
-      const wo = String(call.args.workOrder ?? "");
-      const norm = (s: string) => s.replace(/[\s\-_.]/g, "").toUpperCase();
-      const target = norm(wo);
-      const j = jobs.find((x) => {
+    // Helper for tools that need to resolve a WO to a Job.
+    const norm = (s: string) => s.replace(/[\s\-_.]/g, "").toUpperCase();
+    const findJobByWO = (raw: string) => {
+      const target = norm(raw);
+      // Fast exact match first
+      let j = jobs.find((x) => {
         const w = norm(x.workOrder ?? "");
         if (w === target) return true;
         if (target.startsWith("P") && w === target.slice(1)) return true;
@@ -365,6 +365,49 @@ export function LuminaPanel({
         if (target.length >= 5 && w.endsWith(target)) return true;
         return false;
       });
+      // Fallback to fuzzy
+      if (!j) {
+        const fuse = new Fuse(jobs, { keys: ["workOrder"], threshold: 0.2 });
+        const result = fuse.search(raw);
+        if (result.length > 0) j = result[0].item;
+      }
+      return j;
+    };
+
+    if (call.name === "searchUniverse") {
+      const query = String(call.args.query ?? "");
+      const fuse = new Fuse(jobs, {
+        keys: ["workOrder", "fullAddress", "notes", "crew", "city", "rawSecondaryStatus"],
+        threshold: 0.3,
+        ignoreLocation: true,
+      });
+      const results = fuse.search(query).slice(0, 3);
+      if (results.length === 0) {
+        const msg = `I couldn't find any jobs matching "${query}".`;
+        setMessages((m) => [...m, { role: "model", text: msg }]);
+        recordTurn("model", msg);
+        if (lastSpokenInputRef.current || liveModeRef.current) speak(msg, { onEnd: () => maybeRelisten() });
+        sfx.error();
+      } else {
+        const lines = results.map(r => `- ${r.item.workOrder} (${r.item.status}): ${r.item.fullAddress || "No address"}`);
+        const msg = `Found ${results.length} match${results.length > 1 ? "es" : ""}:\n${lines.join("\n")}`;
+        setMessages((m) => [...m, { role: "model", text: msg }]);
+        recordTurn("model", msg);
+        if (lastSpokenInputRef.current || liveModeRef.current) {
+          const spoken = `I found ${results.length} match${results.length > 1 ? "es" : ""}. ${results[0].item.workOrder} is one of them.`;
+          speak(spoken, { onEnd: () => maybeRelisten() });
+        }
+        sfx.confirm();
+      }
+      return;
+    }
+
+    if (call.name === "lookupJob") {
+      // Look up the full record for any work order Billy mentioned and surface
+      // it directly in the chat as a Lumina-formatted detail block. This
+      // ensures she NEVER fabricates — she pulls real data on demand.
+      const wo = String(call.args.workOrder ?? "");
+      const j = findJobByWO(wo);
       if (!j) {
         const msg = `No work order matching \`${wo}\` exists in the universe. Confirm the number with me.`;
         setMessages((m) => [...m, { role: "model", text: msg }]);
@@ -425,16 +468,7 @@ export function LuminaPanel({
     }
     if (call.name === "flyToJob") {
       const wo = String(call.args.workOrder ?? "");
-      const normWo = (s: string) => s.replace(/[\s\-_.]/g, "").toUpperCase();
-      const target = normWo(wo);
-      const j = jobs.find((x) => {
-        const w = normWo(x.workOrder ?? "");
-        if (w === target) return true;
-        if (target.startsWith("P") && w === target.slice(1)) return true;
-        if (w.startsWith("P") && w.slice(1) === target) return true;
-        if (target.length >= 5 && w.endsWith(target)) return true;
-        return false;
-      });
+      const j = findJobByWO(wo);
       if (j) {
         selectJob(j.id);
         sfx.confirm();
@@ -633,9 +667,7 @@ export function LuminaPanel({
     }
     if (call.name === "openMoonForJob") {
       const wo = String(call.args.wo ?? "");
-      const norm = (s: string) => s.replace(/[\s\-_.]/g, "").toUpperCase();
-      const target = norm(wo);
-      const j = jobs.find((x) => norm(x.workOrder ?? "") === target);
+      const j = findJobByWO(wo);
       if (!j) {
         const msg = `No work order matching ${wo} in the universe.`;
         setMessages((m) => [...m, { role: "model", text: msg }]);
@@ -723,20 +755,6 @@ export function LuminaPanel({
     // ============================================================
     //  PR #10 — Full Lumina mutation surface (chat + voice parity)
     // ============================================================
-
-    // Helper for tools that need to resolve a WO to a Job.
-    const norm = (s: string) => s.replace(/[\s\-_.]/g, "").toUpperCase();
-    const findJobByWO = (raw: string) => {
-      const target = norm(raw);
-      return jobs.find((x) => {
-        const w = norm(x.workOrder ?? "");
-        if (w === target) return true;
-        if (target.startsWith("P") && w === target.slice(1)) return true;
-        if (w.startsWith("P") && w.slice(1) === target) return true;
-        if (target.length >= 5 && w.endsWith(target)) return true;
-        return false;
-      });
-    };
     const ackChat = (text: string) => {
       setMessages((m) => [...m, { role: "model", text }]);
       recordTurn("model", text);
