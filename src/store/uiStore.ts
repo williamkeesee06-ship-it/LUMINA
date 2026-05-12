@@ -451,10 +451,23 @@ export const useUI = create<UIState>((set, get) => ({
     if (cur !== "idle") return; // ignore re-entry while a dive is mid-flight
     set({ mapTransition: "diving" });
     // Mid-flight: at peak warp the map mounts behind the white flash.
+    // Auto-filter to the two actionable statuses so the map opens clean.
     setTimeout(() => {
       // Guard against the user cancelling/closing during the dive
       if (get().mapTransition !== "diving") return;
-      set({ isMapOpen: true });
+      set({
+        isMapOpen: true,
+        // Show only "Needs Fielding" and "Scheduled" by default.
+        // The operator can click any galaxy widget to toggle the rest.
+        hiddenGalaxies: [
+          "Complete",
+          "Fielded-RTS",
+          "On Hold",
+          "Pending",
+          "Routed to Sub",
+        ],
+        showHistoryOnMap: false,
+      });
     }, 850); // peak velocity / flash crest
     // Land: full warp completes ~1600ms total.
     setTimeout(() => {
