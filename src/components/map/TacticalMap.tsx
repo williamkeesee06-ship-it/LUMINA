@@ -502,8 +502,8 @@ function NeonPin({
     if (!map || !g) return;
 
     const scale = selected ? 1.35 : 1.05;
-    const stroke = historical ? "#CBD5E1" : "#fff";
-    const strokeWeight = selected ? 2 : 1.2;
+    const stroke = historical ? "#94A3B8" : "#1E293B"; // dark stroke on light map
+    const strokeWeight = selected ? 2.5 : 1.8;
     const fillOpacity = historical ? 0.55 : 1;
 
     const body = new g.Marker({
@@ -513,7 +513,7 @@ function NeonPin({
         fillColor: color,
         fillOpacity,
         strokeColor: stroke,
-        strokeOpacity: historical ? 0.5 : 1,
+        strokeOpacity: historical ? 0.4 : 1,
         strokeWeight,
         scale,
         anchor: new g.Point(0, 0),
@@ -530,17 +530,18 @@ function NeonPin({
         clickable: false,
         icon: {
           path: innerHolePath(),
-          fillColor: "#fff",
-          fillOpacity: 0.9,
-          strokeColor: color,
-          strokeOpacity: 0.5,
-          strokeWeight: 0.6,
+          fillColor: "#1E293B", // dark dot for contrast on any pin color
+          fillOpacity: 0.85,
+          strokeColor: "#fff",
+          strokeOpacity: 0.4,
+          strokeWeight: 0.5,
           scale,
           anchor: new g.Point(0, 0),
         },
         zIndex: (selected ? 1000 : 50) + 1,
       });
     }
+
 
     let labelMarker: any = null;
     if (showLabel) {
