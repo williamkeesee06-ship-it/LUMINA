@@ -1,6 +1,6 @@
 import { useMemo, useRef } from "react";
 import { useFrame } from "@react-three/fiber";
-import { Billboard, Text } from "@react-three/drei";
+import { Billboard, Text, Trail } from "@react-three/drei";
 import * as THREE from "three";
 
 /**
@@ -554,88 +554,75 @@ function MoonOrbit({
             orbitRefs.current[i] = g;
           }}
         >
-          {/* Soft outer moonlight halo — pulses on unread, additive blending
-              so the existing Bloom pass bleeds the edge for a real-moon feel. */}
-          <mesh
-            ref={(m) => {
-              glowRefs.current[i] = m;
-            }}
-            onClick={(e) => {
-              e.stopPropagation();
-              openThread(it.moon.threadId);
-            }}
+          {/* Glowing orbital trail behind the moon */}
+          <Trail
+            width={0.15}
+            color={it.color}
+            length={12}
+            decay={1}
+            local={false}
+            attenuation={(t) => t * t}
           >
-            <sphereGeometry args={[haloRadius, 16, 16]} />
-            <meshBasicMaterial
-              color={it.color}
-              transparent
-              opacity={0.4}
-              depthWrite={false}
-              blending={THREE.AdditiveBlending}
-              toneMapped={false}
-            />
-          </mesh>
-
-          {/* Tidally-locked moon body. Faces the planet via lookAt(origin). */}
-          <group
-            ref={(g) => {
-              bodyRefs.current[i] = g;
-            }}
-          >
-            {/* Outer tidal-lock ring — faint torus floating around each moon
-                so the operator can see that the moon is actually tidal-locked
-                (the ring's plane rotates with the body). Restores PR #5. */}
-            <mesh rotation={[Math.PI / 2, 0, 0]}>
-              <torusGeometry args={[moonBodyRadius * 1.4, 0.02, 8, 48]} />
-              <meshBasicMaterial
-                color="#aaaaaa"
-                transparent
-                opacity={0.25}
-                depthWrite={false}
-                blending={THREE.AdditiveBlending}
-                toneMapped={false}
-              />
-            </mesh>
-            <mesh
-              onClick={(e) => {
-                e.stopPropagation();
-                openThread(it.moon.threadId);
-              }}
-              onPointerOver={(e) => {
-                e.stopPropagation();
-                document.body.style.cursor =
-                  "url('/cursor-arrow-pointer.svg') 1 1, pointer";
-              }}
-              onPointerOut={() => {
-                document.body.style.cursor = "";
+            {/* Tidally-locked moon body. Faces the planet via lookAt(origin). */}
+            <group
+              ref={(g) => {
+                bodyRefs.current[i] = g;
               }}
             >
-              <sphereGeometry args={[moonBodyRadius, 32, 32]} />
-              {/* Procedural cratered surface — CanvasTexture as bumpMap +
-                  roughnessMap on a MeshStandardMaterial. PR #5 → restored. */}
-              <meshStandardMaterial
-                color="#c8c4be"
-                roughness={0.95}
-                metalness={0.0}
-                bumpMap={MOON_CRATER_TEXTURE}
-                bumpScale={0.06}
-                roughnessMap={MOON_CRATER_TEXTURE}
-              />
-            </mesh>
-            {/* A tiny "near-side" indicator mark — a faint highlight on the
-                planet-facing hemisphere that helps the tidal-lock read. */}
-            <mesh position={[0, 0, -moonBodyRadius * 0.95]}>
-              <circleGeometry args={[moonBodyRadius * 0.18, 16]} />
-              <meshBasicMaterial
-                color={it.color}
-                transparent
-                opacity={0.18}
-                depthWrite={false}
-                blending={THREE.AdditiveBlending}
-                toneMapped={false}
-              />
-            </mesh>
-          </group>
+              {/* Outer tidal-lock ring — faint torus floating around each moon
+                  so the operator can see that the moon is actually tidal-locked
+                  (the ring's plane rotates with the body). Restores PR #5. */}
+              <mesh rotation={[Math.PI / 2, 0, 0]}>
+                <torusGeometry args={[moonBodyRadius * 1.4, 0.02, 8, 48]} />
+                <meshBasicMaterial
+                  color="#aaaaaa"
+                  transparent
+                  opacity={0.25}
+                  depthWrite={false}
+                  blending={THREE.AdditiveBlending}
+                  toneMapped={false}
+                />
+              </mesh>
+              <mesh
+                onClick={(e) => {
+                  e.stopPropagation();
+                  openThread(it.moon.threadId);
+                }}
+                onPointerOver={(e) => {
+                  e.stopPropagation();
+                  document.body.style.cursor =
+                    "url('/cursor-arrow-pointer.svg') 1 1, pointer";
+                }}
+                onPointerOut={() => {
+                  document.body.style.cursor = "";
+                }}
+              >
+                <sphereGeometry args={[moonBodyRadius, 64, 64]} />
+                {/* Enhanced realistic moon surface with deeper crater mapping and metallic hints */}
+                <meshStandardMaterial
+                  color="#e3e1df"
+                  roughness={0.85}
+                  metalness={0.15}
+                  bumpMap={MOON_CRATER_TEXTURE}
+                  bumpScale={0.14}
+                  roughnessMap={MOON_CRATER_TEXTURE}
+                />
+              </mesh>
+              {/* A tiny "near-side" indicator mark — a faint highlight on the
+                  planet-facing hemisphere that helps the tidal-lock read. */}
+              <mesh position={[0, 0, -moonBodyRadius * 0.95]}>
+                <circleGeometry args={[moonBodyRadius * 0.18, 16]} />
+                <meshBasicMaterial
+                  color={it.color}
+                  transparent
+                  opacity={0.18}
+                  depthWrite={false}
+                  blending={THREE.AdditiveBlending}
+                  toneMapped={false}
+                />
+              </mesh>
+            </group>
+          </Trail>
         </group>
       ))}
     </group>
@@ -751,23 +738,16 @@ function SatelliteOrbit({
             meshRefs.current[i] = g;
           }}
         >
-          {/* Soft halo around the whole craft for additive bloom bleed. */}
-          <mesh
-            ref={(m) => {
-              glowRefs.current[i] = m;
-            }}
+          <Trail
+            width={0.08}
+            color={it.color}
+            length={8}
+            decay={1}
+            local={false}
+            attenuation={(t) => t * t}
           >
-            <sphereGeometry args={[0.07, 10, 10]} />
-            <meshBasicMaterial
-              color={it.color}
-              transparent
-              opacity={0.55}
-              depthWrite={false}
-              blending={THREE.AdditiveBlending}
-              toneMapped={false}
-            />
-          </mesh>
-          <SatelliteMesh color={it.color} />
+            <SatelliteMesh color={it.color} />
+          </Trail>
         </group>
       ))}
     </group>
@@ -788,79 +768,105 @@ function SatelliteOrbit({
 function SatelliteMesh({ color }: { color: string }) {
   // Soft cool body color — keeps the visual weight off the orbit color so
   // the category accent (solar panels + dish glow) carries the meaning.
-  const BUS = "#cdd6e0";
-  const PANEL = "#1a2a44";
-  const PANEL_EDGE = "#2f4773";
+  const BUS = "#dbe2e8";
+  const PANEL = "#0f192b";
+  const PANEL_EDGE = "#3b588c";
+  const ACCENT = "#778899";
   return (
     <group>
-      {/* Body / bus — small box, the satellite's main module. */}
-      <mesh>
-        <boxGeometry args={[0.08, 0.06, 0.10]} />
-        <meshStandardMaterial
-          color={BUS}
-          metalness={0.65}
-          roughness={0.4}
-          emissive={color}
-          emissiveIntensity={0.18}
-        />
-      </mesh>
+      {/* Detailed Body / bus — main module with greebles for realism. */}
+      <group>
+        <mesh>
+          <boxGeometry args={[0.08, 0.06, 0.10]} />
+          <meshStandardMaterial
+            color={BUS}
+            metalness={0.75}
+            roughness={0.3}
+            emissive={color}
+            emissiveIntensity={0.2}
+          />
+        </mesh>
+        {/* Subtle top module/instrument */}
+        <mesh position={[0, 0.035, 0.02]}>
+          <boxGeometry args={[0.04, 0.015, 0.04]} />
+          <meshStandardMaterial color={ACCENT} metalness={0.8} roughness={0.4} />
+        </mesh>
+        {/* Camera/Sensor lens on bottom */}
+        <mesh position={[0, -0.03, -0.02]}>
+          <cylinderGeometry args={[0.01, 0.015, 0.01, 12]} />
+          <meshStandardMaterial color="#000" metalness={0.9} roughness={0.1} />
+        </mesh>
+      </group>
 
-      {/* Left solar panel */}
+      {/* Left solar panel with grid lines and struts */}
       <group position={[-0.12, 0, 0]}>
         {/* Yoke / arm connecting panel to bus */}
-        <mesh position={[0.05, 0, 0]}>
-          <boxGeometry args={[0.04, 0.012, 0.012]} />
-          <meshStandardMaterial color={BUS} metalness={0.6} roughness={0.45} />
+        <mesh position={[0.05, 0, 0]} rotation={[0, 0, Math.PI / 2]}>
+          <cylinderGeometry args={[0.006, 0.006, 0.06, 8]} />
+          <meshStandardMaterial color={ACCENT} metalness={0.8} roughness={0.4} />
         </mesh>
         <mesh>
-          <boxGeometry args={[0.14, 0.005, 0.07]} />
+          <boxGeometry args={[0.14, 0.004, 0.07]} />
           <meshStandardMaterial
             color={PANEL}
-            metalness={0.85}
-            roughness={0.25}
+            metalness={0.9}
+            roughness={0.2}
             emissive={PANEL_EDGE}
-            emissiveIntensity={0.35}
+            emissiveIntensity={0.4}
+            wireframe={true}
           />
+        </mesh>
+        <mesh>
+          <boxGeometry args={[0.138, 0.003, 0.068]} />
+          <meshStandardMaterial color="#0a0f1a" metalness={1.0} roughness={0.1} />
         </mesh>
       </group>
 
-      {/* Right solar panel */}
+      {/* Right solar panel with grid lines and struts */}
       <group position={[0.12, 0, 0]}>
-        <mesh position={[-0.05, 0, 0]}>
-          <boxGeometry args={[0.04, 0.012, 0.012]} />
-          <meshStandardMaterial color={BUS} metalness={0.6} roughness={0.45} />
+        <mesh position={[-0.05, 0, 0]} rotation={[0, 0, Math.PI / 2]}>
+          <cylinderGeometry args={[0.006, 0.006, 0.06, 8]} />
+          <meshStandardMaterial color={ACCENT} metalness={0.8} roughness={0.4} />
         </mesh>
         <mesh>
-          <boxGeometry args={[0.14, 0.005, 0.07]} />
+          <boxGeometry args={[0.14, 0.004, 0.07]} />
           <meshStandardMaterial
             color={PANEL}
-            metalness={0.85}
-            roughness={0.25}
+            metalness={0.9}
+            roughness={0.2}
             emissive={PANEL_EDGE}
-            emissiveIntensity={0.35}
+            emissiveIntensity={0.4}
+            wireframe={true}
           />
+        </mesh>
+        <mesh>
+          <boxGeometry args={[0.138, 0.003, 0.068]} />
+          <meshStandardMaterial color="#0a0f1a" metalness={1.0} roughness={0.1} />
         </mesh>
       </group>
 
-      {/* Dish / antenna — small cone pointing forward (toward -Z). The
-          dish glows in the satellite's category color so each category
-          still reads at a glance even with the new geometry. */}
-      <group position={[0, 0, -0.07]} rotation={[Math.PI / 2, 0, 0]}>
+      {/* Dish / antenna — detailed high-gain antenna cone pointing forward. */}
+      <group position={[0, 0, -0.075]} rotation={[Math.PI / 2, 0, 0]}>
         <mesh>
-          <coneGeometry args={[0.035, 0.05, 12, 1, true]} />
+          <coneGeometry args={[0.04, 0.06, 24, 1, true]} />
           <meshStandardMaterial
             color={color}
-            metalness={0.7}
-            roughness={0.35}
+            metalness={0.8}
+            roughness={0.25}
             emissive={color}
-            emissiveIntensity={0.65}
+            emissiveIntensity={0.8}
             side={THREE.DoubleSide}
           />
         </mesh>
-        {/* Antenna feed — thin cylinder centered in dish */}
-        <mesh position={[0, -0.03, 0]}>
-          <cylinderGeometry args={[0.005, 0.005, 0.035, 8]} />
-          <meshStandardMaterial color={BUS} metalness={0.9} roughness={0.3} />
+        {/* Antenna feed — detailed feed horn centered in dish */}
+        <mesh position={[0, -0.035, 0]}>
+          <cylinderGeometry args={[0.002, 0.004, 0.04, 8]} />
+          <meshStandardMaterial color={ACCENT} metalness={0.9} roughness={0.2} />
+        </mesh>
+        {/* Antenna dish rim */}
+        <mesh position={[0, 0.03, 0]} rotation={[Math.PI / 2, 0, 0]}>
+          <torusGeometry args={[0.04, 0.002, 8, 24]} />
+          <meshStandardMaterial color={BUS} metalness={0.8} roughness={0.3} />
         </mesh>
       </group>
     </group>
