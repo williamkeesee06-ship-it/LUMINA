@@ -143,6 +143,7 @@ function HUDVertical() {
   const setHudMode = useUI((s) => s.setHudMode);
   const toggleOrientation = useUI((s) => s.toggleHudOrientation);
   const hudPage = useUI((s) => s.hudPage);
+  const selectedJobId = useUI((s) => s.selectedJobId);
   const {
     counts,
     enterGalaxy,
@@ -172,7 +173,13 @@ function HUDVertical() {
 
   return (
     <div
-      className="pointer-events-none fixed top-6 right-6 bottom-6 z-40 flex flex-col"
+      className={clsx(
+        "pointer-events-none fixed top-6 right-6 bottom-6 z-40 flex flex-col",
+        "transition-[opacity,transform] duration-300 ease-[cubic-bezier(0.16,1,0.3,1)]",
+        selectedJobId
+          ? "opacity-0 translate-x-4 pointer-events-none"
+          : "opacity-100 translate-x-0",
+      )}
       style={{ width: collapsed ? 96 : 240 }}
     >
       <div
@@ -483,6 +490,7 @@ function HUDHorizontal() {
   const setHudMode = useUI((s) => s.setHudMode);
   const toggleOrientation = useUI((s) => s.toggleHudOrientation);
   const hudPage = useUI((s) => s.hudPage);
+  const selectedJobId = useUI((s) => s.selectedJobId);
   const {
     counts,
     enterGalaxy,
@@ -509,7 +517,15 @@ function HUDHorizontal() {
   const sys = useSystemTelemetry();
 
   return (
-    <div className="pointer-events-none fixed bottom-3 left-1/2 -translate-x-1/2 z-40 w-[min(96vw,1480px)]">
+    <div
+      className={clsx(
+        "pointer-events-none fixed bottom-3 left-1/2 -translate-x-1/2 z-40 w-[min(96vw,1480px)]",
+        "transition-[opacity,transform] duration-300 ease-[cubic-bezier(0.16,1,0.3,1)]",
+        selectedJobId
+          ? "opacity-0 translate-y-4 pointer-events-none"
+          : "opacity-100 translate-y-0",
+      )}
+    >
       {/* Top rails */}
       <div className="pointer-events-auto flex items-center justify-between px-6 mb-1.5 font-mono text-[10px] uppercase tracking-tactical relative">
         <button
