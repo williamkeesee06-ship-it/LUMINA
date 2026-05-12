@@ -45,6 +45,7 @@ export function TacticalMap() {
   // Local drawing style config (not persisted — defaults applied on each new annotation)
   const [toolConfig, setToolConfig] = useState({ color: "#3B82F6", strokeWeight: 3, fillOpacity: 0.2 });
   const [popupAnchor, setPopupAnchor] = useState<{ x: number; y: number } | null>(null);
+  const [viewMode, setViewMode] = useState<"tactical" | "felt">("tactical");
 
   const visible = useMemo(() => {
     let pool = jobs.filter((j) => j.coords);
@@ -172,14 +173,39 @@ export function TacticalMap() {
             </span>
           </div>
           <div className="flex items-center gap-3">
-            {drawingMode !== "cursor" && (
+            {/* View toggle */}
+            <div className="flex items-center rounded-full border border-gray-200 bg-gray-100 p-0.5 text-xs font-medium">
+              <button
+                type="button"
+                onClick={() => setViewMode("tactical")}
+                className={`px-2.5 py-0.5 rounded-full transition-all ${
+                  viewMode === "tactical"
+                    ? "bg-white text-gray-800 shadow-sm"
+                    : "text-gray-500 hover:text-gray-700"
+                }`}
+              >
+                Tactical
+              </button>
+              <button
+                type="button"
+                onClick={() => setViewMode("felt")}
+                className={`px-2.5 py-0.5 rounded-full transition-all ${
+                  viewMode === "felt"
+                    ? "bg-white text-gray-800 shadow-sm"
+                    : "text-gray-500 hover:text-gray-700"
+                }`}
+              >
+                Reference
+              </button>
+            </div>
+            {viewMode === "tactical" && drawingMode !== "cursor" && (
               <span className="text-xs bg-blue-100 text-blue-700 font-medium px-2 py-0.5 rounded-full">
                 {drawingMode === "marker" ? "📍 Click to place" :
                  drawingMode === "polyline" ? "〰 Click to draw line" :
                  "⬡ Click to draw area"}
               </span>
             )}
-            {!selectedJobId && (
+            {viewMode === "tactical" && !selectedJobId && (
               <span className="text-xs text-amber-600 bg-amber-50 px-2 py-0.5 rounded-full border border-amber-200">
                 Select a job pin to enable drawing
               </span>
@@ -197,77 +223,91 @@ export function TacticalMap() {
 
         {/* Map container */}
         <div className="flex-1 relative">
-          <APIProvider apiKey={MAPS_KEY}>
-            <Map
-              defaultCenter={center}
-              defaultZoom={10}
-              gestureHandling="greedy"
-              disableDefaultUI={true}
-              mapTypeId="roadmap"
-              styles={LIGHT_MAP_STYLES}
-              clickableIcons={false}
-              backgroundColor="#F8FAFC"
-            >
-              {/* Job pins */}
-              {visible.map((j) => {
-                const isHistorical = j.status === "Complete";
-                const inRoute = showRouteLayer && routeJobIds.includes(j.id);
-                const color = inRoute ? "#3B82F6" : isHistorical ? "#94A3B8" : GALAXY_COLORS[j.status];
-                const isSelected = selectedJobId === j.id;
-                const showLabel = (focusedGalaxy !== null || inRoute) && !isHistorical;
-                return (
-                  <NeonPin
-                    key={j.id}
-                    position={j.coords!}
-                    color={color}
-                    selected={isSelected}
-                    historical={isHistorical}
-                    workOrder={j.workOrder}
-                    showLabel={showLabel}
-                    onClick={() => { sfx.select(); selectJob(j.id); }}
-                  />
-                );
-              })}
-
-              {/* Saved annotation overlays for selected job */}
-              {annotations.map((ann) => (
-                <AnnotationOverlay
-                  key={ann.id}
-                  annotation={ann}
-                  isActive={ann.id === activeAnnotationId}
-                  onClickAnnotation={handleAnnotationClick}
-                />
-              ))}
-
-              <FitToBounds bounds={bounds} selectedId={selectedJobId} center={center} />
-              <MapClickHandler
-                drawingMode={drawingMode}
-                selectedJobId={selectedJobId}
-                toolConfig={toolConfig}
-                annotationsByJob={annotationsByJob}
-                addAnnotation={addAnnotation}
-                setActiveAnnotationId={setActiveAnnotationId}
-                setPopupAnchor={setPopupAnchor}
-                setDrawingMode={setDrawingMode}
-                onMapClick={handleMapClick}
-              />
-            </Map>
-          </APIProvider>
-
-          {/* Drawing toolbar */}
-          <DrawingToolbar
-            config={toolConfig}
-            onConfigChange={(patch) => setToolConfig((c) => ({ ...c, ...patch }))}
-          />
-
-          {/* Annotation popup */}
-          {activeAnnotation && popupAnchor && (
-            <AnnotationPopup
-              annotation={activeAnnotation}
-              anchorX={popupAnchor.x}
-              anchorY={popupAnchor.y}
-              onClose={() => { setActiveAnnotationId(null); setPopupAnchor(null); }}
+          {viewMode === "felt" ? (
+            <iframe
+              width="100%"
+              height="100%"
+              frameBorder="0"
+              title="Felt Map"
+              src="https://felt.com/embed/map/NORTH-METRO-7KI9CCQC9AQp674Tq3LepCPD?loc=47.5296%2C-122.9048%2C9.94z&legend=1&cooperativeGestures=1&link=1&geolocation=0&zoomControls=1&scaleBar=1"
+              referrerPolicy="strict-origin-when-cross-origin"
+              style={{ border: 0, display: "block" }}
             />
+          ) : (
+            <>
+              <APIProvider apiKey={MAPS_KEY}>
+                <Map
+                  defaultCenter={center}
+                  defaultZoom={10}
+                  gestureHandling="greedy"
+                  disableDefaultUI={true}
+                  mapTypeId="roadmap"
+                  styles={LIGHT_MAP_STYLES}
+                  clickableIcons={false}
+                  backgroundColor="#F8FAFC"
+                >
+                  {/* Job pins */}
+                  {visible.map((j) => {
+                    const isHistorical = j.status === "Complete";
+                    const inRoute = showRouteLayer && routeJobIds.includes(j.id);
+                    const color = inRoute ? "#3B82F6" : isHistorical ? "#94A3B8" : GALAXY_COLORS[j.status];
+                    const isSelected = selectedJobId === j.id;
+                    const showLabel = (focusedGalaxy !== null || inRoute) && !isHistorical;
+                    return (
+                      <NeonPin
+                        key={j.id}
+                        position={j.coords!}
+                        color={color}
+                        selected={isSelected}
+                        historical={isHistorical}
+                        workOrder={j.workOrder}
+                        showLabel={showLabel}
+                        onClick={() => { sfx.select(); selectJob(j.id); }}
+                      />
+                    );
+                  })}
+
+                  {/* Saved annotation overlays for selected job */}
+                  {annotations.map((ann) => (
+                    <AnnotationOverlay
+                      key={ann.id}
+                      annotation={ann}
+                      isActive={ann.id === activeAnnotationId}
+                      onClickAnnotation={handleAnnotationClick}
+                    />
+                  ))}
+
+                  <FitToBounds bounds={bounds} selectedId={selectedJobId} center={center} />
+                  <MapClickHandler
+                    drawingMode={drawingMode}
+                    selectedJobId={selectedJobId}
+                    toolConfig={toolConfig}
+                    annotationsByJob={annotationsByJob}
+                    addAnnotation={addAnnotation}
+                    setActiveAnnotationId={setActiveAnnotationId}
+                    setPopupAnchor={setPopupAnchor}
+                    setDrawingMode={setDrawingMode}
+                    onMapClick={handleMapClick}
+                  />
+                </Map>
+              </APIProvider>
+
+              {/* Drawing toolbar */}
+              <DrawingToolbar
+                config={toolConfig}
+                onConfigChange={(patch) => setToolConfig((c) => ({ ...c, ...patch }))}
+              />
+
+              {/* Annotation popup */}
+              {activeAnnotation && popupAnchor && (
+                <AnnotationPopup
+                  annotation={activeAnnotation}
+                  anchorX={popupAnchor.x}
+                  anchorY={popupAnchor.y}
+                  onClose={() => { setActiveAnnotationId(null); setPopupAnchor(null); }}
+                />
+              )}
+            </>
           )}
         </div>
       </div>
