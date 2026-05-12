@@ -56,14 +56,6 @@ const CLOUDS: CloudDef[] = [
   { position: [120, -22, -60], scale: 100, color: "#0E5A6B", opacity: 0.5 },
   // Subtle magenta wash behind the central ring.
   { position: [0, -30, -160], scale: 130, color: "#7B1F5C", opacity: 0.35 },
-  // Bright cyan nebula off to the left
-  { position: [-80, -40, -120], scale: 110, color: "#00E5FF", opacity: 0.4 },
-  // Deep space indigo wash on the right
-  { position: [90, 45, -140], scale: 140, color: "#2B00FF", opacity: 0.3 },
-  // Warm orange/pink stellar nursery far back center
-  { position: [-20, 50, -200], scale: 180, color: "#FF4D00", opacity: 0.25 },
-  // Vibrant violet cloud behind the lower section
-  { position: [40, -60, -100], scale: 120, color: "#B800FF", opacity: 0.45 },
 ];
 
 export function NebulaClouds() {
