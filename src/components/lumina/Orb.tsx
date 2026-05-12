@@ -20,13 +20,13 @@ interface Props {
  */
 
 const COLOR_BY_MODE: Record<OrbMode, { rim: string; glow: string; halo: string }> = {
-  // Default — bright electric blue
-  idle:       { rim: "#3FA9FF", glow: "#5BF3FF", halo: "rgba(63,169,255,0.85)" },
-  escort:     { rim: "#3CFFD2", glow: "#A8FFEB", halo: "rgba(60,255,210,0.85)" },
-  thinking:   { rim: "#A78BFA", glow: "#D6C8FF", halo: "rgba(167,139,250,0.85)" },
-  navigating: { rim: "#FF3D9A", glow: "#FFB3D6", halo: "rgba(255,61,154,0.85)" },
-  listening:  { rim: "#FFB347", glow: "#FFE0B0", halo: "rgba(255,179,71,0.85)" },
-  live:       { rim: "#FF1F8A", glow: "#FF99C7", halo: "rgba(255,31,138,0.95)" },
+  // Quantum Singularity — Deep purple core, neon blue rim
+  idle:       { rim: "#00F0FF", glow: "#7000FF", halo: "rgba(112,0,255,0.65)" },
+  escort:     { rim: "#3CFFD2", glow: "#00B8FF", halo: "rgba(60,255,210,0.65)" },
+  thinking:   { rim: "#E020FF", glow: "#4A00E0", halo: "rgba(224,32,255,0.65)" },
+  navigating: { rim: "#FF007F", glow: "#7000FF", halo: "rgba(255,0,127,0.65)" },
+  listening:  { rim: "#FFB347", glow: "#FF3D00", halo: "rgba(255,179,71,0.65)" },
+  live:       { rim: "#FF1F8A", glow: "#9D00FF", halo: "rgba(255,31,138,0.85)" },
 };
 
 // Stable particle positions — placed within an inner radius
@@ -112,7 +112,11 @@ export function Orb({ size = 44, onActivate, onDoubleActivate }: Props) {
           </radialGradient>
         </defs>
 
-        {/* Inner glow fill — soft blue plasma (no hard center dot) */}
+        {/* Outer Singularity Rings */}
+        <circle cx={50} cy={50} r={44} fill="none" stroke={rim} strokeOpacity={0.15} strokeWidth={0.5} strokeDasharray="1 3" />
+        <circle cx={50} cy={50} r={40} fill="none" stroke={glow} strokeOpacity={0.3} strokeWidth={1} strokeDasharray="4 4" style={{ transformOrigin: '50px 50px', animation: 'orb-spin-reverse 20s linear infinite' }} />
+
+        {/* Inner glow fill — Quantum Plasma */}
         <circle cx={50} cy={50} r={36} fill="url(#orb-core)" />
 
         {/* THICK BRIGHT RIM RING — the defining outer boundary */}
@@ -122,9 +126,9 @@ export function Orb({ size = 44, onActivate, onDoubleActivate }: Props) {
           r={36}
           fill="none"
           stroke={rim}
-          strokeOpacity={0.45}
-          strokeWidth={6}
-          style={{ filter: `drop-shadow(0 0 8px ${rim}) drop-shadow(0 0 18px ${rim})` }}
+          strokeOpacity={0.65}
+          strokeWidth={4}
+          style={{ filter: `drop-shadow(0 0 12px ${rim}) drop-shadow(0 0 24px ${glow})` }}
         />
         <circle
           cx={50}
@@ -133,7 +137,7 @@ export function Orb({ size = 44, onActivate, onDoubleActivate }: Props) {
           fill="none"
           stroke={rim}
           strokeOpacity={1}
-          strokeWidth={2.4}
+          strokeWidth={1.5}
           style={{ filter: `drop-shadow(0 0 4px ${rim})` }}
         />
         <circle
@@ -142,72 +146,45 @@ export function Orb({ size = 44, onActivate, onDoubleActivate }: Props) {
           r={36}
           fill="none"
           stroke="#ffffff"
-          strokeOpacity={0.8}
-          strokeWidth={0.8}
+          strokeOpacity={0.9}
+          strokeWidth={0.5}
         />
 
-        {/* CURVED ARC SWEEPS — 4 "sword-slash" curves crossing the face.
-            Each arcs from one point on the rim to another, like longitude
-            slices on a sphere viewed from an angle. Reference: image.jpg. */}
+        {/* ORBITAL RINGS & ARCS — Quantum Singularity aesthetic */}
         <g
           style={{
-            filter: `drop-shadow(0 0 2px ${glow}) drop-shadow(0 0 4px ${glow})`,
+            transformOrigin: '50px 50px',
+            animation: 'orb-spin 15s linear infinite',
+            filter: `drop-shadow(0 0 2px ${glow}) drop-shadow(0 0 4px ${rim})`,
           }}
         >
-          {/* Top-left to bottom-right curve, bowed up */}
+          {/* Orbital Ellipses */}
+          <ellipse cx="50" cy="50" rx="36" ry="10" fill="none" stroke={rim} strokeOpacity="0.8" strokeWidth="1" transform="rotate(30 50 50)" />
+          <ellipse cx="50" cy="50" rx="36" ry="10" fill="none" stroke="#ffffff" strokeOpacity="0.6" strokeWidth="0.5" transform="rotate(-60 50 50)" />
+          
+          {/* Arc Sweeps */}
           <path
             d="M 18 38 Q 50 22 82 38"
             fill="none"
             stroke="#ffffff"
-            strokeOpacity={0.95}
-            strokeWidth={1}
+            strokeOpacity={0.8}
+            strokeWidth={1.2}
             strokeLinecap="round"
           />
-          {/* Bottom curve, bowed down */}
           <path
             d="M 18 62 Q 50 78 82 62"
             fill="none"
             stroke="#ffffff"
-            strokeOpacity={0.95}
-            strokeWidth={1}
+            strokeOpacity={0.8}
+            strokeWidth={1.2}
             strokeLinecap="round"
           />
-          {/* Left curve, bowed left */}
-          <path
-            d="M 38 18 Q 22 50 38 82"
-            fill="none"
-            stroke="#ffffff"
-            strokeOpacity={0.9}
-            strokeWidth={1}
-            strokeLinecap="round"
-          />
-          {/* Right curve, bowed right */}
-          <path
-            d="M 62 18 Q 78 50 62 82"
-            fill="none"
-            stroke="#ffffff"
-            strokeOpacity={0.9}
-            strokeWidth={1}
-            strokeLinecap="round"
-          />
-          {/* Diagonal slash 1 */}
-          <path
-            d="M 24 30 Q 50 50 76 70"
-            fill="none"
-            stroke="#ffffff"
-            strokeOpacity={0.55}
-            strokeWidth={0.7}
-            strokeLinecap="round"
-          />
-          {/* Diagonal slash 2 */}
-          <path
-            d="M 76 30 Q 50 50 24 70"
-            fill="none"
-            stroke="#ffffff"
-            strokeOpacity={0.55}
-            strokeWidth={0.7}
-            strokeLinecap="round"
-          />
+        </g>
+        
+        {/* Core Geometry (Floating inner elements) */}
+        <g style={{ transformOrigin: '50px 50px', animation: 'orb-spin-reverse 10s linear infinite' }}>
+           <polygon points="50,25 68,60 32,60" fill="none" stroke={rim} strokeWidth="0.5" strokeOpacity="0.3" />
+           <polygon points="50,75 32,40 68,40" fill="none" stroke={glow} strokeWidth="0.5" strokeOpacity="0.3" />
         </g>
 
         {/* FLICKERING SPARKLE PARTICLES — concentrated near center */}
