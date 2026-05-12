@@ -57,6 +57,11 @@ export interface UIState {
   googleToken: string | null;
   unreadCount: number;
   driveFiles: Moon[];
+  /**
+   * Overwatch flag — set true by northSkyWatcher when new North Sky mail
+   * arrives. Drives orbMode "alert" until the operator opens chat.
+   */
+  overwatchAlert: boolean;
 
   // Selection / focus
   selectedJobId: string | null;
@@ -172,6 +177,8 @@ export interface UIState {
   setError: (v: string | null) => void;
   setGoogleToken: (t: string | null) => void;
   setUnreadCount: (n: number) => void;
+  /** Clear the Overwatch alert flag (called when operator opens chat). */
+  setOverwatchAlert: (v: boolean) => void;
   setDriveFiles: (f: Moon[]) => void;
   selectJob: (jobId: string | null) => void;
   enterGalaxy: (galaxy: Galaxy | null) => void;
@@ -303,6 +310,7 @@ export const useUI = create<UIState>((set, get) => ({
   threadSummaries: {},
   googleAccount: null,
   googleGrantedScopes: [],
+  overwatchAlert: false,
 
   setJobs: (jobs) => {
     // Diff against the previous job set to detect new arrivals and
@@ -333,6 +341,7 @@ export const useUI = create<UIState>((set, get) => ({
   setError: (error) => set({ error }),
   setGoogleToken: (googleToken) => set({ googleToken }),
   setUnreadCount: (unreadCount) => set({ unreadCount }),
+  setOverwatchAlert: (overwatchAlert: boolean) => set({ overwatchAlert }),
   setDriveFiles: (driveFiles) => set({ driveFiles }),
 
   selectJob: (jobId) => {

@@ -31,6 +31,10 @@ export default function App() {
   const loading = useUI((s) => s.loading);
   const googleToken = useUI((s) => s.googleToken);
   const setUnreadCount = useUI((s) => s.setUnreadCount);
+  const overwatchAlert = useUI((s) => s.overwatchAlert);
+  const setOverwatchAlert = useUI((s) => s.setOverwatchAlert);
+  const setOrbMode = useUI((s) => s.setOrbMode);
+  const isChatOpen = useUI((s) => s.isChatOpen);
 
   const [booted, setBooted] = useState(false);
 
@@ -96,6 +100,22 @@ export default function App() {
   useEffect(() => {
     primeReminderStore();
   }, []);
+
+  // ── Overwatch bridge ────────────────────────────────────────────────────
+  // Drive the Orb into "alert" mode when the background watcher detects
+  // new North Sky mail. Clear on chat open (operator acknowledged).
+  useEffect(() => {
+    if (overwatchAlert && !isChatOpen) {
+      setOrbMode("alert");
+    } else if (!overwatchAlert || isChatOpen) {
+      // Only snap back to "idle" if nothing else owns the orb right now.
+      // Other modes (thinking, live, etc.) are driven by their own effects
+      // inside LuminaDock — we guard here so we don't stomp them.
+      const current = useUI.getState().orbMode;
+      if (current === "alert") setOrbMode("idle");
+      if (overwatchAlert && isChatOpen) setOverwatchAlert(false);
+    }
+  }, [overwatchAlert, isChatOpen, setOrbMode, setOverwatchAlert]);
 
   // Refresh Gmail unread count when token arrives.
   // PR #10: scope strictly to the "North Sky" label — the operator does not

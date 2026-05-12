@@ -27,6 +27,8 @@ const COLOR_BY_MODE: Record<OrbMode, { rim: string; glow: string; halo: string }
   navigating: { rim: "#FF007F", glow: "#7000FF", halo: "rgba(255,0,127,0.65)" },
   listening:  { rim: "#FFB347", glow: "#FF3D00", halo: "rgba(255,179,71,0.65)" },
   live:       { rim: "#FF1F8A", glow: "#9D00FF", halo: "rgba(255,31,138,0.85)" },
+  // Overwatch alert — urgent red-amber, distinct from every other mode
+  alert:      { rim: "#FF3300", glow: "#CC0000", halo: "rgba(255,51,0,0.85)" },
 };
 
 // Stable particle positions — placed within an inner radius

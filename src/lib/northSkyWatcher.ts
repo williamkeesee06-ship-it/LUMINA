@@ -145,8 +145,17 @@ async function runPollCycle(): Promise<void> {
     const messages = await fetchNorthSky(state.token);
     const newOnes = messages.filter((m) => !state.seen.has(m.id));
     if (newOnes.length > 0) {
-      const jobs = useUI.getState().jobs;
-      const attachMoons = useUI.getState().attachMoons;
+      // ── Overwatch: signal the Orb and bump the unread counter ──────────
+      const uiState = useUI.getState();
+      uiState.setOverwatchAlert(true);
+      // Bump unread count by the delta (do not reset — label count from
+      // Gmail is reconciled separately in App.tsx on token arrival).
+      uiState.setUnreadCount(
+        Math.max(0, uiState.unreadCount) + newOnes.length,
+      );
+
+      const jobs = uiState.jobs;
+      const attachMoons = uiState.attachMoons;
       // Group moons per job so we attachMoons once per planet.
       const perJob = new Map<string, Moon[]>();
       for (const msg of newOnes) {

@@ -57,7 +57,9 @@ export type OrbMode =
   | "thinking"
   | "navigating"
   | "listening"
-  | "live";
+  | "live"
+  /** Overwatch fired — new North Sky email detected in background. */
+  | "alert";
 
 /**
  * A satellite represents a Smartsheet row attachment for a job
