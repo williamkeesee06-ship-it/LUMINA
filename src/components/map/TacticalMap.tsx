@@ -1,66 +1,55 @@
-import { useEffect, useMemo, useRef } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { APIProvider, Map, useMap } from "@vis.gl/react-google-maps";
 import { useUI } from "@/store/uiStore";
 import { GALAXY_COLORS } from "@/lib/statusMap";
 import { sfx } from "@/lib/audio";
+import { newAnnotationId } from "@/lib/mapAnnotations";
+import type { MapAnnotation } from "@/types";
+import { DrawingToolbar } from "./DrawingToolbar";
+import { AnnotationPopup } from "./AnnotationPopup";
 
-/**
- * Build a teardrop pin SVG (Google Maps Symbol path) at the given color.
- * Path is centered such that the tip sits exactly at the marker's position.
- * The inner dot is drawn as a separate marker to get the bright "glowing
- * core" look from the reference.
- */
-/**
- * Classic Google-style teardrop pin. Tip at (0,0), bulb sits above.
- * Wider rounded balloon with a narrow tail, matching the user's reference.
- */
+// ─── Pin helpers ─────────────────────────────────────────────────────────────
+
 function pinPath() {
-  // Tip at (0,0); rounded balloon centered at (0,-22), radius ~12.
   return "M 0 0 C -7 -8 -12 -14 -12 -22 A 12 12 0 1 1 12 -22 C 12 -14 7 -8 0 0 Z";
 }
-
-/**
- * Hollow-circle inset that sits inside the bulb, like a punched-out negative
- * space. This mirrors the reference image where each pin shows a dark hole
- * in the middle of the colored balloon.
- */
 function innerHolePath() {
-  // Small circle, centered at (0,-22), radius 4.5, drawn as a closed sub-path
-  // using two arcs.
   return "M -4.5 -22 A 4.5 4.5 0 1 1 4.5 -22 A 4.5 4.5 0 1 1 -4.5 -22 Z";
 }
 
-// We rely on inline `styles` for the dark tactical look. A custom mapId would
-// require Cloud-console map style and is unnecessary here.
 const MAPS_KEY = import.meta.env.VITE_GOOGLE_MAPS_API_KEY as string | undefined;
 
-/**
- * Tactical map. Surface, not the home. Bible:
- * - View job markers, center on selected, filter by focused galaxy, route overlays.
- * - Black pins for historical (Complete) operations.
- * - Truthful state — never decorative.
- */
+// ─── TacticalMap ─────────────────────────────────────────────────────────────
+
 export function TacticalMap() {
-  const isMapOpen = useUI((s) => s.isMapOpen);
-  const mapTransition = useUI((s) => s.mapTransition);
-  const riseFromMap = useUI((s) => s.riseFromMap);
-  const jobs = useUI((s) => s.jobs);
-  const focusedGalaxy = useUI((s) => s.focusedGalaxy);
-  const selectedJobId = useUI((s) => s.selectedJobId);
-  const selectJob = useUI((s) => s.selectJob);
-  const showRouteLayer = useUI((s) => s.showRouteLayer);
-  const routeJobIds = useUI((s) => s.routeJobIds);
-  const hiddenGalaxies = useUI((s) => s.hiddenGalaxies);
+  const isMapOpen        = useUI((s) => s.isMapOpen);
+  const mapTransition    = useUI((s) => s.mapTransition);
+  const riseFromMap      = useUI((s) => s.riseFromMap);
+  const jobs             = useUI((s) => s.jobs);
+  const focusedGalaxy    = useUI((s) => s.focusedGalaxy);
+  const selectedJobId    = useUI((s) => s.selectedJobId);
+  const selectJob        = useUI((s) => s.selectJob);
+  const showRouteLayer   = useUI((s) => s.showRouteLayer);
+  const routeJobIds      = useUI((s) => s.routeJobIds);
+  const hiddenGalaxies   = useUI((s) => s.hiddenGalaxies);
+
+  // Annotation store
+  const loadAnnotations     = useUI((s) => s.loadAnnotations);
+  const addAnnotation       = useUI((s) => s.addAnnotation);
+  const annotationsByJob    = useUI((s) => s.annotationsByJob);
+  const drawingMode         = useUI((s) => s.drawingMode);
+  const setDrawingMode      = useUI((s) => s.setDrawingMode);
+  const activeAnnotationId  = useUI((s) => s.activeAnnotationId);
+  const setActiveAnnotationId = useUI((s) => s.setActiveAnnotationId);
+
+  // Local drawing style config (not persisted — defaults applied on each new annotation)
+  const [toolConfig, setToolConfig] = useState({ color: "#3B82F6", strokeWeight: 3, fillOpacity: 0.2 });
+  const [popupAnchor, setPopupAnchor] = useState<{ x: number; y: number } | null>(null);
 
   const visible = useMemo(() => {
     let pool = jobs.filter((j) => j.coords);
     if (focusedGalaxy) pool = pool.filter((j) => j.status === focusedGalaxy);
-    // Apply HUD widget filters — jobs in any hidden galaxy are removed.
-    // Note: "Complete" lives in hiddenGalaxies by default so the history
-    // markers stay off until the user explicitly toggles HISTORY on.
-    if (hiddenGalaxies.length > 0) {
-      pool = pool.filter((j) => !hiddenGalaxies.includes(j.status));
-    }
+    if (hiddenGalaxies.length > 0) pool = pool.filter((j) => !hiddenGalaxies.includes(j.status));
     return pool;
   }, [jobs, focusedGalaxy, hiddenGalaxies]);
 
@@ -72,11 +61,9 @@ export function TacticalMap() {
       const lng = visible.reduce((a, j) => a + j.coords!.lng, 0) / visible.length;
       return { lat, lng };
     }
-    // Seattle metro center — between Seattle, Bellevue, and Lynnwood.
     return { lat: 47.6515, lng: -122.2735 };
   }, [visible, selectedJobId, jobs]);
 
-  // Compute lat/lng bounds across all visible jobs so we can auto-fit.
   const bounds = useMemo(() => {
     if (visible.length === 0) return null;
     let minLat = 90, maxLat = -90, minLng = 180, maxLng = -180;
@@ -90,36 +77,75 @@ export function TacticalMap() {
     return { minLat, maxLat, minLng, maxLng };
   }, [visible]);
 
+  // Load annotations for the focused job when map opens
+  useEffect(() => {
+    if (isMapOpen && selectedJobId) {
+      void loadAnnotations(selectedJobId);
+    }
+  }, [isMapOpen, selectedJobId, loadAnnotations]);
+
+  // Resolve the active annotation for the popup
+  const annotations = selectedJobId ? (annotationsByJob[selectedJobId] ?? []) : [];
+  const activeAnnotation = activeAnnotationId
+    ? annotations.find((a) => a.id === activeAnnotationId) ?? null
+    : null;
+
+  const handleAnnotationClick = useCallback(
+    (id: string, x: number, y: number) => {
+      setActiveAnnotationId(id);
+      setPopupAnchor({ x, y });
+    },
+    [setActiveAnnotationId],
+  );
+
+  const handleMapClick = useCallback(
+    (lat: number, lng: number, screenX: number, screenY: number) => {
+      if (!selectedJobId) return;
+      if (drawingMode === "cursor") return;
+
+      if (drawingMode === "marker") {
+        const ann: MapAnnotation = {
+          id: newAnnotationId(),
+          jobId: selectedJobId,
+          type: "marker",
+          name: "New Marker",
+          description: "",
+          createdAt: new Date().toISOString(),
+          position: { lat, lng },
+          color: toolConfig.color,
+          strokeWeight: toolConfig.strokeWeight,
+          fillOpacity: toolConfig.fillOpacity,
+        };
+        addAnnotation(ann);
+        setActiveAnnotationId(ann.id);
+        setPopupAnchor({ x: screenX, y: screenY });
+        setDrawingMode("cursor");
+      }
+    },
+    [selectedJobId, drawingMode, toolConfig, addAnnotation, setActiveAnnotationId, setDrawingMode],
+  );
+
   if (!isMapOpen) return null;
 
-  // Mount-in / mount-out fade so the surface bleeds through the warp flash
-  // instead of popping. "open" = fully visible. "diving"/"rising" = behind
-  // flash, still mounted but at low opacity.
-  const surfaceOpacity = mapTransition === "open" ? 1 : 0.0;
+  const surfaceOpacity   = mapTransition === "open" ? 1 : 0.0;
   const surfaceTransition =
-    mapTransition === "open"
-      ? "opacity 380ms ease-out 80ms"
-      : "opacity 220ms ease-in";
+    mapTransition === "open" ? "opacity 380ms ease-out 80ms" : "opacity 220ms ease-in";
 
   if (!MAPS_KEY) {
     return (
       <div
-        className="pointer-events-auto fixed inset-0 z-30 metallic-plate p-6"
+        className="pointer-events-auto fixed inset-0 z-30 bg-gray-100 p-6"
         style={{ opacity: surfaceOpacity, transition: surfaceTransition }}
       >
-        <div className="tactical-label">tactical map</div>
-        <div className="text-sm text-cyan-glow mt-2 font-mono">
+        <div className="text-sm text-gray-600 font-mono mt-2">
           Awaiting maps key. Add VITE_GOOGLE_MAPS_API_KEY in Vercel env to bring this surface online.
         </div>
         <button
           type="button"
-          onClick={() => {
-            sfx.select();
-            riseFromMap();
-          }}
-          className="mt-4 text-cyan-glow/70 hover:text-cyan-glow font-mono text-xs uppercase tracking-tactical border border-cyan-glow/30 px-3 py-1.5"
+          onClick={() => { sfx.select(); riseFromMap(); }}
+          className="mt-4 text-blue-600 hover:text-blue-800 font-mono text-xs uppercase tracking-wider border border-blue-300 px-3 py-1.5 rounded"
         >
-          Warp out to universe
+          Back to Universe
         </button>
       </div>
     );
@@ -130,32 +156,46 @@ export function TacticalMap() {
       className="pointer-events-auto fixed inset-0 z-30"
       style={{ opacity: surfaceOpacity, transition: surfaceTransition }}
     >
-      <div className="metallic-plate h-full w-full overflow-hidden flex flex-col relative">
-        <span className="reticle opacity-25" />
-        <div className="flex items-center justify-between px-4 py-2.5 border-b border-cyan-glow/15">
+      <div className="h-full w-full overflow-hidden flex flex-col relative bg-gray-50">
+        {/* Header bar */}
+        <div className="flex items-center justify-between px-4 py-2.5 bg-white border-b border-gray-200 shadow-sm z-10">
           <div className="flex items-center gap-2.5">
-            <span className="w-1.5 h-1.5 rounded-full bg-cyan-glow shadow-[0_0_8px_#5BF3FF]" />
-            <span className="font-display tracking-tactical text-xs uppercase text-cyan-glow">
-              tactical map
+            <span className="w-2 h-2 rounded-full bg-blue-500" />
+            <span className="font-semibold text-sm text-gray-800">
+              Tactical Map
             </span>
-            <span className="font-mono text-[10px] text-white/40">
+            <span className="text-xs text-gray-400 font-mono">
               {visible.length} markers
               {focusedGalaxy ? ` · ${focusedGalaxy}` : ""}
               {showRouteLayer && routeJobIds.length > 0 ? ` · route ${routeJobIds.length}` : ""}
+              {selectedJobId ? ` · drawing for job` : ""}
             </span>
           </div>
-          <button
-            type="button"
-            onClick={() => {
-              sfx.select();
-              riseFromMap();
-            }}
-            className="text-cyan-glow/60 hover:text-cyan-glow text-lg leading-none px-2"
-            title="Warp out to universe"
-          >
-            ×
-          </button>
+          <div className="flex items-center gap-3">
+            {drawingMode !== "cursor" && (
+              <span className="text-xs bg-blue-100 text-blue-700 font-medium px-2 py-0.5 rounded-full">
+                {drawingMode === "marker" ? "📍 Click to place" :
+                 drawingMode === "polyline" ? "〰 Click to draw line" :
+                 "⬡ Click to draw area"}
+              </span>
+            )}
+            {!selectedJobId && (
+              <span className="text-xs text-amber-600 bg-amber-50 px-2 py-0.5 rounded-full border border-amber-200">
+                Select a job pin to enable drawing
+              </span>
+            )}
+            <button
+              type="button"
+              onClick={() => { sfx.select(); riseFromMap(); }}
+              className="text-gray-400 hover:text-gray-700 text-xl leading-none px-2 transition-colors"
+              title="Back to Universe"
+            >
+              ×
+            </button>
+          </div>
         </div>
+
+        {/* Map container */}
         <div className="flex-1 relative">
           <APIProvider apiKey={MAPS_KEY}>
             <Map
@@ -163,24 +203,17 @@ export function TacticalMap() {
               defaultZoom={10}
               gestureHandling="greedy"
               disableDefaultUI={true}
-              colorScheme="DARK"
-              styles={DARK_TACTICAL_STYLES}
+              mapTypeId="roadmap"
+              styles={LIGHT_MAP_STYLES}
               clickableIcons={false}
-              backgroundColor="#02040A"
+              backgroundColor="#F8FAFC"
             >
+              {/* Job pins */}
               {visible.map((j) => {
                 const isHistorical = j.status === "Complete";
                 const inRoute = showRouteLayer && routeJobIds.includes(j.id);
-                const color = inRoute
-                  ? "#FF3D9A"
-                  : isHistorical
-                    ? "#1A1F2E"
-                    : GALAXY_COLORS[j.status];
+                const color = inRoute ? "#3B82F6" : isHistorical ? "#94A3B8" : GALAXY_COLORS[j.status];
                 const isSelected = selectedJobId === j.id;
-                // Show a work-order label above each pin only when the
-                // operator is filtered into a single galaxy (or when the pin
-                // is in the route layer). At the unfiltered all-galaxies view
-                // we'd flood the screen with overlapping labels.
                 const showLabel = (focusedGalaxy !== null || inRoute) && !isHistorical;
                 return (
                   <NeonPin
@@ -191,39 +224,266 @@ export function TacticalMap() {
                     historical={isHistorical}
                     workOrder={j.workOrder}
                     showLabel={showLabel}
-                    onClick={() => {
-                      sfx.select();
-                      selectJob(j.id);
-                    }}
+                    onClick={() => { sfx.select(); selectJob(j.id); }}
                   />
                 );
               })}
+
+              {/* Saved annotation overlays for selected job */}
+              {annotations.map((ann) => (
+                <AnnotationOverlay
+                  key={ann.id}
+                  annotation={ann}
+                  isActive={ann.id === activeAnnotationId}
+                  onClickAnnotation={handleAnnotationClick}
+                />
+              ))}
+
               <FitToBounds bounds={bounds} selectedId={selectedJobId} center={center} />
+              <MapClickHandler
+                drawingMode={drawingMode}
+                selectedJobId={selectedJobId}
+                toolConfig={toolConfig}
+                annotationsByJob={annotationsByJob}
+                addAnnotation={addAnnotation}
+                setActiveAnnotationId={setActiveAnnotationId}
+                setPopupAnchor={setPopupAnchor}
+                setDrawingMode={setDrawingMode}
+                onMapClick={handleMapClick}
+              />
             </Map>
           </APIProvider>
+
+          {/* Drawing toolbar */}
+          <DrawingToolbar
+            config={toolConfig}
+            onConfigChange={(patch) => setToolConfig((c) => ({ ...c, ...patch }))}
+          />
+
+          {/* Annotation popup */}
+          {activeAnnotation && popupAnchor && (
+            <AnnotationPopup
+              annotation={activeAnnotation}
+              anchorX={popupAnchor.x}
+              anchorY={popupAnchor.y}
+              onClose={() => { setActiveAnnotationId(null); setPopupAnchor(null); }}
+            />
+          )}
         </div>
       </div>
     </div>
   );
 }
 
-/**
- * NeonPin — a teardrop pin with a bright glowing dot at its bulb,
- * matching the reference vibe. Built from two stacked legacy Markers:
- *   1. The teardrop body (SVG path, color = category color, dropping a glow)
- *   2. A bright white inner dot anchored to the bulb center
- *
- * Historical jobs use a near-black body with a faint white outline so
- * they read as "ghost" markers without disappearing into the map.
- */
+// ─── AnnotationOverlay — renders saved overlays using google.maps imperatively ─
+
+function AnnotationOverlay({
+  annotation,
+  isActive,
+  onClickAnnotation,
+}: {
+  annotation: MapAnnotation;
+  isActive: boolean;
+  onClickAnnotation: (id: string, x: number, y: number) => void;
+}) {
+  const map = useMap();
+
+  useEffect(() => {
+    const g = (window as unknown as { google?: { maps?: any } }).google?.maps;
+    if (!map || !g) return;
+
+    let overlay: any = null;
+
+    if (annotation.type === "marker" && annotation.position) {
+      overlay = new g.Marker({
+        position: annotation.position,
+        map,
+        title: annotation.name,
+        icon: {
+          path: g.SymbolPath.CIRCLE,
+          fillColor: annotation.color,
+          fillOpacity: 1,
+          strokeColor: isActive ? "#1D4ED8" : "#fff",
+          strokeWeight: isActive ? 3 : 2,
+          scale: 10,
+        },
+        label: annotation.markerLabel
+          ? { text: annotation.markerLabel, color: "#fff", fontSize: "10px", fontWeight: "bold" }
+          : undefined,
+        zIndex: isActive ? 200 : 100,
+        cursor: "pointer",
+      });
+      overlay.addListener("click", (e: any) => {
+        onClickAnnotation(annotation.id, e.domEvent?.clientX ?? 400, e.domEvent?.clientY ?? 300);
+      });
+    } else if (annotation.type === "polyline" && annotation.path) {
+      overlay = new g.Polyline({
+        path: annotation.path,
+        map,
+        strokeColor: annotation.color,
+        strokeWeight: annotation.strokeWeight,
+        strokeOpacity: 0.9,
+        clickable: true,
+        zIndex: isActive ? 150 : 50,
+      });
+      overlay.addListener("click", (e: any) => {
+        onClickAnnotation(annotation.id, e.domEvent?.clientX ?? 400, e.domEvent?.clientY ?? 300);
+      });
+    } else if (annotation.type === "polygon" && annotation.path) {
+      overlay = new g.Polygon({
+        paths: annotation.path,
+        map,
+        strokeColor: annotation.color,
+        strokeWeight: annotation.strokeWeight,
+        strokeOpacity: 0.9,
+        fillColor: annotation.color,
+        fillOpacity: annotation.fillOpacity,
+        clickable: true,
+        zIndex: isActive ? 150 : 50,
+      });
+      overlay.addListener("click", (e: any) => {
+        onClickAnnotation(annotation.id, e.domEvent?.clientX ?? 400, e.domEvent?.clientY ?? 300);
+      });
+    }
+
+    return () => { if (overlay) overlay.setMap(null); };
+  }, [map, annotation, isActive, onClickAnnotation]);
+
+  return null;
+}
+
+// ─── MapClickHandler — polyline/polygon drawing state machine ─────────────────
+
+function MapClickHandler({
+  drawingMode,
+  selectedJobId,
+  toolConfig,
+  annotationsByJob: _annotationsByJob,
+  addAnnotation,
+  setActiveAnnotationId,
+  setPopupAnchor,
+  setDrawingMode,
+  onMapClick,
+}: {
+  drawingMode: string;
+  selectedJobId: string | null;
+  toolConfig: { color: string; strokeWeight: number; fillOpacity: number };
+  annotationsByJob: Record<string, MapAnnotation[]>;
+  addAnnotation: (a: MapAnnotation) => void;
+  setActiveAnnotationId: (id: string | null) => void;
+  setPopupAnchor: (p: { x: number; y: number } | null) => void;
+  setDrawingMode: (m: any) => void;
+  onMapClick: (lat: number, lng: number, sx: number, sy: number) => void;
+}) {
+  const map = useMap();
+  // Accumulate polyline/polygon vertices as the operator clicks
+  const pathRef = useRef<{ lat: number; lng: number }[]>([]);
+  // Preview overlay drawn while user is placing points
+  const previewRef = useRef<any>(null);
+
+  // Reset path when mode changes
+  useEffect(() => {
+    pathRef.current = [];
+    if (previewRef.current) { previewRef.current.setMap(null); previewRef.current = null; }
+  }, [drawingMode]);
+
+  useEffect(() => {
+    const g = (window as unknown as { google?: { maps?: any } }).google?.maps;
+    if (!map || !g) return;
+
+    // Set cursor based on drawing mode
+    map.setOptions({
+      draggableCursor: drawingMode === "cursor" ? "default"
+        : drawingMode === "marker" ? "crosshair"
+        : "crosshair",
+    });
+
+    const clickListener = map.addListener("click", (e: any) => {
+      const lat = e.latLng?.lat();
+      const lng = e.latLng?.lng();
+      const sx = e.domEvent?.clientX ?? 400;
+      const sy = e.domEvent?.clientY ?? 300;
+      if (lat == null || lng == null) return;
+
+      if (drawingMode === "marker") {
+        onMapClick(lat, lng, sx, sy);
+        return;
+      }
+
+      if ((drawingMode === "polyline" || drawingMode === "polygon") && selectedJobId) {
+        pathRef.current = [...pathRef.current, { lat, lng }];
+
+        // Rebuild preview overlay
+        if (previewRef.current) previewRef.current.setMap(null);
+        if (drawingMode === "polyline") {
+          previewRef.current = new g.Polyline({
+            path: pathRef.current,
+            map,
+            strokeColor: toolConfig.color,
+            strokeWeight: toolConfig.strokeWeight,
+            strokeOpacity: 0.7,
+            icons: [{ icon: { path: g.SymbolPath.FORWARD_OPEN_ARROW }, offset: "100%" }],
+          });
+        } else {
+          previewRef.current = new g.Polygon({
+            paths: pathRef.current,
+            map,
+            strokeColor: toolConfig.color,
+            strokeWeight: toolConfig.strokeWeight,
+            strokeOpacity: 0.7,
+            fillColor: toolConfig.color,
+            fillOpacity: toolConfig.fillOpacity * 0.5,
+          });
+        }
+      }
+    });
+
+    // Double-click = finish polyline/polygon
+    const dblListener = map.addListener("dblclick", (e: any) => {
+      e.stop?.();
+      if (
+        (drawingMode === "polyline" || drawingMode === "polygon") &&
+        selectedJobId &&
+        pathRef.current.length >= 2
+      ) {
+        if (previewRef.current) { previewRef.current.setMap(null); previewRef.current = null; }
+        const sx = e.domEvent?.clientX ?? 400;
+        const sy = e.domEvent?.clientY ?? 300;
+        const ann: MapAnnotation = {
+          id: newAnnotationId(),
+          jobId: selectedJobId,
+          type: drawingMode as "polyline" | "polygon",
+          name: drawingMode === "polyline" ? "New Line" : "New Area",
+          description: "",
+          createdAt: new Date().toISOString(),
+          path: [...pathRef.current],
+          color: toolConfig.color,
+          strokeWeight: toolConfig.strokeWeight,
+          fillOpacity: toolConfig.fillOpacity,
+        };
+        addAnnotation(ann);
+        setActiveAnnotationId(ann.id);
+        setPopupAnchor({ x: sx, y: sy });
+        pathRef.current = [];
+        setDrawingMode("cursor");
+      }
+    });
+
+    return () => {
+      clickListener.remove();
+      dblListener.remove();
+      map.setOptions({ draggableCursor: "default" });
+    };
+  }, [map, drawingMode, selectedJobId, toolConfig, addAnnotation,
+      setActiveAnnotationId, setPopupAnchor, setDrawingMode, onMapClick]);
+
+  return null;
+}
+
+// ─── NeonPin — adapted for light map (darker stroke, lighter glow) ────────────
+
 function NeonPin({
-  position,
-  color,
-  selected,
-  historical,
-  workOrder,
-  showLabel,
-  onClick,
+  position, color, selected, historical, workOrder, showLabel, onClick,
 }: {
   position: { lat: number; lng: number };
   color: string;
@@ -234,58 +494,46 @@ function NeonPin({
   onClick: () => void;
 }) {
   const map = useMap();
-  // Hold the latest onClick in a ref so the marker effect doesn't recreate
-  // markers every render (which was leaving stale markers on the map and
-  // causing the "filtered category doesn't visually return" bug).
   const clickRef = useRef(onClick);
-  useEffect(() => {
-    clickRef.current = onClick;
-  }, [onClick]);
+  useEffect(() => { clickRef.current = onClick; }, [onClick]);
 
   useEffect(() => {
     const g = (window as unknown as { google?: { maps?: any } }).google?.maps;
     if (!map || !g) return;
 
     const scale = selected ? 1.35 : 1.05;
-    const stroke = historical ? "#3A4258" : "#0A0E16";
-    const strokeWeight = selected ? 1.4 : historical ? 0.8 : 1.0;
-    const fillOpacity = historical ? 0.75 : 1;
+    const stroke = historical ? "#CBD5E1" : "#fff";
+    const strokeWeight = selected ? 2 : 1.2;
+    const fillOpacity = historical ? 0.55 : 1;
 
-    // Outer teardrop body — colored balloon with a thin dark outline so it
-    // reads cleanly against the dark map.
     const body = new g.Marker({
-      position,
-      map,
+      position, map,
       icon: {
         path: pinPath(),
         fillColor: color,
         fillOpacity,
         strokeColor: stroke,
-        strokeOpacity: historical ? 0.55 : 0.9,
+        strokeOpacity: historical ? 0.5 : 1,
         strokeWeight,
         scale,
-        anchor: new g.Point(0, 0), // tip of teardrop sits on the coord
+        anchor: new g.Point(0, 0),
       },
       zIndex: selected ? 1000 : historical ? 5 : 50,
       cursor: "pointer",
     });
     const listener = body.addListener("click", () => clickRef.current());
 
-    // Hollow inner circle — dark punched-out negative space inside the bulb,
-    // matching the reference image. Skipped for historical (black) pins so
-    // they stay flat.
     let hole: any = null;
     if (!historical) {
       hole = new g.Marker({
-        position,
-        map,
+        position, map,
         clickable: false,
         icon: {
           path: innerHolePath(),
-          fillColor: "#0A0E16",
-          fillOpacity: 1,
+          fillColor: "#fff",
+          fillOpacity: 0.9,
           strokeColor: color,
-          strokeOpacity: 0.6,
+          strokeOpacity: 0.5,
           strokeWeight: 0.6,
           scale,
           anchor: new g.Point(0, 0),
@@ -294,34 +542,22 @@ function NeonPin({
       });
     }
 
-    // Work-order label — only when filtered to a single galaxy. Implemented
-    // as a third (non-clickable) Marker with a tiny transparent icon and a
-    // visible Google Maps text label anchored above the pin. The label
-    // inherits the pin's status color so the eye reads category at a glance.
     let labelMarker: any = null;
     if (showLabel) {
       labelMarker = new g.Marker({
-        position,
-        map,
+        position, map,
         clickable: false,
-        // 1px transparent square — the marker has no visible icon, just text.
         icon: {
-          path: "M 0 0",
-          fillOpacity: 0,
-          strokeOpacity: 0,
-          scale: 0,
+          path: "M 0 0", fillOpacity: 0, strokeOpacity: 0, scale: 0,
           anchor: new g.Point(0, 0),
-          // The label draws relative to the icon's anchor; offset upward via
-          // labelOrigin so the text sits above the teardrop bulb.
           labelOrigin: new g.Point(0, -34),
         },
         label: {
           text: workOrder,
-          color,
+          color: color,
           fontFamily: "'JetBrains Mono', ui-monospace, monospace",
           fontSize: "10px",
-          fontWeight: "600",
-          className: "map-pin-label",
+          fontWeight: "700",
         },
         zIndex: (selected ? 1000 : 50) + 2,
       });
@@ -333,20 +569,16 @@ function NeonPin({
       if (hole) hole.setMap(null);
       if (labelMarker) labelMarker.setMap(null);
     };
-    // Intentionally omit `onClick` from deps — we read it via ref.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [map, position.lat, position.lng, color, selected, historical, showLabel, workOrder]);
+
   return null;
 }
 
-/**
- * Auto-fit the map to all visible markers on first open. When a specific
- * job is selected, smoothly recenter on that single job instead.
- */
+// ─── FitToBounds ──────────────────────────────────────────────────────────────
+
 function FitToBounds({
-  bounds,
-  selectedId,
-  center,
+  bounds, selectedId, center,
 }: {
   bounds: { minLat: number; maxLat: number; minLng: number; maxLng: number } | null;
   selectedId: string | null;
@@ -358,21 +590,14 @@ function FitToBounds({
     const g = (window as unknown as { google?: { maps?: any } }).google?.maps;
     if (!g) return;
 
-    if (selectedId) {
-      map.panTo(center);
-      return;
-    }
+    if (selectedId) { map.panTo(center); return; }
 
     if (bounds) {
-      const sw = new g.LatLng(bounds.minLat, bounds.minLng);
-      const ne = new g.LatLng(bounds.maxLat, bounds.maxLng);
-      const llb = new g.LatLngBounds(sw, ne);
-      // Padding leaves room for the right-rail HUD and top header.
-      map.fitBounds(llb, { top: 80, right: 380, bottom: 60, left: 60 });
-
-      // After Google computes the zoom for fitBounds, clamp it so we never
-      // zoom out further than zoom 9 (state-level) even if a stray outlier
-      // job widens the bounds. Keeps the cluster readable.
+      const llb = new g.LatLngBounds(
+        new g.LatLng(bounds.minLat, bounds.minLng),
+        new g.LatLng(bounds.maxLat, bounds.maxLng),
+      );
+      map.fitBounds(llb, { top: 80, right: 260, bottom: 60, left: 80 });
       const idle = map.addListener("idle", () => {
         const z = map.getZoom?.();
         if (typeof z === "number" && z < 9) map.setZoom(9);
@@ -384,179 +609,38 @@ function FitToBounds({
   return null;
 }
 
-// Quiet, dramatic dark map style — the reference vibe.
-// Land is near-black, water is even deeper void. Faint white admin borders
-// + sparse city/state labels give just enough context to orient the eye
-// without drowning the pins.
-const DARK_TACTICAL_STYLES = [
-  // Base land — deep charcoal-black
-  { elementType: "geometry", stylers: [{ color: "#0A0E16" }] },
-  // Default everything labels off; we re-enable specific ones below.
-  { elementType: "labels", stylers: [{ visibility: "off" }] },
-  { elementType: "labels.icon", stylers: [{ visibility: "off" }] },
+// ─── Light map style ─────────────────────────────────────────────────────────
+// Clean professional style — full road network visible, POI off, subtle palette.
+// Easy to read hand-drawn lines and annotation overlays against.
 
-  // Admin outlines — faint white state/county borders, exactly like the ref.
-  {
-    featureType: "administrative",
-    elementType: "geometry.fill",
-    stylers: [{ color: "#0A0E16" }],
-  },
-  {
-    featureType: "administrative",
-    elementType: "geometry.stroke",
-    stylers: [{ color: "#FFFFFF" }, { weight: 0.4 }, { lightness: -50 }],
-  },
-  {
-    featureType: "administrative.country",
-    elementType: "geometry.stroke",
-    stylers: [{ color: "#FFFFFF" }, { weight: 0.7 }, { lightness: -30 }],
-  },
-  {
-    featureType: "administrative.province",
-    elementType: "geometry.stroke",
-    stylers: [{ color: "#FFFFFF" }, { weight: 0.5 }, { lightness: -40 }],
-  },
+const LIGHT_MAP_STYLES = [
+  // Kill POI and transit clutter
+  { featureType: "poi",              stylers: [{ visibility: "off" }] },
+  { featureType: "transit",          stylers: [{ visibility: "off" }] },
 
-  // —— Sparse, atmospheric labels ——
-  // City names (locality) — muted slate so larger cities read but small
-  // towns recede into the background. Google's renderer hides smaller
-  // localities at lower zooms, but at zoom 9-10 over the Seattle metro the
-  // density is still high — the muted color keeps the pins as the focus.
-  {
-    featureType: "administrative.locality",
-    elementType: "labels.text.fill",
-    stylers: [{ color: "#5a6478" }],
-  },
-  {
-    featureType: "administrative.locality",
-    elementType: "labels.text.stroke",
-    stylers: [{ color: "#04070C" }, { weight: 2 }],
-  },
-  {
-    featureType: "administrative.locality",
-    elementType: "labels",
-    stylers: [{ visibility: "on" }],
-  },
-  // State names — a touch lighter, larger feel via stroke weight
-  {
-    featureType: "administrative.province",
-    elementType: "labels.text.fill",
-    stylers: [{ color: "#7a8294" }],
-  },
-  {
-    featureType: "administrative.province",
-    elementType: "labels.text.stroke",
-    stylers: [{ color: "#04070C" }, { weight: 2 }],
-  },
-  {
-    featureType: "administrative.province",
-    elementType: "labels",
-    stylers: [{ visibility: "on" }],
-  },
-  // Country names
-  {
-    featureType: "administrative.country",
-    elementType: "labels.text.fill",
-    stylers: [{ color: "#8a93a8" }],
-  },
-  {
-    featureType: "administrative.country",
-    elementType: "labels.text.stroke",
-    stylers: [{ color: "#04070C" }, { weight: 2 }],
-  },
-  {
-    featureType: "administrative.country",
-    elementType: "labels",
-    stylers: [{ visibility: "on" }],
-  },
-  // Neighborhoods — stay off, too dense in Seattle metro
-  {
-    featureType: "administrative.neighborhood",
-    stylers: [{ visibility: "off" }],
-  },
-  {
-    featureType: "administrative.land_parcel",
-    stylers: [{ visibility: "off" }],
-  },
-  // Water labels — ocean / Puget Sound names (very faint)
-  {
-    featureType: "water",
-    elementType: "labels.text.fill",
-    stylers: [{ color: "#3a4258" }],
-  },
-  {
-    featureType: "water",
-    elementType: "labels.text.stroke",
-    stylers: [{ color: "#04070C" }, { weight: 2 }],
-  },
-  {
-    featureType: "water",
-    elementType: "labels",
-    stylers: [{ visibility: "on" }],
-  },
+  // Subtle road colors
+  { featureType: "road",             elementType: "geometry.fill",   stylers: [{ color: "#FFFFFF" }] },
+  { featureType: "road",             elementType: "geometry.stroke", stylers: [{ color: "#E2E8F0" }, { weight: 1 }] },
+  { featureType: "road.highway",     elementType: "geometry.fill",   stylers: [{ color: "#FEF3C7" }] },
+  { featureType: "road.highway",     elementType: "geometry.stroke", stylers: [{ color: "#FDE68A" }, { weight: 1 }] },
+  { featureType: "road.arterial",    elementType: "geometry.fill",   stylers: [{ color: "#F8FAFC" }] },
 
-  // Landscape — slightly lighter than water for subtle continental shape
-  {
-    featureType: "landscape",
-    elementType: "geometry",
-    stylers: [{ color: "#0C111B" }],
-  },
-  {
-    featureType: "landscape.natural",
-    elementType: "geometry",
-    stylers: [{ color: "#0B0F18" }],
-  },
-  {
-    featureType: "landscape.man_made",
-    elementType: "geometry",
-    stylers: [{ color: "#0E1320" }],
-  },
+  // Land + landscape
+  { featureType: "landscape",        elementType: "geometry", stylers: [{ color: "#F1F5F9" }] },
+  { featureType: "landscape.natural",elementType: "geometry", stylers: [{ color: "#E8F5E9" }] },
 
-  // Parks — barely-there green tint, no labels
-  {
-    featureType: "poi.park",
-    elementType: "geometry",
-    stylers: [{ color: "#0B1318" }],
-  },
+  // Water
+  { featureType: "water",            elementType: "geometry", stylers: [{ color: "#BFDBFE" }] },
+  { featureType: "water",            elementType: "labels.text.fill", stylers: [{ color: "#3B82F6" }] },
 
-  // Roads — silent. Filled to match land so they vanish; only barely-visible
-  // strokes remain at the highest zoom levels.
-  {
-    featureType: "road",
-    elementType: "geometry.fill",
-    stylers: [{ color: "#0A0E16" }],
-  },
-  {
-    featureType: "road",
-    elementType: "geometry.stroke",
-    stylers: [{ visibility: "off" }],
-  },
-  { featureType: "road", elementType: "labels", stylers: [{ visibility: "off" }] },
-  {
-    featureType: "road.highway",
-    elementType: "geometry.fill",
-    stylers: [{ color: "#0E1422" }],
-  },
-  {
-    featureType: "road.highway",
-    elementType: "geometry.stroke",
-    stylers: [{ visibility: "off" }],
-  },
+  // Parks
+  { featureType: "poi.park",         elementType: "geometry", stylers: [{ color: "#D1FAE5" }] },
+  { featureType: "poi.park",         elementType: "labels.text.fill", stylers: [{ color: "#059669" }] },
+  { featureType: "poi.park",         elementType: "labels",   stylers: [{ visibility: "on" }] },
 
-  // Water — deepest void, slightly inkier than the land
-  {
-    featureType: "water",
-    elementType: "geometry",
-    stylers: [{ color: "#04070C" }],
-  },
-
-  // Kill all POI / transit / business clutter
-  { featureType: "poi", stylers: [{ visibility: "off" }] },
-  { featureType: "poi.business", stylers: [{ visibility: "off" }] },
-  { featureType: "poi.medical", stylers: [{ visibility: "off" }] },
-  { featureType: "poi.school", stylers: [{ visibility: "off" }] },
-  { featureType: "poi.attraction", stylers: [{ visibility: "off" }] },
-  { featureType: "transit", stylers: [{ visibility: "off" }] },
-  { featureType: "transit.station", stylers: [{ visibility: "off" }] },
-  { featureType: "transit.line", stylers: [{ visibility: "off" }] },
+  // Label colors — keep legible on light background
+  { featureType: "road",             elementType: "labels.text.fill",   stylers: [{ color: "#475569" }] },
+  { featureType: "road.highway",     elementType: "labels.text.fill",   stylers: [{ color: "#92400E" }] },
+  { featureType: "administrative.locality", elementType: "labels.text.fill", stylers: [{ color: "#1E293B" }] },
+  { featureType: "administrative.province", elementType: "labels.text.fill", stylers: [{ color: "#334155" }] },
 ] as const;

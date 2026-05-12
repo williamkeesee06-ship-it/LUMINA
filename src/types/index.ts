@@ -175,3 +175,30 @@ export interface RouteState {
   visible: boolean;
   jobIds: string[];
 }
+
+// ─── Map Annotation Types ────────────────────────────────────────────────────
+// Persisted to Firestore collection `lumina_annotations`, one document per job.
+
+export type AnnotationType = "marker" | "polyline" | "polygon";
+
+export type DrawingMode = "cursor" | "marker" | "polyline" | "polygon";
+
+export interface MapAnnotation {
+  id: string;                              // uuid — client-generated
+  jobId: string;                           // scoped per planet/job
+  type: AnnotationType;
+  name: string;                            // shown in callout title
+  description: string;                     // operator notes (callout body)
+  createdAt: string;                       // ISO timestamp
+
+  // Geometry — exactly one is set based on type
+  position?: { lat: number; lng: number }; // marker only
+  path?: { lat: number; lng: number }[];   // polyline / polygon
+
+  // Style
+  color: string;                           // hex e.g. "#FF5733"
+  strokeWeight: number;                    // 1–10 (lines/polygon border)
+  fillOpacity: number;                     // 0–1 (polygon fill only)
+  markerLabel?: string;                    // 1 char shown inside pin icon
+}
+

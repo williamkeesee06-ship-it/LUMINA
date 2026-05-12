@@ -3,18 +3,21 @@ import { sfx } from "@/lib/audio";
 import { mapStatusToGalaxy } from "@/lib/statusMap";
 import { updateJobFields, type EditableJobField } from "@/lib/api";
 import type {
+  DrawingMode,
   Galaxy,
   HudMode,
   HudOrientation,
   HudPage,
   Job,
   JobChecklist,
+  MapAnnotation,
   MapTransition,
   Moon,
   OrbMode,
   Satellite,
   ViewMode,
 } from "@/types";
+import { fetchAnnotations, saveAnnotations as _saveAnnotations } from "@/lib/mapAnnotations";
 
 /**
  *  The subset of `Job` fields the operator can edit through the UI.
@@ -194,6 +197,24 @@ export interface UIState {
   setShowRouteLayer: (v: boolean) => void;
   setRouteJobIds: (ids: string[]) => void;
   setMapOpen: (open: boolean) => void;
+
+  // ── Map Annotations (drawing tools) ──────────────────────────────────────
+  /** All loaded annotations for the currently-open job map. Keyed by jobId. */
+  annotationsByJob: Record<string, MapAnnotation[]>;
+  /** Active drawing mode — controls cursor + which overlay is being placed. */
+  drawingMode: DrawingMode;
+  /** The annotation currently open in the edit popup (null = popup closed). */
+  activeAnnotationId: string | null;
+  /** Load annotations from Firestore for a job (no-op if already loaded). */
+  loadAnnotations: (jobId: string) => Promise<void>;
+  /** Add a new annotation and persist. */
+  addAnnotation: (annotation: MapAnnotation) => void;
+  /** Patch an existing annotation by id and persist. */
+  updateAnnotation: (jobId: string, id: string, patch: Partial<MapAnnotation>) => void;
+  /** Remove an annotation and persist. */
+  deleteAnnotation: (jobId: string, id: string) => void;
+  setDrawingMode: (mode: DrawingMode) => void;
+  setActiveAnnotationId: (id: string | null) => void;
   toggleMapFilter: (g: Galaxy) => void;
   toggleHistoryOnMap: () => void;
   resetMapFilters: () => void;
@@ -290,6 +311,11 @@ export const useUI = create<UIState>((set, get) => ({
   showRouteLayer: false,
   routeJobIds: [],
 
+  // Annotation drawing tool state
+  annotationsByJob: {},
+  drawingMode: "cursor",
+  activeAnnotationId: null,
+
   hudMode: "expanded",
   hudOrientation: "vertical",
   // Default to navigation page — action-oriented; users open the app to do something.
@@ -343,6 +369,51 @@ export const useUI = create<UIState>((set, get) => ({
   setUnreadCount: (unreadCount) => set({ unreadCount }),
   setOverwatchAlert: (overwatchAlert: boolean) => set({ overwatchAlert }),
   setDriveFiles: (driveFiles) => set({ driveFiles }),
+
+  // ── Annotation CRUD ─────────────────────────────────────────────────────
+  loadAnnotations: async (jobId: string) => {
+    // Idempotent: skip if we already have this job's annotations in memory.
+    if (get().annotationsByJob[jobId]) return;
+    const annotations = await fetchAnnotations(jobId);
+    set((s) => ({
+      annotationsByJob: { ...s.annotationsByJob, [jobId]: annotations },
+    }));
+  },
+
+  addAnnotation: (annotation: MapAnnotation) => {
+    const { jobId } = annotation;
+    set((s) => {
+      const existing = s.annotationsByJob[jobId] ?? [];
+      const next = [...existing, annotation];
+      _debounceAnnotationSave(jobId, next);
+      return { annotationsByJob: { ...s.annotationsByJob, [jobId]: next } };
+    });
+  },
+
+  updateAnnotation: (jobId: string, id: string, patch: Partial<MapAnnotation>) => {
+    set((s) => {
+      const existing = s.annotationsByJob[jobId] ?? [];
+      const next = existing.map((a) => (a.id === id ? { ...a, ...patch } : a));
+      _debounceAnnotationSave(jobId, next);
+      return { annotationsByJob: { ...s.annotationsByJob, [jobId]: next } };
+    });
+  },
+
+  deleteAnnotation: (jobId: string, id: string) => {
+    set((s) => {
+      const existing = s.annotationsByJob[jobId] ?? [];
+      const next = existing.filter((a) => a.id !== id);
+      _debounceAnnotationSave(jobId, next);
+      return {
+        annotationsByJob: { ...s.annotationsByJob, [jobId]: next },
+        activeAnnotationId: s.activeAnnotationId === id ? null : s.activeAnnotationId,
+      };
+    });
+  },
+
+  setDrawingMode: (drawingMode: DrawingMode) => set({ drawingMode }),
+  setActiveAnnotationId: (activeAnnotationId: string | null) => set({ activeAnnotationId }),
+
 
   selectJob: (jobId) => {
     if (!jobId) {
@@ -737,6 +808,15 @@ if (import.meta.env.DEV) {
 // what stops Zustand v5 from treating every render as a state change.
 export const selectJobsByGalaxy = (state: UIState, galaxy: Galaxy) =>
   state.jobs.filter((j) => j.status === galaxy);
+
+// Debounce Firestore annotation writes so rapid drag events don't hammer the DB.
+const _annotationSaveTimers: Record<string, ReturnType<typeof setTimeout>> = {};
+function _debounceAnnotationSave(jobId: string, annotations: MapAnnotation[]): void {
+  clearTimeout(_annotationSaveTimers[jobId]);
+  _annotationSaveTimers[jobId] = setTimeout(() => {
+    void _saveAnnotations(jobId, annotations);
+  }, 800);
+}
 
 let _countsKey: Job[] | null = null;
 let _countsValue: Record<Galaxy, number> = {
