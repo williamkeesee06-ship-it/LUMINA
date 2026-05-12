@@ -173,7 +173,7 @@ export function HyperspaceTransition() {
         className="absolute inset-0"
         style={{
           background:
-            "radial-gradient(circle at 50% 50%, rgba(255,255,255,0.95) 0%, rgba(168,248,255,0.55) 18%, rgba(91,243,255,0.18) 38%, rgba(2,5,10,0) 70%)",
+            "radial-gradient(circle at 50% 50%, rgba(220,245,255,0.95) 0%, rgba(130,225,255,0.65) 18%, rgba(60,200,255,0.25) 38%, rgba(2,5,10,0) 70%)",
           opacity: 0,
           mixBlendMode: "screen",
         }}

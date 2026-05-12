@@ -294,11 +294,11 @@ export function CameraRig() {
       const elapsed = performance.now() - warpStart.current;
       const TOTAL = mapTransition === "diving" ? 1600 : 1400;
       const tRaw = Math.min(1, Math.max(0, elapsed / TOTAL));
-      // Ease: cubic in for dive (slow start, hyper accel), cubic out for rise.
+      // Ease: quintic in for dive (slower start, harder snap), quartic out for rise.
       const e =
         mapTransition === "diving"
-          ? tRaw * tRaw * tRaw
-          : 1 - Math.pow(1 - tRaw, 3);
+          ? Math.pow(tRaw, 5)
+          : 1 - Math.pow(1 - tRaw, 4);
 
       // Forward direction at the snapshot orientation (we keep looking the
       // same way — the streaks are the spectacle, not a re-orient).
@@ -311,9 +311,9 @@ export function CameraRig() {
         const offset = forward.clone().multiplyScalar(e * 140);
         camera.position.copy(warpFromPos.current).add(offset);
         camera.quaternion.copy(warpFromQuat.current);
-        // FOV widens 52 -> ~110 to sell the warp; bell-curved so it crests at peak.
+        // FOV widens significantly to stretch edges and sell the warp speed
         const bell = Math.sin(Math.PI * tRaw); // 0 -> 1 -> 0
-        persp.fov = warpFromFov.current + bell * 58;
+        persp.fov = warpFromFov.current + bell * 85; 
         persp.updateProjectionMatrix();
       } else {
         // Rising: start at the dove-forward position and ease back to snapshot.
@@ -323,7 +323,7 @@ export function CameraRig() {
         camera.position.copy(warpFromPos.current).add(offset);
         camera.quaternion.copy(warpFromQuat.current);
         const bell = Math.sin(Math.PI * tRaw);
-        persp.fov = warpFromFov.current + bell * 58;
+        persp.fov = warpFromFov.current + bell * 85;
         persp.updateProjectionMatrix();
       }
       return;
