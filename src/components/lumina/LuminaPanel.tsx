@@ -301,7 +301,11 @@ export function LuminaPanel({
       operator: "Billy Keesee",
       role: "Construction Supervisor",
       company: "North Sky Communications",
-      now: new Date().toISOString(),
+      // Truth lockdown: round to the minute so the CURRENT_STATE payload is
+      // stable across keystrokes / re-renders. Sending a fresh ISO every send
+      // makes the model think the data is constantly changing and defeats any
+      // prompt cache.
+      now: new Date(Math.floor(Date.now() / 60000) * 60000).toISOString(),
       timezone: "America/Los_Angeles",
       viewMode,
       focusedGalaxy,

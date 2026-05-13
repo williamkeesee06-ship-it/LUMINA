@@ -1,5 +1,129 @@
 import type { VercelRequest, VercelResponse } from "@vercel/node";
 
+// =====================================================================
+//  GROUNDING FILTER — the last line of defense against fabrication.
+// =====================================================================
+//  Even with prompt hardening and temp 0, the model can occasionally
+//  emit a WO / date / address that isn't in the Smartsheet payload.
+//  This filter runs over Lumina's reply BEFORE returning it. Any
+//  specific value that doesn't appear in CURRENT_STATE is replaced
+//  with an [unknown ...] marker. If the response has 3+ such
+//  fabrications, the whole body is collapsed to the standard refusal.
+
+interface GroundedFacts {
+  /** Normalized work orders (no whitespace/dashes/dots, upper). */
+  workOrders: Set<string>;
+  /** Normalized addresses (collapsed whitespace, upper). */
+  addresses: Set<string>;
+  /** Date strings as they appear in Smartsheet. */
+  dates: Set<string>;
+  /** Permit numbers (normalized). */
+  permits: Set<string>;
+  /** Cities (upper). */
+  cities: Set<string>;
+  /** Crew names (upper). */
+  crews: Set<string>;
+}
+
+const normalizeWo = (s: string): string => s.replace(/[\s\-_.]/g, "").toUpperCase();
+const normalizeAddr = (s: string): string => s.replace(/\s+/g, " ").trim().toUpperCase();
+
+function collectGroundedFacts(context: Record<string, unknown> | undefined): GroundedFacts {
+  const facts: GroundedFacts = {
+    workOrders: new Set(),
+    addresses: new Set(),
+    dates: new Set(),
+    permits: new Set(),
+    cities: new Set(),
+    crews: new Set(),
+  };
+  if (!context) return facts;
+
+  const visit = (node: unknown): void => {
+    if (!node) return;
+    if (Array.isArray(node)) {
+      for (const item of node) visit(item);
+      return;
+    }
+    if (typeof node !== "object") return;
+    const obj = node as Record<string, unknown>;
+    for (const [key, val] of Object.entries(obj)) {
+      if (val === null || val === undefined) continue;
+      if (typeof val === "string") {
+        const k = key.toLowerCase();
+        if (k === "wo" || k === "workorder") facts.workOrders.add(normalizeWo(val));
+        else if (k === "address" || k === "fulladdress") facts.addresses.add(normalizeAddr(val));
+        else if (k.endsWith("date") || k === "sd") facts.dates.add(val.trim());
+        else if (k === "permitnumber") facts.permits.add(normalizeWo(val));
+        else if (k === "city" || k === "c") facts.cities.add(val.trim().toUpperCase());
+        else if (k === "crew") facts.crews.add(val.trim().toUpperCase());
+      } else if (typeof val === "object") {
+        visit(val);
+      }
+    }
+  };
+  visit(context);
+  return facts;
+}
+
+const WO_TOKEN_PATTERNS: readonly RegExp[] = [
+  /\bP\.?\d{5,8}\b/gi,
+  /\bWO[\s\-_]*\d{5,10}\b/gi,
+  /\b\d{7,9}\b/g,
+];
+
+const DATE_PATTERNS: readonly RegExp[] = [
+  /\b\d{1,2}\/\d{1,2}\/\d{2,4}\b/g,
+  /\b\d{4}-\d{2}-\d{2}\b/g,
+];
+
+function splitToolCall(text: string): { body: string; tool: string } {
+  const m = text.match(/<<TOOL>>[\s\S]*?<<END>>\s*$/);
+  if (!m || m.index === undefined) return { body: text, tool: "" };
+  return { body: text.slice(0, m.index).trimEnd(), tool: m[0] };
+}
+
+function applyGroundingFilter(
+  reply: string,
+  facts: GroundedFacts,
+): { text: string; fabrications: string[] } {
+  const { body, tool } = splitToolCall(reply);
+  const fabrications: string[] = [];
+  let scrubbed = body;
+
+  // Work order tokens
+  for (const re of WO_TOKEN_PATTERNS) {
+    scrubbed = scrubbed.replace(re, (match) => {
+      const norm = normalizeWo(match);
+      if (facts.workOrders.has(norm)) return match;
+      if (norm.startsWith("P") && facts.workOrders.has(norm.slice(1))) return match;
+      if (facts.workOrders.has("P" + norm)) return match;
+      fabrications.push(match);
+      return "[unknown WO]";
+    });
+  }
+
+  // Date strings
+  for (const re of DATE_PATTERNS) {
+    scrubbed = scrubbed.replace(re, (match) => {
+      for (const d of facts.dates) {
+        if (d.includes(match) || match.includes(d.slice(0, 10))) return match;
+      }
+      fabrications.push(match);
+      return "[unknown date]";
+    });
+  }
+
+  // Catch-all: too many fabrications → collapse to refusal
+  if (fabrications.length >= 3) {
+    scrubbed =
+      "I don't have enough verified Smartsheet data to answer that. Confirm the work order or pull the row.";
+  }
+
+  const finalText = tool ? `${scrubbed}\n${tool}`.trim() : scrubbed;
+  return { text: finalText, fabrications };
+}
+
 /**
  * LUMINA — Gemini-backed intelligence for North Sky Communications.
  *
@@ -374,7 +498,35 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   const contextLine = body.context
     ? `\n\nCURRENT_STATE:\n${JSON.stringify(body.context, null, 0)}`
     : "";
-  const tail = memoryBlock + contextLine;
+
+  // Truth lockdown v2: HARD FINAL REMINDER. The persona/tool docs at the top
+  // of SYSTEM_INSTRUCTION are too far from the answer position for the model
+  // to keep them in working memory while generating. Putting the truth rules
+  // here — between CURRENT_STATE and Billy's question — is the highest-
+  // attention slot in the whole prompt. This is the slot that actually moves
+  // the needle on hallucination.
+  const finalReminder = body.context
+    ? `\n\n=== READ THIS BEFORE YOU ANSWER ===
+The ONLY work facts you know are in CURRENT_STATE above.
+  - If a work order is not in universeIndex, it does NOT exist. Do not
+    invent a status, address, date, crew, permit, bid value, or note for it.
+    Say: "That work order isn't in your universe — confirm the number."
+  - If a field is missing from matchedJobs / sample / universeIndex,
+    you DO NOT know it. Say: "I don't have that in Smartsheet."
+  - NEVER paraphrase a date, address, permit number, or WO. Copy the
+    exact string from CURRENT_STATE or stay silent.
+  - NEVER guess from training data. If a job topic is asked and the WO
+    isn't in matchedJobs, call lookupJob first. Do not answer until then.
+  - MODE B (general knowledge) is OFF for anything job-adjacent. If
+    Billy mentions a WO, address, crew, permit, date, schedule, note,
+    or any North Sky operations topic, you are in WORK MODE — sourced
+    ONLY from CURRENT_STATE.
+  - When unsure whether something is in CURRENT_STATE, say so. Truth
+    over fullness. Every time.
+=== END REMINDER ===`
+    : "";
+
+  const tail = memoryBlock + contextLine + finalReminder;
 
   // Convert chat history to Gemini's contents format. Inject memory + context
   // as a prefix on the latest user turn so persona stays clean.
@@ -387,7 +539,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     };
   });
 
-  const model = process.env.GEMINI_MODEL || "gemini-2.5-flash";
+  // Truth lockdown: Pro is the default. Flash hallucinates more on long-context
+  // factual recall (Smartsheet records with dozens of WOs, dates, addresses).
+  // Override with GEMINI_MODEL env if you ever need to A/B.
+  const model = process.env.GEMINI_MODEL || "gemini-2.5-pro";
   const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${encodeURIComponent(apiKey)}`;
 
   try {
@@ -398,13 +553,15 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         systemInstruction: { role: "system", parts: [{ text: SYSTEM_INSTRUCTION }] },
         contents,
         generationConfig: {
-          // Truth lockdown: factual recall demands low entropy so the
-          // model quotes Smartsheet verbatim instead of "smoothing" values
-          // into plausible-sounding fabrications. Calibrated per the
-          // upgrade brief: 0.85 → 0.2, topP 0.92 → 0.7, topK 40, tokens 1500.
-          temperature: 0.2,
-          topP: 0.7,
-          topK: 40,
+          // Truth lockdown v2: deterministic decoding. Factual recall of
+          // Smartsheet WOs / addresses / dates demands ZERO entropy. Any
+          // sampling at all lets the model "smooth" values into plausible
+          // fabrications. Calibrated from temp 0.2 -> 0, topP 0.7 -> 1,
+          // topK 40 -> 1. This makes Lumina boring on banter but truthful
+          // on data — which is the only thing that matters.
+          temperature: 0,
+          topP: 1,
+          topK: 1,
           maxOutputTokens: 1500,
         },
         safetySettings: [],
@@ -422,16 +579,31 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const data = (await upstream.json()) as {
       candidates?: { content?: { parts?: { text?: string }[] } }[];
     };
-    const text =
+    const rawText =
       data.candidates?.[0]?.content?.parts?.map((p) => p.text ?? "").join("").trim() ?? "";
-    if (!text) {
+    if (!rawText) {
       res.status(502).json({
         error: "intelligence_offline",
         message: "Lumina returned no signal.",
       });
       return;
     }
-    res.status(200).json({ text });
+
+    // Truth lockdown v2: server-side grounding filter. Strip any
+    // WO / date Lumina emits that isn't actually in CURRENT_STATE.
+    const grounded = collectGroundedFacts(
+      body.context as Record<string, unknown> | undefined,
+    );
+    const { text, fabrications } = applyGroundingFilter(rawText, grounded);
+    if (fabrications.length > 0) {
+      // Log for ops visibility; surface count to client via header.
+      console.warn(
+        `[lumina] grounding filter caught ${fabrications.length} fabrication(s):`,
+        fabrications,
+      );
+      res.setHeader("X-Lumina-Fabrications", String(fabrications.length));
+    }
+    res.status(200).json({ text, fabrications: fabrications.length });
   } catch (err) {
     const message = err instanceof Error ? err.message : "Unknown error";
     res
